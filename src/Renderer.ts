@@ -92,7 +92,11 @@ export class Renderer {
 
     this.updateActiveTetromino(this.gameState.getActiveTetromino());
     this.updateSettledBlocks(this.gameState.getSettledBlocks());
-    this.updateHud(this.gameState.getUpcomingQueue(), this.gameState.getPhase());
+    this.updateHud(
+      this.gameState.getUpcomingQueue(),
+      this.gameState.getPhase(),
+      this.gameState.getClearedLayerCount()
+    );
     this.renderFrame();
   }
 
@@ -181,7 +185,11 @@ export class Renderer {
     this.renderFrame();
   }
 
-  public updateHud(queue: readonly TetrominoType[], phase: GamePhase): void {
+  public updateHud(
+    queue: readonly TetrominoType[],
+    phase: GamePhase,
+    clearedLayerCount: number
+  ): void {
     if (!this.hudElement) {
       return;
     }
@@ -193,6 +201,7 @@ export class Renderer {
     this.hudElement.innerHTML = `
       <div style="font-size:12px;letter-spacing:0.18em;color:#7dd3fc;">${headline}</div>
       <div style="margin-top:8px;font-size:13px;color:#e2e8f0;">Next: ${queueText}</div>
+      <div style="margin-top:6px;font-size:13px;color:#e2e8f0;">Cleared: ${clearedLayerCount}</div>
       <div style="margin-top:12px;font-size:12px;line-height:1.6;color:#cbd5e1;">
         Move: Arrow keys / W / S<br />
         Rotate: Q E / A D / Z X<br />

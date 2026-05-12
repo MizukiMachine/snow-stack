@@ -136,7 +136,11 @@ export class GameEngine {
   private syncScene(): void {
     this.renderer.updateSettledBlocks(this.state.getSettledBlocks());
     this.renderer.updateActiveTetromino(this.state.getActiveTetromino());
-    this.renderer.updateHud(this.state.getUpcomingQueue(), this.state.getPhase());
+    this.renderer.updateHud(
+      this.state.getUpcomingQueue(),
+      this.state.getPhase(),
+      this.state.getClearedLayerCount()
+    );
   }
 }
 

@@ -26,6 +26,7 @@ export class GameState {
   private activeTetromino: ActiveTetromino | null = null;
   private queue: TetrominoType[] = [];
   private phase: GamePhase = 'running';
+  private clearedLayerCount = 0;
 
   constructor(dimensions: FieldDimensions = FIELD_DIMENSIONS) {
     this.dimensions = dimensions;
@@ -59,6 +60,7 @@ export class GameState {
     this.activeTetromino = null;
     this.queue = [];
     this.phase = 'running';
+    this.clearedLayerCount = 0;
   }
 
   /**
@@ -70,6 +72,10 @@ export class GameState {
 
   public isGameOver(): boolean {
     return this.phase === 'game-over';
+  }
+
+  public getClearedLayerCount(): number {
+    return this.clearedLayerCount;
   }
 
   /**
@@ -238,9 +244,9 @@ export class GameState {
   /**
    * アクティブピースを固定し、盤面に反映する。
    */
-  public lockActiveTetromino(): boolean {
+  public lockActiveTetromino(): number {
     if (!this.activeTetromino) {
-      return false;
+      return 0;
     }
 
     const tetrominoType = this.activeTetromino.type;
@@ -249,7 +255,9 @@ export class GameState {
       this.grid[block.y][block.x][block.z] = tetrominoType;
     });
     this.activeTetromino = null;
-    return true;
+    const clearedLayers = this.clearCompletedLayers();
+    this.clearedLayerCount += clearedLayers;
+    return clearedLayers;
   }
 
   private canOccupy(position: FieldCoordinate, cells: readonly FieldCoordinate[]): boolean {
@@ -338,6 +346,32 @@ export class GameState {
       Array.from({ length: width }, () =>
         Array.from({ length: depth }, () => 'empty' as CellState)
       )
+    );
+  }
+
+  private clearCompletedLayers(): number {
+    const remainingLayers = this.grid.filter((layer) => !this.isLayerFilled(layer));
+    const clearedLayers = this.grid.length - remainingLayers.length;
+
+    if (clearedLayers === 0) {
+      return 0;
+    }
+
+    const emptyLayers = Array.from({ length: clearedLayers }, () =>
+      this.createEmptyLayer()
+    );
+    this.grid = [...remainingLayers, ...emptyLayers];
+    return clearedLayers;
+  }
+
+  private isLayerFilled(layer: CellState[][]): boolean {
+    return layer.every((column) => column.every((cell) => cell !== 'empty'));
+  }
+
+  private createEmptyLayer(): CellState[][] {
+    const { width, depth } = this.dimensions;
+    return Array.from({ length: width }, () =>
+      Array.from({ length: depth }, () => 'empty' as CellState)
     );
   }
 }
