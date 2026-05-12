@@ -27,6 +27,7 @@ export class GameState {
   private queue: TetrominoType[] = [];
   private phase: GamePhase = 'running';
   private clearedLayerCount = 0;
+  private score = 0;
 
   constructor(dimensions: FieldDimensions = FIELD_DIMENSIONS) {
     this.dimensions = dimensions;
@@ -61,6 +62,7 @@ export class GameState {
     this.queue = [];
     this.phase = 'running';
     this.clearedLayerCount = 0;
+    this.score = 0;
   }
 
   /**
@@ -76,6 +78,18 @@ export class GameState {
 
   public getClearedLayerCount(): number {
     return this.clearedLayerCount;
+  }
+
+  public getScore(): number {
+    return this.score;
+  }
+
+  public getLevel(): number {
+    return Math.floor(this.clearedLayerCount / LAYERS_PER_LEVEL) + 1;
+  }
+
+  public getDropIntervalMs(): number {
+    return Math.max(MIN_DROP_INTERVAL_MS, BASE_DROP_INTERVAL_MS - (this.getLevel() - 1) * DROP_SPEED_STEP_MS);
   }
 
   /**
@@ -199,16 +213,39 @@ export class GameState {
       rotateCell(cell, axis, direction)
     );
 
-    if (!this.canOccupy(this.activeTetromino.position, rotatedCells)) {
-      return false;
+    for (const kick of getKickOffsets(axis)) {
+      const kickedPosition: FieldCoordinate = {
+        x: this.activeTetromino.position.x + kick.x,
+        y: this.activeTetromino.position.y + kick.y,
+        z: this.activeTetromino.position.z + kick.z
+      };
+
+      if (!this.canOccupy(kickedPosition, rotatedCells)) {
+        continue;
+      }
+
+      this.activeTetromino = {
+        ...this.activeTetromino,
+        position: kickedPosition,
+        cells: rotatedCells
+      };
+
+      return true;
     }
 
-    this.activeTetromino = {
-      ...this.activeTetromino,
-      cells: rotatedCells
-    };
+    return false;
+  }
 
-    return true;
+  public hardDropActiveTetromino(): number {
+    if (!this.activeTetromino) {
+      return 0;
+    }
+
+    let moved = 0;
+    while (this.moveActiveTetromino(DROP_VECTOR)) {
+      moved += 1;
+    }
+    return moved;
   }
 
   /**
@@ -257,7 +294,16 @@ export class GameState {
     this.activeTetromino = null;
     const clearedLayers = this.clearCompletedLayers();
     this.clearedLayerCount += clearedLayers;
+    this.score += getLayerClearScore(clearedLayers, this.getLevel());
     return clearedLayers;
+  }
+
+  public addSoftDropScore(steps = 1): void {
+    this.score += Math.max(0, steps);
+  }
+
+  public addHardDropScore(steps: number): void {
+    this.score += Math.max(0, steps) * 2;
   }
 
   private canOccupy(position: FieldCoordinate, cells: readonly FieldCoordinate[]): boolean {
@@ -397,6 +443,24 @@ export interface SettledBlockSnapshot {
   readonly coordinate: FieldCoordinate;
 }
 
+const DROP_VECTOR: FieldCoordinate = { x: 0, y: -1, z: 0 };
+const BASE_DROP_INTERVAL_MS = 700;
+const MIN_DROP_INTERVAL_MS = 120;
+const DROP_SPEED_STEP_MS = 55;
+const LAYERS_PER_LEVEL = 5;
+const GENERIC_KICK_OFFSETS: readonly FieldCoordinate[] = [
+  { x: 0, y: 0, z: 0 },
+  { x: -1, y: 0, z: 0 },
+  { x: 1, y: 0, z: 0 },
+  { x: 0, y: 0, z: -1 },
+  { x: 0, y: 0, z: 1 },
+  { x: 0, y: 1, z: 0 },
+  { x: -2, y: 0, z: 0 },
+  { x: 2, y: 0, z: 0 },
+  { x: 0, y: 0, z: -2 },
+  { x: 0, y: 0, z: 2 }
+];
+
 function rotateCell(
   cell: FieldCoordinate,
   axis: Axis,
@@ -420,4 +484,17 @@ function rotateCell(
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function getKickOffsets(_axis: Axis): readonly FieldCoordinate[] {
+  return GENERIC_KICK_OFFSETS;
+}
+
+function getLayerClearScore(clearedLayers: number, level: number): number {
+  if (clearedLayers <= 0) {
+    return 0;
+  }
+
+  const base = [0, 100, 300, 500, 800][Math.min(clearedLayers, 4)] ?? 1200;
+  return base * level;
 }

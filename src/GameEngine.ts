@@ -94,10 +94,27 @@ export class GameEngine {
       return;
     }
 
+    if (event.code === 'Space') {
+      event.preventDefault();
+      const distance = this.state.hardDropActiveTetromino();
+      this.state.addHardDropScore(distance);
+      if (this.state.getActiveTetromino()) {
+        this.state.lockActiveTetromino();
+        this.state.spawnTetromino();
+      }
+      this.lastDropAt = performance.now();
+      this.syncScene();
+      return;
+    }
+
     const move = MOVEMENT_OFFSETS[event.code];
     if (move) {
       event.preventDefault();
       if (this.state.moveActiveTetromino(move)) {
+        if (event.code === 'KeyS') {
+          this.state.addSoftDropScore();
+          this.lastDropAt = performance.now();
+        }
         this.syncScene();
       }
       return;
@@ -113,7 +130,10 @@ export class GameEngine {
   }
 
   private advanceGame(timestamp: number): void {
-    if (this.state.isGameOver() || timestamp - this.lastDropAt < DROP_INTERVAL_MS) {
+    if (
+      this.state.isGameOver() ||
+      timestamp - this.lastDropAt < this.state.getDropIntervalMs()
+    ) {
       return;
     }
 
@@ -161,7 +181,6 @@ const MOVEMENT_OFFSETS: Record<string, FieldCoordinate> = {
 };
 
 const DROP_OFFSET: FieldCoordinate = { x: 0, y: -1, z: 0 };
-const DROP_INTERVAL_MS = 700;
 
 const ROTATION_COMMANDS: Record<string, RotationCommand> = {
   KeyQ: { axis: 'y', direction: -1 },
