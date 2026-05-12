@@ -16,7 +16,12 @@ import {
   WebGLRenderer,
   GridHelper
 } from 'three';
-import type { ActiveTetrominoSnapshot } from './GameState';
+import type {
+  ActiveTetrominoSnapshot,
+  GamePhase,
+  SettledBlockSnapshot
+} from './GameState';
+import type { TetrominoType } from './constants/tetromino';
 import { GameState } from './GameState';
 import { CELL_SIZE, FIELD_DIMENSIONS, FIELD_ORIGIN } from './constants/field';
 
@@ -31,6 +36,8 @@ export class Renderer {
   private container: HTMLElement | null = null;
   private resizeHandler: (() => void) | null = null;
   private activeTetrominoGroup: Group | null = null;
+  private settledBlocksGroup: Group | null = null;
+  private hudElement: HTMLDivElement | null = null;
 
   constructor(gameState: GameState) {
     this.gameState = gameState;
@@ -70,6 +77,7 @@ export class Renderer {
 
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
+    container.appendChild(this.createHudElement());
 
     scene.add(this.createLighting());
     scene.add(this.createFieldBounds());
@@ -83,6 +91,8 @@ export class Renderer {
     window.addEventListener('resize', this.resizeHandler);
 
     this.updateActiveTetromino(this.gameState.getActiveTetromino());
+    this.updateSettledBlocks(this.gameState.getSettledBlocks());
+    this.updateHud(this.gameState.getUpcomingQueue(), this.gameState.getPhase());
     this.renderFrame();
   }
 
@@ -108,6 +118,9 @@ export class Renderer {
 
     this.renderer?.dispose();
     this.disposeActiveTetrominoGroup();
+    this.disposeSettledBlocksGroup();
+    this.hudElement?.remove();
+    this.hudElement = null;
     this.renderer = null;
     this.scene = null;
     this.camera = null;
@@ -129,14 +142,7 @@ export class Renderer {
     group.position.set(FIELD_ORIGIN.x, FIELD_ORIGIN.y, FIELD_ORIGIN.z);
 
     tetromino.blocks.forEach((block) => {
-      const geometry = new BoxGeometry(CELL_SIZE, CELL_SIZE, CELL_SIZE);
-      const material = new MeshStandardMaterial({
-        color: tetromino.color,
-        metalness: 0.1,
-        roughness: 0.35
-      });
-      const mesh = new Mesh(geometry, material);
-      mesh.castShadow = true;
+      const mesh = this.createBlockMesh(tetromino.color);
       mesh.position.set(
         (block.x + 0.5) * CELL_SIZE,
         (block.y + 0.5) * CELL_SIZE,
@@ -148,6 +154,51 @@ export class Renderer {
     this.activeTetrominoGroup = group;
     this.scene.add(group);
     this.renderFrame();
+  }
+
+  public updateSettledBlocks(blocks: readonly SettledBlockSnapshot[]): void {
+    if (!this.scene) {
+      return;
+    }
+
+    this.disposeSettledBlocksGroup();
+
+    const group = new Group();
+    group.position.set(FIELD_ORIGIN.x, FIELD_ORIGIN.y, FIELD_ORIGIN.z);
+
+    blocks.forEach((block) => {
+      const mesh = this.createBlockMesh(block.color);
+      mesh.position.set(
+        (block.coordinate.x + 0.5) * CELL_SIZE,
+        (block.coordinate.y + 0.5) * CELL_SIZE,
+        (block.coordinate.z + 0.5) * CELL_SIZE
+      );
+      group.add(mesh);
+    });
+
+    this.settledBlocksGroup = group;
+    this.scene.add(group);
+    this.renderFrame();
+  }
+
+  public updateHud(queue: readonly TetrominoType[], phase: GamePhase): void {
+    if (!this.hudElement) {
+      return;
+    }
+
+    const headline = phase === 'game-over' ? 'GAME OVER' : 'RUNNING';
+    const queueText = queue.join('  ');
+    const restartHint = phase === 'game-over' ? 'Press R to restart' : 'R to restart';
+
+    this.hudElement.innerHTML = `
+      <div style="font-size:12px;letter-spacing:0.18em;color:#7dd3fc;">${headline}</div>
+      <div style="margin-top:8px;font-size:13px;color:#e2e8f0;">Next: ${queueText}</div>
+      <div style="margin-top:12px;font-size:12px;line-height:1.6;color:#cbd5e1;">
+        Move: Arrow keys / W / S<br />
+        Rotate: Q E / A D / Z X<br />
+        ${restartHint}
+      </div>
+    `;
   }
 
   /**
@@ -296,7 +347,24 @@ export class Renderer {
       return;
     }
 
-    this.activeTetrominoGroup.children.forEach((child) => {
+    this.disposeGroupMeshes(this.activeTetrominoGroup);
+
+    this.scene.remove(this.activeTetrominoGroup);
+    this.activeTetrominoGroup = null;
+  }
+
+  private disposeSettledBlocksGroup(): void {
+    if (!this.scene || !this.settledBlocksGroup) {
+      return;
+    }
+
+    this.disposeGroupMeshes(this.settledBlocksGroup);
+    this.scene.remove(this.settledBlocksGroup);
+    this.settledBlocksGroup = null;
+  }
+
+  private disposeGroupMeshes(group: Group): void {
+    group.children.forEach((child) => {
       if (child instanceof Mesh) {
         child.geometry.dispose();
         if (Array.isArray(child.material)) {
@@ -306,8 +374,34 @@ export class Renderer {
         }
       }
     });
+  }
 
-    this.scene.remove(this.activeTetrominoGroup);
-    this.activeTetrominoGroup = null;
+  private createBlockMesh(color: number): Mesh {
+    const geometry = new BoxGeometry(CELL_SIZE, CELL_SIZE, CELL_SIZE);
+    const material = new MeshStandardMaterial({
+      color,
+      metalness: 0.1,
+      roughness: 0.35
+    });
+    const mesh = new Mesh(geometry, material);
+    mesh.castShadow = true;
+    return mesh;
+  }
+
+  private createHudElement(): HTMLDivElement {
+    const hud = document.createElement('div');
+    hud.style.position = 'absolute';
+    hud.style.top = '16px';
+    hud.style.left = '16px';
+    hud.style.padding = '12px 14px';
+    hud.style.background = 'rgba(15, 23, 42, 0.72)';
+    hud.style.border = '1px solid rgba(56, 189, 248, 0.25)';
+    hud.style.borderRadius = '10px';
+    hud.style.backdropFilter = 'blur(10px)';
+    hud.style.fontFamily = '"Segoe UI", sans-serif';
+    hud.style.minWidth = '220px';
+    hud.style.pointerEvents = 'none';
+    this.hudElement = hud;
+    return hud;
   }
 }

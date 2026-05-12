@@ -227,14 +227,8 @@ export class GameState {
     };
 
     if (!this.canOccupy(instance.position, instance.cells)) {
-      // Attempt to nudge downward until it fits; if impossible, leave inactive.
-      const adjusted = this.findFirstValidPosition(instance);
-      if (!adjusted) {
-        this.activeTetromino = null;
-        this.phase = 'game-over';
-        return;
-      }
-      this.activeTetromino = adjusted;
+      this.activeTetromino = null;
+      this.phase = 'game-over';
       return;
     }
 
@@ -256,20 +250,6 @@ export class GameState {
     });
     this.activeTetromino = null;
     return true;
-  }
-
-  private findFirstValidPosition(instance: ActiveTetromino): ActiveTetromino | null {
-    const candidate: ActiveTetromino = { ...instance };
-    while (candidate.position.y >= 0) {
-      if (this.canOccupy(candidate.position, candidate.cells)) {
-        return candidate;
-      }
-      candidate.position = {
-        ...candidate.position,
-        y: candidate.position.y - 1
-      };
-    }
-    return null;
   }
 
   private canOccupy(position: FieldCoordinate, cells: readonly FieldCoordinate[]): boolean {

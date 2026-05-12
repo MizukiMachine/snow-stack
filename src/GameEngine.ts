@@ -11,6 +11,7 @@ export class GameEngine {
   private readonly renderer: Renderer;
   private animationFrameId: number | null = null;
   private keydownHandler: ((event: KeyboardEvent) => void) | null = null;
+  private lastDropAt = 0;
 
   constructor(state: GameState = new GameState(), renderer?: Renderer) {
     this.state = state;
@@ -23,7 +24,7 @@ export class GameEngine {
   public start(container: HTMLElement): void {
     this.state.ensureActiveTetromino();
     this.renderer.initialize(container);
-    this.syncActiveTetromino();
+    this.syncScene();
     this.attachInputHandlers();
     this.beginRenderLoop();
   }
@@ -56,11 +57,13 @@ export class GameEngine {
   }
 
   private beginRenderLoop(): void {
-    const loop = () => {
+    const loop = (timestamp: number) => {
+      this.advanceGame(timestamp);
       this.renderer.renderFrame();
       this.animationFrameId = requestAnimationFrame(loop);
     };
 
+    this.lastDropAt = performance.now();
     this.animationFrameId = requestAnimationFrame(loop);
   }
 
@@ -81,11 +84,21 @@ export class GameEngine {
   }
 
   private handleKeyDown(event: KeyboardEvent): void {
+    if (event.code === 'KeyR') {
+      event.preventDefault();
+      this.restart();
+      return;
+    }
+
+    if (this.state.isGameOver()) {
+      return;
+    }
+
     const move = MOVEMENT_OFFSETS[event.code];
     if (move) {
       event.preventDefault();
       if (this.state.moveActiveTetromino(move)) {
-        this.syncActiveTetromino();
+        this.syncScene();
       }
       return;
     }
@@ -94,13 +107,36 @@ export class GameEngine {
     if (rotation) {
       event.preventDefault();
       if (this.state.rotateActiveTetromino(rotation.axis, rotation.direction)) {
-        this.syncActiveTetromino();
+        this.syncScene();
       }
     }
   }
 
-  private syncActiveTetromino(): void {
+  private advanceGame(timestamp: number): void {
+    if (this.state.isGameOver() || timestamp - this.lastDropAt < DROP_INTERVAL_MS) {
+      return;
+    }
+
+    if (!this.state.moveActiveTetromino(DROP_OFFSET) && this.state.getActiveTetromino()) {
+      this.state.lockActiveTetromino();
+      this.state.spawnTetromino();
+    }
+
+    this.lastDropAt = timestamp;
+    this.syncScene();
+  }
+
+  private restart(): void {
+    this.state.reset();
+    this.state.ensureActiveTetromino();
+    this.lastDropAt = performance.now();
+    this.syncScene();
+  }
+
+  private syncScene(): void {
+    this.renderer.updateSettledBlocks(this.state.getSettledBlocks());
     this.renderer.updateActiveTetromino(this.state.getActiveTetromino());
+    this.renderer.updateHud(this.state.getUpcomingQueue(), this.state.getPhase());
   }
 }
 
@@ -119,6 +155,9 @@ const MOVEMENT_OFFSETS: Record<string, FieldCoordinate> = {
   KeyW: { x: 0, y: 1, z: 0 },
   KeyS: { x: 0, y: -1, z: 0 }
 };
+
+const DROP_OFFSET: FieldCoordinate = { x: 0, y: -1, z: 0 };
+const DROP_INTERVAL_MS = 700;
 
 const ROTATION_COMMANDS: Record<string, RotationCommand> = {
   KeyQ: { axis: 'y', direction: -1 },
