@@ -159,7 +159,10 @@ export class GameEngine {
     this.renderer.updateHud(
       this.state.getUpcomingQueue(),
       this.state.getPhase(),
-      this.state.getClearedLayerCount()
+      this.state.getClearedLayerCount(),
+      this.state.getScore(),
+      this.state.getLevel(),
+      this.state.getDropIntervalMs()
     );
   }
 }
