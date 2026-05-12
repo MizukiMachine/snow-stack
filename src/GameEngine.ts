@@ -12,10 +12,21 @@ export class GameEngine {
   private animationFrameId: number | null = null;
   private keydownHandler: ((event: KeyboardEvent) => void) | null = null;
   private lastDropAt = 0;
+  private startedAt = 0;
+  private pausedAt = 0;
+  private pausedDuration = 0;
+  private paused = false;
+  private settingsOpen = false;
 
   constructor(state: GameState = new GameState(), renderer?: Renderer) {
     this.state = state;
-    this.renderer = renderer ?? new Renderer(this.state);
+    this.renderer =
+      renderer ??
+      new Renderer(this.state, {
+        onRestart: () => this.restart(),
+        onTogglePause: () => this.togglePause(),
+        onToggleSettings: () => this.toggleSettings()
+      });
   }
 
   /**
@@ -23,6 +34,10 @@ export class GameEngine {
    */
   public start(container: HTMLElement): void {
     this.state.ensureActiveTetromino();
+    this.startedAt = performance.now();
+    this.pausedDuration = 0;
+    this.pausedAt = 0;
+    this.paused = false;
     this.renderer.initialize(container);
     this.syncScene();
     this.attachInputHandlers();
@@ -59,6 +74,7 @@ export class GameEngine {
   private beginRenderLoop(): void {
     const loop = (timestamp: number) => {
       this.advanceGame(timestamp);
+      this.syncScene();
       this.renderer.renderFrame();
       this.animationFrameId = requestAnimationFrame(loop);
     };
@@ -90,7 +106,17 @@ export class GameEngine {
       return;
     }
 
+    if (event.code === 'KeyP' || event.code === 'Escape') {
+      event.preventDefault();
+      this.togglePause();
+      return;
+    }
+
     if (this.state.isGameOver()) {
+      return;
+    }
+
+    if (this.paused) {
       return;
     }
 
@@ -131,6 +157,7 @@ export class GameEngine {
 
   private advanceGame(timestamp: number): void {
     if (
+      this.paused ||
       this.state.isGameOver() ||
       timestamp - this.lastDropAt < this.state.getDropIntervalMs()
     ) {
@@ -149,6 +176,11 @@ export class GameEngine {
   private restart(): void {
     this.state.reset();
     this.state.ensureActiveTetromino();
+    this.startedAt = performance.now();
+    this.pausedDuration = 0;
+    this.pausedAt = 0;
+    this.paused = false;
+    this.settingsOpen = false;
     this.lastDropAt = performance.now();
     this.syncScene();
   }
@@ -162,8 +194,42 @@ export class GameEngine {
       this.state.getClearedLayerCount(),
       this.state.getScore(),
       this.state.getLevel(),
-      this.state.getDropIntervalMs()
+      this.state.getDropIntervalMs(),
+      this.getElapsedMs(),
+      this.paused,
+      this.settingsOpen
     );
+  }
+
+  private togglePause(): void {
+    if (this.state.isGameOver()) {
+      return;
+    }
+
+    if (this.paused) {
+      this.paused = false;
+      this.pausedDuration += performance.now() - this.pausedAt;
+      this.lastDropAt = performance.now();
+    } else {
+      this.paused = true;
+      this.pausedAt = performance.now();
+    }
+
+    this.syncScene();
+  }
+
+  private toggleSettings(): void {
+    this.settingsOpen = !this.settingsOpen;
+    this.syncScene();
+  }
+
+  private getElapsedMs(): number {
+    if (this.startedAt === 0) {
+      return 0;
+    }
+
+    const now = this.paused ? this.pausedAt : performance.now();
+    return now - this.startedAt - this.pausedDuration;
   }
 }
 
