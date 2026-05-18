@@ -28,6 +28,8 @@ export class GameState {
   private phase: GamePhase = 'running';
   private clearedLayerCount = 0;
   private score = 0;
+  private heldPiece: TetrominoType | null = null;
+  private holdUsed = false;
 
   constructor(dimensions: FieldDimensions = FIELD_DIMENSIONS) {
     this.dimensions = dimensions;
@@ -63,6 +65,8 @@ export class GameState {
     this.phase = 'running';
     this.clearedLayerCount = 0;
     this.score = 0;
+    this.heldPiece = null;
+    this.holdUsed = false;
   }
 
   /**
@@ -134,6 +138,29 @@ export class GameState {
         z: position.z + cell.z
       }))
     };
+  }
+
+  public getHeldPiece(): TetrominoType | null {
+    return this.heldPiece;
+  }
+
+  public holdActiveTetromino(): boolean {
+    if (!this.activeTetromino || this.holdUsed) {
+      return false;
+    }
+
+    const currentType = this.activeTetromino.type;
+    this.activeTetromino = null;
+
+    if (this.heldPiece) {
+      this.spawnTetromino(this.heldPiece);
+    } else {
+      this.spawnTetromino();
+    }
+
+    this.heldPiece = currentType;
+    this.holdUsed = true;
+    return true;
   }
 
   /**
@@ -295,6 +322,7 @@ export class GameState {
     const clearedLayers = this.clearCompletedLayers();
     this.clearedLayerCount += clearedLayers;
     this.score += getLayerClearScore(clearedLayers, this.getLevel());
+    this.holdUsed = false;
     return clearedLayers;
   }
 

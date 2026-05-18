@@ -21,7 +21,7 @@ export const TETROMINO_TYPES: readonly TetrominoType[] = Object.freeze([
 const DEFINITIONS: Record<TetrominoType, TetrominoDefinition> = {
   I: {
     type: 'I',
-    color: 0x38bdf8,
+    color: 0x42c9ff,
     cells: Object.freeze([
       { x: -1, y: 0, z: 0 },
       { x: 0, y: 0, z: 0 },
@@ -31,7 +31,7 @@ const DEFINITIONS: Record<TetrominoType, TetrominoDefinition> = {
   },
   J: {
     type: 'J',
-    color: 0x0ea5e9,
+    color: 0x3b74ff,
     cells: Object.freeze([
       { x: -1, y: 0, z: 0 },
       { x: 0, y: 0, z: 0 },
@@ -41,7 +41,7 @@ const DEFINITIONS: Record<TetrominoType, TetrominoDefinition> = {
   },
   L: {
     type: 'L',
-    color: 0xf97316,
+    color: 0xffb22e,
     cells: Object.freeze([
       { x: -1, y: 0, z: 0 },
       { x: 0, y: 0, z: 0 },
@@ -51,7 +51,7 @@ const DEFINITIONS: Record<TetrominoType, TetrominoDefinition> = {
   },
   O: {
     type: 'O',
-    color: 0xfacc15,
+    color: 0xffcf3f,
     cells: Object.freeze([
       { x: 0, y: 0, z: 0 },
       { x: 1, y: 0, z: 0 },
@@ -61,7 +61,7 @@ const DEFINITIONS: Record<TetrominoType, TetrominoDefinition> = {
   },
   S: {
     type: 'S',
-    color: 0x22c55e,
+    color: 0x4de064,
     cells: Object.freeze([
       { x: -1, y: 0, z: 0 },
       { x: 0, y: 0, z: 0 },
@@ -71,7 +71,7 @@ const DEFINITIONS: Record<TetrominoType, TetrominoDefinition> = {
   },
   T: {
     type: 'T',
-    color: 0xa855f7,
+    color: 0xb24bff,
     cells: Object.freeze([
       { x: -1, y: 0, z: 0 },
       { x: 0, y: 0, z: 0 },
@@ -81,7 +81,7 @@ const DEFINITIONS: Record<TetrominoType, TetrominoDefinition> = {
   },
   Z: {
     type: 'Z',
-    color: 0xef4444,
+    color: 0xff4f50,
     cells: Object.freeze([
       { x: -1, y: 0, z: 1 },
       { x: 0, y: 0, z: 1 },

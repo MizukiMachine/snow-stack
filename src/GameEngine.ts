@@ -133,6 +133,15 @@ export class GameEngine {
       return;
     }
 
+    if (event.code === 'KeyC') {
+      event.preventDefault();
+      if (this.state.holdActiveTetromino()) {
+        this.lastDropAt = performance.now();
+        this.syncScene();
+      }
+      return;
+    }
+
     const move = MOVEMENT_OFFSETS[event.code];
     if (move) {
       event.preventDefault();
@@ -197,7 +206,8 @@ export class GameEngine {
       this.state.getDropIntervalMs(),
       this.getElapsedMs(),
       this.paused,
-      this.settingsOpen
+      this.settingsOpen,
+      this.state.getHeldPiece()
     );
   }
 
@@ -243,10 +253,10 @@ type RotationDirection = 1 | -1;
 const MOVEMENT_OFFSETS: Record<string, FieldCoordinate> = {
   ArrowLeft: { x: -1, y: 0, z: 0 },
   ArrowRight: { x: 1, y: 0, z: 0 },
-  ArrowUp: { x: 0, y: 0, z: -1 },
-  ArrowDown: { x: 0, y: 0, z: 1 },
-  KeyW: { x: 0, y: 1, z: 0 },
-  KeyS: { x: 0, y: -1, z: 0 }
+  ArrowUp: { x: 0, y: 1, z: 0 },
+  ArrowDown: { x: 0, y: -1, z: 0 },
+  KeyW: { x: 0, y: 0, z: -1 },
+  KeyS: { x: 0, y: 0, z: 1 }
 };
 
 const DROP_OFFSET: FieldCoordinate = { x: 0, y: -1, z: 0 };

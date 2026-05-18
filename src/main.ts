@@ -9,6 +9,7 @@ type AppLogEntry = {
 declare global {
   interface Window {
     __appLogs?: AppLogEntry[];
+    __engine?: GameEngine;
   }
 }
 
@@ -50,6 +51,7 @@ viewport.className = 'app-viewport';
 root.appendChild(viewport);
 
 const engine = new GameEngine();
+window.__engine = engine;
 engine.start(viewport);
 
 if (import.meta.hot) {
