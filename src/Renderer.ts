@@ -1,8 +1,8 @@
 import {
+  AdditiveBlending,
   AmbientLight,
   BufferGeometry,
   BoxGeometry,
-  Color,
   DirectionalLight,
   EdgesGeometry,
   Float32BufferAttribute,
@@ -64,18 +64,31 @@ type CameraOrbitState = {
   lastY: number;
 };
 
+type HudIconName =
+  | 'alert'
+  | 'chart'
+  | 'cube'
+  | 'home'
+  | 'layers'
+  | 'lightbulb'
+  | 'mouse'
+  | 'pause'
+  | 'restart'
+  | 'settings'
+  | 'trophy';
+
 const CAMERA_SETTINGS = {
-  targetHeightFactor: 0.42,
-  initialTheta: -Math.PI / 2,
-  initialPhi: 1.08,
-  minPhi: 0.08,
-  maxPhi: Math.PI / 2,
+  targetHeightFactor: 0.46,
+  initialTheta: -2.32,
+  initialPhi: 0.82,
+  minPhi: 0.22,
+  maxPhi: 1.42,
   rotateSpeedX: 0.0022,
   rotateSpeedY: 0.002,
   zoomSpeed: 0.01,
-  minRadius: 16,
-  maxRadius: 42,
-  initialRadiusMultiplier: 1.46,
+  minRadius: 14,
+  maxRadius: 38,
+  initialRadiusMultiplier: 1.26,
   axisLockThresholdPx: 6
 } as const;
 
@@ -152,7 +165,7 @@ export class Renderer {
     container.appendChild(canvasHost);
 
     const scene = new Scene();
-    scene.background = new Color('#02050d');
+    scene.background = null;
     scene.fog = null;
 
     const camera = new PerspectiveCamera(36, this.getAspectRatio(), 0.1, 1000);
@@ -166,6 +179,7 @@ export class Renderer {
       preserveDrawingBuffer: true
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x000000, 0);
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.domElement.className = 'scene-canvas';
     canvasHost.appendChild(renderer.domElement);
@@ -337,7 +351,7 @@ export class Renderer {
     this.setText(root, '[data-role="speed"]', `${(1000 / this.hudState.dropIntervalMs).toFixed(2)}x`);
     this.setText(root, '[data-role="timer"]', this.formatElapsed(this.hudState.elapsedMs));
     this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? 'RESUME' : 'PAUSE');
-      this.setText(
+    this.setText(
       root,
       '[data-role="footer-tip"]',
       this.hudState.phase === 'game-over'
@@ -371,15 +385,14 @@ export class Renderer {
 
   private createHudElement(): HTMLDivElement {
     const hud = document.createElement('div');
+    const icon = (name: HudIconName) => renderHudIcon(name);
     hud.className = 'ui-layer';
     hud.innerHTML = `
       <div class="brand-panel">
         <div class="brand-mark"><span>3D</span> TETRIS</div>
       </div>
       <section class="info-card tip-card">
-        <div class="card-icon" aria-hidden="true">
-          <span></span><span></span><span></span>
-        </div>
+        <div class="card-icon">${icon('cube')}</div>
         <div>
           <div class="card-title">TIP</div>
           <p>This is 3D. Move, rotate, and think in every direction.</p>
@@ -395,9 +408,9 @@ export class Renderer {
       </section>
       <aside class="right-rail">
         <section class="panel stat-panel">
-          <div class="metric-row"><span><i class="metric-icon">T</i> SCORE</span><strong data-role="score">0</strong></div>
-          <div class="metric-row"><span><i class="metric-icon">L</i> LEVEL</span><strong data-role="level">1</strong></div>
-          <div class="metric-row"><span><i class="metric-icon">S</i> LINES</span><strong data-role="lines">0</strong></div>
+          <div class="metric-row"><span>${icon('trophy')} SCORE</span><strong data-role="score">0</strong></div>
+          <div class="metric-row"><span>${icon('chart')} LEVEL</span><strong data-role="level">1</strong></div>
+          <div class="metric-row"><span>${icon('layers')} LINES</span><strong data-role="lines">0</strong></div>
         </section>
         <section class="panel preview-panel">
           <h3>NEXT PIECE</h3>
@@ -410,24 +423,21 @@ export class Renderer {
         <section class="panel controls-panel">
           <h3>CONTROLS</h3>
           <div class="control-grid">
-            <div class="control-row"><span class="keys"><b>←</b><b>→</b></span><span>MOVE</span></div>
-            <div class="control-row"><span class="keys"><b>↑</b><b>↓</b></span><span>HEIGHT</span></div>
-            <div class="control-row"><span class="keys"><b>W</b><b>S</b></span><span>DEPTH</span></div>
+            <div class="control-row"><span class="keys"><b>↑</b><b>↓</b><b>←</b><b>→</b></span><span>MOVE</span></div>
             <div class="control-row"><span class="keys"><b>A</b><b>D</b></span><span>ROTATE</span></div>
-            <div class="control-row"><span class="keys wide"><b>SPACE</b></span><span>DROP</span></div>
-            <div class="control-row"><span class="keys"><b>C</b></span><span>HOLD</span></div>
-            <div class="control-row"><span class="keys"><b>◔</b></span><span>CAMERA</span></div>
+            <div class="control-row"><span class="keys"><b>↓</b><b class="wide-key">SPACE</b></span><span>DROP</span></div>
+            <div class="control-row"><span class="keys"><b>${icon('mouse')}</b></span><span>DRAG CAMERA</span></div>
           </div>
         </section>
         <div class="action-row">
-          <button class="action-button" data-action="pause" type="button"><span>II</span><span data-role="pause-label">PAUSE</span></button>
-          <button class="action-button" data-action="restart" type="button"><span>◔</span><span>RESTART</span></button>
-          <button class="action-button" data-action="settings" type="button"><span>◌</span><span>SETTINGS</span></button>
+          <button class="action-button" data-action="pause" type="button"><span class="button-icon">${icon('pause')}</span><span data-role="pause-label">PAUSE</span></button>
+          <button class="action-button" data-action="restart" type="button"><span class="button-icon">${icon('restart')}</span><span>RESTART</span></button>
+          <button class="action-button" data-action="settings" type="button"><span class="button-icon">${icon('settings')}</span><span>SETTINGS</span></button>
         </div>
       </aside>
       <section class="status-bar">
         <div class="status-pill"><span class="status-label">STATUS</span><span class="status-dot"></span><span data-role="status-label">RUNNING</span></div>
-        <div class="status-hint"><span>◌</span><span data-role="footer-tip"></span></div>
+        <div class="status-hint">${icon('lightbulb')}<span data-role="footer-tip"></span></div>
         <div class="status-meta"><span data-role="timer">00:00:00</span></div>
       </section>
       <section class="panel settings-panel" data-role="settings-panel" hidden>
@@ -439,7 +449,7 @@ export class Renderer {
         </div>
       </section>
       <section class="overlay-card" data-role="overlay" hidden>
-        <div class="overlay-alert">!</div>
+        <div class="overlay-alert">${icon('alert')}</div>
         <h2>GAME OVER</h2>
         <p>The tower has reached the top.</p>
         <div class="overlay-scorebox">
@@ -452,8 +462,8 @@ export class Renderer {
           <div><span>TIME PLAYED</span><strong data-role="overlay-time">00:00:00</strong></div>
         </div>
         <div class="overlay-actions">
-          <button class="overlay-button overlay-button-danger" data-action="restart" type="button">RETRY</button>
-          <button class="overlay-button overlay-button-primary" data-action="settings" type="button">MENU</button>
+          <button class="overlay-button overlay-button-danger" data-action="restart" type="button">${icon('restart')}<span>RETRY</span></button>
+          <button class="overlay-button overlay-button-primary" data-action="settings" type="button">${icon('home')}<span>MENU</span></button>
         </div>
         <p class="overlay-footnote">You can always rotate the view and look for a path.</p>
       </section>
@@ -488,7 +498,7 @@ export class Renderer {
     const panelMaterial = new MeshStandardMaterial({
       color: 0x0a1330,
       transparent: true,
-      opacity: 0.1,
+      opacity: 0.08,
       roughness: 0.35,
       metalness: 0.25
     });
@@ -500,7 +510,7 @@ export class Renderer {
         roughness: 0.5,
         metalness: 0.3,
         transparent: true,
-        opacity: 0.18
+        opacity: 0.14
       })
     );
     floor.rotation.x = -Math.PI / 2;
@@ -532,31 +542,33 @@ export class Renderer {
     );
     const bounds = new LineSegments(
       new EdgesGeometry(boundsGeometry),
-      new LineBasicMaterial({ color: 0x8fdfff, transparent: true, opacity: 0.96 })
+      new LineBasicMaterial({ color: 0x9ce9ff, transparent: true, opacity: 0.98 })
     );
 
     group.add(floor, leftWall, rightWall, backWall, bounds);
+    group.add(this.createFaceGrid('xy', width, height, 0, 0x58c9ff));
     group.add(this.createFaceGrid('xy', width, height, depth, 0x62c4ff));
     group.add(this.createFaceGrid('yz', depth, height, 0, 0x4ca6ff));
     group.add(this.createFaceGrid('yz', depth, height, width, 0x4ca6ff));
     group.add(this.createFaceGrid('xz', width, depth, 0, 0x2a7cff));
+    group.add(this.createFaceGrid('xz', width, depth, height, 0x62c4ff));
     group.add(this.createCornerGlow(width, height, depth));
     return group;
   }
 
   private createLighting(): Group {
     const group = new Group();
-    group.add(new AmbientLight(0xb9d5ff, 0.62));
+    group.add(new AmbientLight(0xb9d5ff, 0.72));
 
     const key = new DirectionalLight(0x8fd7ff, 1.7);
     key.position.set(14, 22, 10);
     group.add(key);
 
-    const rim = new DirectionalLight(0x6f7cff, 1);
+    const rim = new DirectionalLight(0x6f7cff, 1.3);
     rim.position.set(-12, 16, -8);
     group.add(rim);
 
-    const warm = new DirectionalLight(0xffb44a, 0.7);
+    const warm = new DirectionalLight(0xffb44a, 0.86);
     warm.position.set(4, 8, 14);
     group.add(warm);
 
@@ -591,16 +603,28 @@ export class Renderer {
   private createBlockMesh(color: number, isActive: boolean): Group {
     const cube = new Group();
 
+    const glowShell = new Mesh(
+      new BoxGeometry(CELL_SIZE * 1.1, CELL_SIZE * 1.1, CELL_SIZE * 1.1),
+      new MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: isActive ? 0.18 : 0.1,
+        depthWrite: false,
+        blending: AdditiveBlending
+      })
+    );
+    cube.add(glowShell);
+
     const solid = new Mesh(
       new BoxGeometry(CELL_SIZE * 0.92, CELL_SIZE * 0.92, CELL_SIZE * 0.92),
       new MeshStandardMaterial({
         color,
         emissive: color,
-        emissiveIntensity: isActive ? 0.92 : 0.45,
-        metalness: 0.14,
-        roughness: 0.12,
+        emissiveIntensity: isActive ? 1.08 : 0.62,
+        metalness: 0.22,
+        roughness: 0.16,
         transparent: true,
-        opacity: isActive ? 0.56 : 0.42
+        opacity: isActive ? 0.94 : 0.88
       })
     );
     cube.add(solid);
@@ -610,7 +634,7 @@ export class Renderer {
       new MeshBasicMaterial({
         color,
         transparent: true,
-        opacity: isActive ? 0.3 : 0.2
+        opacity: isActive ? 0.3 : 0.24
       })
     );
     cube.add(inner);
@@ -621,7 +645,7 @@ export class Renderer {
         new LineBasicMaterial({
           color: 0xf5fbff,
           transparent: true,
-          opacity: isActive ? 0.96 : 0.7
+          opacity: isActive ? 0.98 : 0.78
         })
       )
     );
@@ -653,9 +677,9 @@ export class Renderer {
         pointsGeometry,
         new PointsMaterial({
           color,
-          size: 0.045,
+          size: 0.052,
           transparent: true,
-          opacity: 0.54
+          opacity: 0.64
         })
       )
     );
@@ -663,7 +687,7 @@ export class Renderer {
     const lineMaterial = new LineBasicMaterial({
       color,
       transparent: true,
-      opacity: 0.12
+      opacity: 0.18
     });
 
     for (let a = 0; a <= spanA; a += 1) {
@@ -933,32 +957,56 @@ export class Renderer {
     }
 
     const definition = getTetrominoDefinition(type);
-    const projected = definition.cells.map((cell) => ({
-      left: cell.x * 31 + cell.z * 17,
-      top: -cell.z * 27 + cell.y * -12
-    }));
+    const blockSize = 34;
+    const gap = 4;
+    const step = blockSize + gap;
+    const minCellX = Math.min(...definition.cells.map((cell) => cell.x));
+    const maxCellX = Math.max(...definition.cells.map((cell) => cell.x));
+    const minCellZ = Math.min(...definition.cells.map((cell) => cell.z));
+    const maxCellZ = Math.max(...definition.cells.map((cell) => cell.z));
+    const cubes = definition.cells
+      .map((cell) => ({
+        x: (cell.x - minCellX) * step,
+        y: (maxCellZ - cell.z) * step
+      }))
+      .sort((a, b) => a.y - b.y || a.x - b.x);
 
-    const minLeft = Math.min(...projected.map((cell) => cell.left));
-    const minTop = Math.min(...projected.map((cell) => cell.top));
-    const maxLeft = Math.max(...projected.map((cell) => cell.left));
-    const maxTop = Math.max(...projected.map((cell) => cell.top));
-    const width = maxLeft - minLeft + 34;
-    const height = maxTop - minTop + 34;
+    const previewWidth = (maxCellX - minCellX + 1) * step - gap;
+    const previewHeight = (maxCellZ - minCellZ + 1) * step - gap;
+    const padding = 20;
+    const viewBox = [
+      -padding,
+      -padding,
+      previewWidth + padding * 2,
+      previewHeight + padding * 2
+    ].join(' ');
+    const baseColor = definition.color;
+    const frontColor = mixColor(baseColor, 0xffffff, 0.08);
+    const strokeColor = mixColor(baseColor, 0xffffff, 0.62);
+    const glowColor = `#${baseColor.toString(16).padStart(6, '0')}`;
 
-    container.innerHTML = projected
-      .map(
-        (cell) => `
-          <span
-            class="mini-voxel"
-            style="
-              left:${cell.left - minLeft + 50 - width / 2}px;
-              top:${cell.top - minTop + 58 - height / 2}px;
-              --piece-color:#${definition.color.toString(16).padStart(6, '0')};
-            "
-          ><span></span></span>
-        `
-      )
-      .join('');
+    container.innerHTML = `
+      <svg
+        class="piece-preview-svg"
+        viewBox="${viewBox}"
+        preserveAspectRatio="xMidYMid meet"
+        style="--piece-color:${glowColor};"
+        aria-hidden="true"
+        focusable="false"
+      >
+        ${cubes
+          .map(({ x, y }) =>
+            renderPreviewCube(
+              x,
+              y,
+              blockSize,
+              frontColor,
+              strokeColor
+            )
+          )
+          .join('')}
+      </svg>
+    `;
   }
 
   private setText(root: ParentNode, selector: string, text: string): void {
@@ -997,4 +1045,64 @@ export class Renderer {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function renderPreviewCube(
+  x: number,
+  y: number,
+  size: number,
+  frontColor: string,
+  strokeColor: string
+): string {
+  return `
+    <g class="preview-cube">
+      <rect x="${x}" y="${y}" width="${size}" height="${size}" rx="5" fill="${frontColor}" stroke="${strokeColor}" />
+      <path d="M${x + 6} ${y + 6} H${x + size - 8}" class="preview-cube-highlight" />
+      <path d="M${x + size - 6} ${y + 7} V${y + size - 8}" class="preview-cube-shade" />
+    </g>
+  `;
+}
+
+function mixColor(color: number, target: number, amount: number): string {
+  const sourceRgb = numberToRgb(color);
+  const targetRgb = numberToRgb(target);
+  const mixed = sourceRgb.map((value, index) =>
+    Math.round(value + (targetRgb[index] - value) * amount)
+  );
+  return `rgb(${mixed[0]}, ${mixed[1]}, ${mixed[2]})`;
+}
+
+function numberToRgb(color: number): [number, number, number] {
+  return [(color >> 16) & 255, (color >> 8) & 255, color & 255];
+}
+
+function renderHudIcon(name: HudIconName): string {
+  const common =
+    'class="hud-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"';
+  const paths: Record<HudIconName, string> = {
+    alert:
+      '<path d="M12 3 22 20H2L12 3Z"/><path d="M12 9v5"/><path d="M12 17h.01"/>',
+    chart:
+      '<path d="M4 20V9"/><path d="M10 20V4"/><path d="M16 20v-8"/><path d="M22 20H2"/>',
+    cube:
+      '<path d="m12 2 8 4.5v9L12 20l-8-4.5v-9L12 2Z"/><path d="M12 11 4 6.5"/><path d="m12 11 8-4.5"/><path d="M12 11v9"/>',
+    home:
+      '<path d="M3 11 12 3l9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
+    layers:
+      '<path d="m12 3 9 4-9 4-9-4 9-4Z"/><path d="m3 12 9 4 9-4"/><path d="m3 17 9 4 9-4"/>',
+    lightbulb:
+      '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M8 14a6 6 0 1 1 8 0c-.8.7-1.2 1.6-1.2 2.5H9.2c0-.9-.4-1.8-1.2-2.5Z"/>',
+    mouse:
+      '<rect x="7" y="3" width="10" height="18" rx="5"/><path d="M12 7v4"/>',
+    pause:
+      '<path d="M8 5v14"/><path d="M16 5v14"/>',
+    restart:
+      '<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v6h-6"/>',
+    settings:
+      '<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M4 12h2"/><path d="M18 12h2"/><path d="m6.3 6.3 1.4 1.4"/><path d="m16.3 16.3 1.4 1.4"/><path d="m17.7 6.3-1.4 1.4"/><path d="m7.7 16.3-1.4 1.4"/><path d="M12 2v2"/><path d="M12 20v2"/>',
+    trophy:
+      '<path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5a3 3 0 0 0 3 3"/><path d="M16 6h3a3 3 0 0 1-3 3"/><path d="M12 12v5"/><path d="M8 21h8"/><path d="M10 17h4"/>'
+  };
+
+  return `<svg ${common}>${paths[name]}</svg>`;
 }
