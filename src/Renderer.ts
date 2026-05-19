@@ -1,9 +1,11 @@
 import {
+  AdditiveBlending,
   AmbientLight,
+  BufferGeometry,
   BoxGeometry,
-  Color,
   DirectionalLight,
   EdgesGeometry,
+  Float32BufferAttribute,
   Group,
   LineBasicMaterial,
   LineSegments,
@@ -12,6 +14,9 @@ import {
   MeshStandardMaterial,
   PerspectiveCamera,
   PlaneGeometry,
+  Points,
+  PointsMaterial,
+  RingGeometry,
   Scene,
   SphereGeometry,
   Vector3,
@@ -42,6 +47,7 @@ type HudState = {
   elapsedMs: number;
   isPaused: boolean;
   settingsOpen: boolean;
+  heldPiece: TetrominoType | null;
 };
 
 type CameraOrbitState = {
@@ -50,10 +56,41 @@ type CameraOrbitState = {
   phi: number;
   target: Vector3;
   dragging: boolean;
+  dragAxis: 'horizontal' | 'vertical' | null;
   pointerId: number | null;
+  startX: number;
+  startY: number;
   lastX: number;
   lastY: number;
 };
+
+type HudIconName =
+  | 'alert'
+  | 'chart'
+  | 'cube'
+  | 'home'
+  | 'layers'
+  | 'lightbulb'
+  | 'mouse'
+  | 'pause'
+  | 'restart'
+  | 'settings'
+  | 'trophy';
+
+const CAMERA_SETTINGS = {
+  targetHeightFactor: 0.46,
+  initialTheta: -2.32,
+  initialPhi: 0.82,
+  minPhi: 0.22,
+  maxPhi: 1.42,
+  rotateSpeedX: 0.0022,
+  rotateSpeedY: 0.002,
+  zoomSpeed: 0.01,
+  minRadius: 14,
+  maxRadius: 38,
+  initialRadiusMultiplier: 1.26,
+  axisLockThresholdPx: 6
+} as const;
 
 /**
  * Three.js scene rendering and DOM-based HUD for the 3D Tetris playfield.
@@ -86,17 +123,20 @@ export class Renderer {
     const { width, height, depth } = this.gameState.getDimensions();
     const target = new Vector3(
       FIELD_ORIGIN.x + (width * CELL_SIZE) / 2,
-      height * CELL_SIZE * 0.42,
+      height * CELL_SIZE * CAMERA_SETTINGS.targetHeightFactor,
       FIELD_ORIGIN.z + (depth * CELL_SIZE) / 2
     );
 
     this.cameraOrbit = {
-      radius: Math.max(width, height, depth) * 1.58,
-      theta: -0.86,
-      phi: 1.08,
+      radius: 0,
+      theta: CAMERA_SETTINGS.initialTheta,
+      phi: CAMERA_SETTINGS.initialPhi,
       target,
       dragging: false,
+      dragAxis: null,
       pointerId: null,
+      startX: 0,
+      startY: 0,
       lastX: 0,
       lastY: 0
     };
@@ -110,7 +150,8 @@ export class Renderer {
       dropIntervalMs: 700,
       elapsedMs: 0,
       isPaused: false,
-      settingsOpen: false
+      settingsOpen: false,
+      heldPiece: null
     };
   }
 
@@ -124,18 +165,21 @@ export class Renderer {
     container.appendChild(canvasHost);
 
     const scene = new Scene();
-    scene.background = new Color('#030611');
+    scene.background = null;
     scene.fog = null;
 
-    const camera = new PerspectiveCamera(44, this.getAspectRatio(), 0.1, 1000);
+    const camera = new PerspectiveCamera(36, this.getAspectRatio(), 0.1, 1000);
+    this.configureInitialCameraOrbit(camera);
     this.applyCameraOrbit(camera);
 
     const renderer = new WebGLRenderer({
       antialias: true,
       alpha: true,
-      powerPreference: 'high-performance'
+      powerPreference: 'high-performance',
+      preserveDrawingBuffer: true
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x000000, 0);
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.domElement.className = 'scene-canvas';
     canvasHost.appendChild(renderer.domElement);
@@ -157,7 +201,7 @@ export class Renderer {
 
     this.updateActiveTetromino(this.gameState.getActiveTetromino());
     this.updateSettledBlocks(this.gameState.getSettledBlocks());
-    this.updateHud([], 'running', 0, 0, 1, 700, 0, false, false);
+    this.updateHud([], 'running', 0, 0, 1, 700, 0, false, false, null);
     this.renderFrame();
   }
 
@@ -273,7 +317,8 @@ export class Renderer {
     dropIntervalMs: number,
     elapsedMs: number,
     isPaused: boolean,
-    settingsOpen: boolean
+    settingsOpen: boolean,
+    heldPiece: TetrominoType | null
   ): void {
     if (!this.hudElement) {
       return;
@@ -288,6 +333,7 @@ export class Renderer {
     this.hudState.elapsedMs = elapsedMs;
     this.hudState.isPaused = isPaused;
     this.hudState.settingsOpen = settingsOpen;
+    this.hudState.heldPiece = heldPiece;
 
     this.syncHud();
   }
@@ -309,8 +355,8 @@ export class Renderer {
       root,
       '[data-role="footer-tip"]',
       this.hudState.phase === 'game-over'
-        ? 'Rotate the camera and reopen a fresh run.'
-        : 'Clear more layers at once to push higher scores.'
+        ? 'Rotate the view and start a fresh run.'
+        : 'Clear more lines at once to earn higher scores!'
     );
 
     this.renderPreview(
@@ -319,7 +365,7 @@ export class Renderer {
     );
     this.renderPreview(
       root.querySelector('[data-role="hold-piece"]'),
-      this.hudState.queue[1] ?? 'S'
+      this.hudState.heldPiece ?? null
     );
 
     const overlay = root.querySelector<HTMLElement>('[data-role="overlay"]');
@@ -339,13 +385,14 @@ export class Renderer {
 
   private createHudElement(): HTMLDivElement {
     const hud = document.createElement('div');
+    const icon = (name: HudIconName) => renderHudIcon(name);
     hud.className = 'ui-layer';
     hud.innerHTML = `
       <div class="brand-panel">
         <div class="brand-mark"><span>3D</span> TETRIS</div>
       </div>
       <section class="info-card tip-card">
-        <div class="card-icon">◇</div>
+        <div class="card-icon">${icon('cube')}</div>
         <div>
           <div class="card-title">TIP</div>
           <p>This is 3D. Move, rotate, and think in every direction.</p>
@@ -361,9 +408,9 @@ export class Renderer {
       </section>
       <aside class="right-rail">
         <section class="panel stat-panel">
-          <div class="metric-row"><span>🏆 SCORE</span><strong data-role="score">0</strong></div>
-          <div class="metric-row"><span>▥ LEVEL</span><strong data-role="level">1</strong></div>
-          <div class="metric-row"><span>▤ LINES</span><strong data-role="lines">0</strong></div>
+          <div class="metric-row"><span>${icon('trophy')} SCORE</span><strong data-role="score">0</strong></div>
+          <div class="metric-row"><span>${icon('chart')} LEVEL</span><strong data-role="level">1</strong></div>
+          <div class="metric-row"><span>${icon('layers')} LINES</span><strong data-role="lines">0</strong></div>
         </section>
         <section class="panel preview-panel">
           <h3>NEXT PIECE</h3>
@@ -376,22 +423,22 @@ export class Renderer {
         <section class="panel controls-panel">
           <h3>CONTROLS</h3>
           <div class="control-grid">
-            <div class="control-row"><span class="keys">← ↑ ↓ →</span><span>MOVE</span></div>
-            <div class="control-row"><span class="keys">Q E / A D / Z X</span><span>ROTATE</span></div>
-            <div class="control-row"><span class="keys">SPACE</span><span>DROP</span></div>
-            <div class="control-row"><span class="keys">DRAG</span><span>CAMERA</span></div>
+            <div class="control-row"><span class="keys"><b>↑</b><b>↓</b><b>←</b><b>→</b></span><span>MOVE</span></div>
+            <div class="control-row"><span class="keys"><b>A</b><b>D</b></span><span>ROTATE</span></div>
+            <div class="control-row"><span class="keys"><b>↓</b><b class="wide-key">SPACE</b></span><span>DROP</span></div>
+            <div class="control-row"><span class="keys"><b>${icon('mouse')}</b></span><span>DRAG CAMERA</span></div>
           </div>
         </section>
+        <div class="action-row">
+          <button class="action-button" data-action="pause" type="button"><span class="button-icon">${icon('pause')}</span><span data-role="pause-label">PAUSE</span></button>
+          <button class="action-button" data-action="restart" type="button"><span class="button-icon">${icon('restart')}</span><span>RESTART</span></button>
+          <button class="action-button" data-action="settings" type="button"><span class="button-icon">${icon('settings')}</span><span>SETTINGS</span></button>
+        </div>
       </aside>
-      <div class="action-row">
-        <button class="action-button" data-action="pause" type="button"><span>Ⅱ</span><span data-role="pause-label">PAUSE</span></button>
-        <button class="action-button" data-action="restart" type="button"><span>↻</span><span>RESTART</span></button>
-        <button class="action-button" data-action="settings" type="button"><span>⚙</span><span>SETTINGS</span></button>
-      </div>
       <section class="status-bar">
         <div class="status-pill"><span class="status-label">STATUS</span><span class="status-dot"></span><span data-role="status-label">RUNNING</span></div>
-        <div class="status-hint"><span>◌</span><span data-role="footer-tip"></span></div>
-        <div class="status-meta"><span>SPEED <b data-role="speed">1.00x</b></span><span data-role="timer">00:00:00</span></div>
+        <div class="status-hint">${icon('lightbulb')}<span data-role="footer-tip"></span></div>
+        <div class="status-meta"><span data-role="timer">00:00:00</span></div>
       </section>
       <section class="panel settings-panel" data-role="settings-panel" hidden>
         <h3>VIEW SETTINGS</h3>
@@ -402,7 +449,7 @@ export class Renderer {
         </div>
       </section>
       <section class="overlay-card" data-role="overlay" hidden>
-        <div class="overlay-alert">⚠</div>
+        <div class="overlay-alert">${icon('alert')}</div>
         <h2>GAME OVER</h2>
         <p>The tower has reached the top.</p>
         <div class="overlay-scorebox">
@@ -415,8 +462,8 @@ export class Renderer {
           <div><span>TIME PLAYED</span><strong data-role="overlay-time">00:00:00</strong></div>
         </div>
         <div class="overlay-actions">
-          <button class="overlay-button overlay-button-danger" data-action="restart" type="button">⟳ RETRY</button>
-          <button class="overlay-button overlay-button-primary" data-action="settings" type="button">⌂ MENU</button>
+          <button class="overlay-button overlay-button-danger" data-action="restart" type="button">${icon('restart')}<span>RETRY</span></button>
+          <button class="overlay-button overlay-button-primary" data-action="settings" type="button">${icon('home')}<span>MENU</span></button>
         </div>
         <p class="overlay-footnote">You can always rotate the view and look for a path.</p>
       </section>
@@ -451,7 +498,7 @@ export class Renderer {
     const panelMaterial = new MeshStandardMaterial({
       color: 0x0a1330,
       transparent: true,
-      opacity: 0.12,
+      opacity: 0.08,
       roughness: 0.35,
       metalness: 0.25
     });
@@ -459,11 +506,11 @@ export class Renderer {
     const floor = new Mesh(
       new PlaneGeometry(width * CELL_SIZE, depth * CELL_SIZE),
       new MeshStandardMaterial({
-        color: 0x061125,
+        color: 0x081326,
         roughness: 0.5,
         metalness: 0.3,
         transparent: true,
-        opacity: 0.4
+        opacity: 0.14
       })
     );
     floor.rotation.x = -Math.PI / 2;
@@ -487,13 +534,6 @@ export class Renderer {
     backWall.position.set((width * CELL_SIZE) / 2, (height * CELL_SIZE) / 2, depth * CELL_SIZE);
     backWall.rotation.y = Math.PI;
 
-    const ceiling = new Mesh(
-      new PlaneGeometry(width * CELL_SIZE, depth * CELL_SIZE),
-      panelMaterial.clone()
-    );
-    ceiling.rotation.x = Math.PI / 2;
-    ceiling.position.set((width * CELL_SIZE) / 2, height * CELL_SIZE, (depth * CELL_SIZE) / 2);
-
     const boundsGeometry = new BoxGeometry(width * CELL_SIZE, height * CELL_SIZE, depth * CELL_SIZE);
     boundsGeometry.translate(
       (width * CELL_SIZE) / 2,
@@ -502,60 +542,33 @@ export class Renderer {
     );
     const bounds = new LineSegments(
       new EdgesGeometry(boundsGeometry),
-      new LineBasicMaterial({ color: 0x7bd9ff, transparent: true, opacity: 0.85 })
+      new LineBasicMaterial({ color: 0x9ce9ff, transparent: true, opacity: 0.98 })
     );
 
-    const verticals = new Group();
-    const lineMaterial = new LineBasicMaterial({
-      color: 0x4eb3ff,
-      transparent: true,
-      opacity: 0.35
-    });
-
-    for (let x = 0; x <= width; x += 1) {
-      for (let z = 0; z <= depth; z += 1) {
-        if (x !== 0 && x !== width && z !== 0 && z !== depth) {
-          continue;
-        }
-        const geometry = new BoxGeometry(0.02, height * CELL_SIZE, 0.02);
-        geometry.translate(x * CELL_SIZE, (height * CELL_SIZE) / 2, z * CELL_SIZE);
-        verticals.add(new LineSegments(new EdgesGeometry(geometry), lineMaterial));
-      }
-    }
-
-    const horizontalGrid = new Group();
-    for (let y = 1; y < height; y += 1) {
-      const ringGeometry = new BoxGeometry(width * CELL_SIZE, 0.01, depth * CELL_SIZE);
-      ringGeometry.translate((width * CELL_SIZE) / 2, y * CELL_SIZE, (depth * CELL_SIZE) / 2);
-      horizontalGrid.add(
-        new LineSegments(
-          new EdgesGeometry(ringGeometry),
-          new LineBasicMaterial({
-            color: 0x4a78d5,
-            transparent: true,
-            opacity: 0.14
-          })
-        )
-      );
-    }
-
-    group.add(floor, ceiling, leftWall, rightWall, backWall, bounds, verticals, horizontalGrid);
+    group.add(floor, leftWall, rightWall, backWall, bounds);
+    group.add(this.createFaceGrid('xy', width, height, 0, 0x58c9ff));
+    group.add(this.createFaceGrid('xy', width, height, depth, 0x62c4ff));
+    group.add(this.createFaceGrid('yz', depth, height, 0, 0x4ca6ff));
+    group.add(this.createFaceGrid('yz', depth, height, width, 0x4ca6ff));
+    group.add(this.createFaceGrid('xz', width, depth, 0, 0x2a7cff));
+    group.add(this.createFaceGrid('xz', width, depth, height, 0x62c4ff));
+    group.add(this.createCornerGlow(width, height, depth));
     return group;
   }
 
   private createLighting(): Group {
     const group = new Group();
-    group.add(new AmbientLight(0xb9d5ff, 0.5));
+    group.add(new AmbientLight(0xb9d5ff, 0.72));
 
-    const key = new DirectionalLight(0x8fd7ff, 1.4);
+    const key = new DirectionalLight(0x8fd7ff, 1.7);
     key.position.set(14, 22, 10);
     group.add(key);
 
-    const rim = new DirectionalLight(0x6f7cff, 0.8);
+    const rim = new DirectionalLight(0x6f7cff, 1.3);
     rim.position.set(-12, 16, -8);
     group.add(rim);
 
-    const warm = new DirectionalLight(0xffb44a, 0.55);
+    const warm = new DirectionalLight(0xffb44a, 0.86);
     warm.position.set(4, 8, 14);
     group.add(warm);
 
@@ -565,21 +578,23 @@ export class Renderer {
   private createFloorHalo(): Group {
     const group = new Group();
     const { width, depth } = FIELD_DIMENSIONS;
+    const centerX = FIELD_ORIGIN.x + (width * CELL_SIZE) / 2;
+    const centerZ = FIELD_ORIGIN.z + (depth * CELL_SIZE) / 2;
 
-    for (let i = 0; i < 4; i += 1) {
-      const scale = 1.2 + i * 0.4;
-      const geometry = new PlaneGeometry(width * scale, depth * scale, 1, 1);
-      const mesh = new Mesh(
-        geometry,
+    for (let i = 0; i < 6; i += 1) {
+      const innerRadius = width * 0.9 + i * 1.8;
+      const outerRadius = innerRadius + 0.12;
+      const ring = new Mesh(
+        new RingGeometry(innerRadius, outerRadius, 96),
         new MeshBasicMaterial({
-          color: i % 2 === 0 ? 0x173d8a : 0x7a2cbf,
+          color: i % 2 === 0 ? 0x1e84ff : 0xab43ff,
           transparent: true,
-          opacity: 0.05
+          opacity: i === 0 ? 0.22 : 0.08
         })
       );
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.position.set(0, -0.02 - i * 0.002, 0);
-      group.add(mesh);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(centerX, -0.04 - i * 0.003, centerZ);
+      group.add(ring);
     }
 
     return group;
@@ -588,19 +603,41 @@ export class Renderer {
   private createBlockMesh(color: number, isActive: boolean): Group {
     const cube = new Group();
 
+    const glowShell = new Mesh(
+      new BoxGeometry(CELL_SIZE * 1.1, CELL_SIZE * 1.1, CELL_SIZE * 1.1),
+      new MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: isActive ? 0.18 : 0.1,
+        depthWrite: false,
+        blending: AdditiveBlending
+      })
+    );
+    cube.add(glowShell);
+
     const solid = new Mesh(
-      new BoxGeometry(CELL_SIZE * 0.95, CELL_SIZE * 0.95, CELL_SIZE * 0.95),
+      new BoxGeometry(CELL_SIZE * 0.92, CELL_SIZE * 0.92, CELL_SIZE * 0.92),
       new MeshStandardMaterial({
         color,
         emissive: color,
-        emissiveIntensity: isActive ? 0.45 : 0.22,
-        metalness: 0.18,
-        roughness: 0.28,
+        emissiveIntensity: isActive ? 1.08 : 0.62,
+        metalness: 0.22,
+        roughness: 0.16,
         transparent: true,
-        opacity: isActive ? 0.95 : 0.82
+        opacity: isActive ? 0.94 : 0.88
       })
     );
     cube.add(solid);
+
+    const inner = new Mesh(
+      new BoxGeometry(CELL_SIZE * 0.72, CELL_SIZE * 0.72, CELL_SIZE * 0.72),
+      new MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: isActive ? 0.3 : 0.24
+      })
+    );
+    cube.add(inner);
 
     cube.add(
       new LineSegments(
@@ -608,12 +645,107 @@ export class Renderer {
         new LineBasicMaterial({
           color: 0xf5fbff,
           transparent: true,
-          opacity: isActive ? 0.72 : 0.38
+          opacity: isActive ? 0.98 : 0.78
         })
       )
     );
 
     return cube;
+  }
+
+  private createFaceGrid(
+    plane: 'xy' | 'yz' | 'xz',
+    spanA: number,
+    spanB: number,
+    offset: number,
+    color: number
+  ): Group {
+    const group = new Group();
+    const positions: number[] = [];
+
+    for (let a = 0; a <= spanA; a += 1) {
+      for (let b = 0; b <= spanB; b += 1) {
+        const point = this.getPlanePoint(plane, a, b, offset);
+        positions.push(point.x, point.y, point.z);
+      }
+    }
+
+    const pointsGeometry = new BufferGeometry();
+    pointsGeometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+    group.add(
+      new Points(
+        pointsGeometry,
+        new PointsMaterial({
+          color,
+          size: 0.052,
+          transparent: true,
+          opacity: 0.64
+        })
+      )
+    );
+
+    const lineMaterial = new LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.18
+    });
+
+    for (let a = 0; a <= spanA; a += 1) {
+      const geometry = new BufferGeometry().setFromPoints([
+        this.getPlanePoint(plane, a, 0, offset),
+        this.getPlanePoint(plane, a, spanB, offset)
+      ]);
+      group.add(new LineSegments(geometry, lineMaterial));
+    }
+
+    for (let b = 0; b <= spanB; b += 1) {
+      const geometry = new BufferGeometry().setFromPoints([
+        this.getPlanePoint(plane, 0, b, offset),
+        this.getPlanePoint(plane, spanA, b, offset)
+      ]);
+      group.add(new LineSegments(geometry, lineMaterial));
+    }
+
+    return group;
+  }
+
+  private getPlanePoint(plane: 'xy' | 'yz' | 'xz', a: number, b: number, offset: number): Vector3 {
+    if (plane === 'xy') {
+      return new Vector3(a * CELL_SIZE, b * CELL_SIZE, offset * CELL_SIZE);
+    }
+    if (plane === 'yz') {
+      return new Vector3(offset * CELL_SIZE, b * CELL_SIZE, a * CELL_SIZE);
+    }
+    return new Vector3(a * CELL_SIZE, offset * CELL_SIZE, b * CELL_SIZE);
+  }
+
+  private createCornerGlow(width: number, height: number, depth: number): Group {
+    const group = new Group();
+    const corners = [
+      [0, 0, 0],
+      [width, 0, 0],
+      [0, 0, depth],
+      [width, 0, depth],
+      [0, height, 0],
+      [width, height, 0],
+      [0, height, depth],
+      [width, height, depth]
+    ] as const;
+
+    corners.forEach(([x, y, z]) => {
+      const orb = new Mesh(
+        new SphereGeometry(0.14, 10, 10),
+        new MeshBasicMaterial({
+          color: 0x7fd9ff,
+          transparent: true,
+          opacity: 0.9
+        })
+      );
+      orb.position.set(x * CELL_SIZE, y * CELL_SIZE, z * CELL_SIZE);
+      group.add(orb);
+    });
+
+    return group;
   }
 
   private attachCameraControls(): void {
@@ -625,7 +757,10 @@ export class Renderer {
 
     this.pointerDownHandler = (event: PointerEvent) => {
       this.cameraOrbit.dragging = true;
+      this.cameraOrbit.dragAxis = null;
       this.cameraOrbit.pointerId = event.pointerId;
+      this.cameraOrbit.startX = event.clientX;
+      this.cameraOrbit.startY = event.clientY;
       this.cameraOrbit.lastX = event.clientX;
       this.cameraOrbit.lastY = event.clientY;
       canvas.setPointerCapture(event.pointerId);
@@ -638,11 +773,29 @@ export class Renderer {
 
       const deltaX = event.clientX - this.cameraOrbit.lastX;
       const deltaY = event.clientY - this.cameraOrbit.lastY;
+      const dragX = event.clientX - this.cameraOrbit.startX;
+      const dragY = event.clientY - this.cameraOrbit.startY;
       this.cameraOrbit.lastX = event.clientX;
       this.cameraOrbit.lastY = event.clientY;
 
-      this.cameraOrbit.theta -= deltaX * 0.008;
-      this.cameraOrbit.phi = clamp(this.cameraOrbit.phi + deltaY * 0.008, 0.45, 1.45);
+      if (
+        !this.cameraOrbit.dragAxis &&
+        (Math.abs(dragX) >= CAMERA_SETTINGS.axisLockThresholdPx ||
+          Math.abs(dragY) >= CAMERA_SETTINGS.axisLockThresholdPx)
+      ) {
+        this.cameraOrbit.dragAxis =
+          Math.abs(dragX) >= Math.abs(dragY) ? 'horizontal' : 'vertical';
+      }
+
+      if (this.cameraOrbit.dragAxis === 'horizontal') {
+        this.cameraOrbit.theta -= deltaX * CAMERA_SETTINGS.rotateSpeedX;
+      } else if (this.cameraOrbit.dragAxis === 'vertical') {
+        this.cameraOrbit.phi = clamp(
+          this.cameraOrbit.phi - deltaY * CAMERA_SETTINGS.rotateSpeedY,
+          CAMERA_SETTINGS.minPhi,
+          CAMERA_SETTINGS.maxPhi
+        );
+      }
 
       if (this.camera) {
         this.applyCameraOrbit(this.camera);
@@ -653,6 +806,7 @@ export class Renderer {
     this.pointerUpHandler = (event: PointerEvent) => {
       if (this.cameraOrbit.pointerId === event.pointerId) {
         this.cameraOrbit.dragging = false;
+        this.cameraOrbit.dragAxis = null;
         this.cameraOrbit.pointerId = null;
         canvas.releasePointerCapture(event.pointerId);
       }
@@ -660,7 +814,11 @@ export class Renderer {
 
     this.wheelHandler = (event: WheelEvent) => {
       event.preventDefault();
-      this.cameraOrbit.radius = clamp(this.cameraOrbit.radius + event.deltaY * 0.02, 14, 42);
+      this.cameraOrbit.radius = clamp(
+        this.cameraOrbit.radius + event.deltaY * CAMERA_SETTINGS.zoomSpeed,
+        CAMERA_SETTINGS.minRadius,
+        CAMERA_SETTINGS.maxRadius
+      );
       if (this.camera) {
         this.applyCameraOrbit(this.camera);
         this.renderFrame();
@@ -709,6 +867,23 @@ export class Renderer {
     const z = target.z + radius * sinPhi * Math.sin(theta);
     camera.position.set(x, y, z);
     camera.lookAt(target);
+  }
+
+  private configureInitialCameraOrbit(camera: PerspectiveCamera): void {
+    const { width, height, depth } = this.gameState.getDimensions();
+    const paddedHeight = height + 2;
+    const halfWidth = (width * CELL_SIZE) / 2;
+    const halfHeight = (paddedHeight * CELL_SIZE) / 2;
+    const halfDepth = (depth * CELL_SIZE) / 2;
+    const halfVerticalFov = (camera.fov * Math.PI) / 360;
+    const halfHorizontalFov = Math.atan(Math.tan(halfVerticalFov) * camera.aspect);
+    const fitHeightDistance = halfHeight / Math.tan(halfVerticalFov);
+    const fitWidthDistance = halfWidth / Math.tan(halfHorizontalFov);
+    const boundingRadius = Math.hypot(halfWidth, halfHeight, halfDepth);
+
+    this.cameraOrbit.radius =
+      Math.max(fitHeightDistance, fitWidthDistance, boundingRadius) *
+      CAMERA_SETTINGS.initialRadiusMultiplier;
   }
 
   private onResize(): void {
@@ -771,33 +946,67 @@ export class Renderer {
     });
   }
 
-  private renderPreview(container: Element | null, type: TetrominoType): void {
+  private renderPreview(container: Element | null, type: TetrominoType | null): void {
     if (!(container instanceof HTMLElement)) {
       return;
     }
 
-    const definition = getTetrominoDefinition(type);
-    const projected = definition.cells.map((cell, index) => ({
-      left: (cell.x + cell.z * 0.52) * 26,
-      top: (-cell.z * 0.44) * 26 + index * 0.2
-    }));
+    if (!type) {
+      container.innerHTML = '';
+      return;
+    }
 
-    const minLeft = Math.min(...projected.map((cell) => cell.left));
-    const minTop = Math.min(...projected.map((cell) => cell.top));
-    container.innerHTML = projected
-      .map(
-        (cell) => `
-          <span
-            class="mini-voxel"
-            style="
-              left:${cell.left - minLeft + 28}px;
-              top:${cell.top - minTop + 16}px;
-              --piece-color:#${definition.color.toString(16).padStart(6, '0')};
-            "
-          ></span>
-        `
-      )
-      .join('');
+    const definition = getTetrominoDefinition(type);
+    const blockSize = 34;
+    const gap = 4;
+    const step = blockSize + gap;
+    const minCellX = Math.min(...definition.cells.map((cell) => cell.x));
+    const maxCellX = Math.max(...definition.cells.map((cell) => cell.x));
+    const minCellZ = Math.min(...definition.cells.map((cell) => cell.z));
+    const maxCellZ = Math.max(...definition.cells.map((cell) => cell.z));
+    const cubes = definition.cells
+      .map((cell) => ({
+        x: (cell.x - minCellX) * step,
+        y: (maxCellZ - cell.z) * step
+      }))
+      .sort((a, b) => a.y - b.y || a.x - b.x);
+
+    const previewWidth = (maxCellX - minCellX + 1) * step - gap;
+    const previewHeight = (maxCellZ - minCellZ + 1) * step - gap;
+    const padding = 20;
+    const viewBox = [
+      -padding,
+      -padding,
+      previewWidth + padding * 2,
+      previewHeight + padding * 2
+    ].join(' ');
+    const baseColor = definition.color;
+    const frontColor = mixColor(baseColor, 0xffffff, 0.08);
+    const strokeColor = mixColor(baseColor, 0xffffff, 0.62);
+    const glowColor = `#${baseColor.toString(16).padStart(6, '0')}`;
+
+    container.innerHTML = `
+      <svg
+        class="piece-preview-svg"
+        viewBox="${viewBox}"
+        preserveAspectRatio="xMidYMid meet"
+        style="--piece-color:${glowColor};"
+        aria-hidden="true"
+        focusable="false"
+      >
+        ${cubes
+          .map(({ x, y }) =>
+            renderPreviewCube(
+              x,
+              y,
+              blockSize,
+              frontColor,
+              strokeColor
+            )
+          )
+          .join('')}
+      </svg>
+    `;
   }
 
   private setText(root: ParentNode, selector: string, text: string): void {
@@ -836,4 +1045,64 @@ export class Renderer {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function renderPreviewCube(
+  x: number,
+  y: number,
+  size: number,
+  frontColor: string,
+  strokeColor: string
+): string {
+  return `
+    <g class="preview-cube">
+      <rect x="${x}" y="${y}" width="${size}" height="${size}" rx="5" fill="${frontColor}" stroke="${strokeColor}" />
+      <path d="M${x + 6} ${y + 6} H${x + size - 8}" class="preview-cube-highlight" />
+      <path d="M${x + size - 6} ${y + 7} V${y + size - 8}" class="preview-cube-shade" />
+    </g>
+  `;
+}
+
+function mixColor(color: number, target: number, amount: number): string {
+  const sourceRgb = numberToRgb(color);
+  const targetRgb = numberToRgb(target);
+  const mixed = sourceRgb.map((value, index) =>
+    Math.round(value + (targetRgb[index] - value) * amount)
+  );
+  return `rgb(${mixed[0]}, ${mixed[1]}, ${mixed[2]})`;
+}
+
+function numberToRgb(color: number): [number, number, number] {
+  return [(color >> 16) & 255, (color >> 8) & 255, color & 255];
+}
+
+function renderHudIcon(name: HudIconName): string {
+  const common =
+    'class="hud-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"';
+  const paths: Record<HudIconName, string> = {
+    alert:
+      '<path d="M12 3 22 20H2L12 3Z"/><path d="M12 9v5"/><path d="M12 17h.01"/>',
+    chart:
+      '<path d="M4 20V9"/><path d="M10 20V4"/><path d="M16 20v-8"/><path d="M22 20H2"/>',
+    cube:
+      '<path d="m12 2 8 4.5v9L12 20l-8-4.5v-9L12 2Z"/><path d="M12 11 4 6.5"/><path d="m12 11 8-4.5"/><path d="M12 11v9"/>',
+    home:
+      '<path d="M3 11 12 3l9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
+    layers:
+      '<path d="m12 3 9 4-9 4-9-4 9-4Z"/><path d="m3 12 9 4 9-4"/><path d="m3 17 9 4 9-4"/>',
+    lightbulb:
+      '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M8 14a6 6 0 1 1 8 0c-.8.7-1.2 1.6-1.2 2.5H9.2c0-.9-.4-1.8-1.2-2.5Z"/>',
+    mouse:
+      '<rect x="7" y="3" width="10" height="18" rx="5"/><path d="M12 7v4"/>',
+    pause:
+      '<path d="M8 5v14"/><path d="M16 5v14"/>',
+    restart:
+      '<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v6h-6"/>',
+    settings:
+      '<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M4 12h2"/><path d="M18 12h2"/><path d="m6.3 6.3 1.4 1.4"/><path d="m16.3 16.3 1.4 1.4"/><path d="m17.7 6.3-1.4 1.4"/><path d="m7.7 16.3-1.4 1.4"/><path d="M12 2v2"/><path d="M12 20v2"/>',
+    trophy:
+      '<path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5a3 3 0 0 0 3 3"/><path d="M16 6h3a3 3 0 0 1-3 3"/><path d="M12 12v5"/><path d="M8 21h8"/><path d="M10 17h4"/>'
+  };
+
+  return `<svg ${common}>${paths[name]}</svg>`;
 }

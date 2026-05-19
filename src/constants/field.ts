@@ -20,8 +20,8 @@ export const CELL_SIZE = 1;
  */
 export const FIELD_DIMENSIONS: FieldDimensions = Object.freeze({
   width: 10,
-  height: 20,
-  depth: 10
+  height: 15,
+  depth: 2
 });
 
 /**
