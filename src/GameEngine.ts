@@ -15,6 +15,7 @@ export class GameEngine {
   private startedAt = 0;
   private pausedAt = 0;
   private pausedDuration = 0;
+  private lastHudElapsedSecond = -1;
   private paused = false;
   private settingsOpen = false;
 
@@ -74,12 +75,12 @@ export class GameEngine {
   private beginRenderLoop(): void {
     const loop = (timestamp: number) => {
       this.advanceGame(timestamp);
-      this.syncScene();
-      this.renderer.renderFrame();
+      this.syncElapsedHud();
       this.animationFrameId = requestAnimationFrame(loop);
     };
 
     this.lastDropAt = performance.now();
+    this.lastHudElapsedSecond = -1;
     this.animationFrameId = requestAnimationFrame(loop);
   }
 
@@ -137,7 +138,7 @@ export class GameEngine {
       event.preventDefault();
       if (this.state.holdActiveTetromino()) {
         this.lastDropAt = performance.now();
-        this.syncScene();
+        this.syncScene({ settledBlocks: false });
       }
       return;
     }
@@ -150,7 +151,7 @@ export class GameEngine {
           this.state.addSoftDropScore();
           this.lastDropAt = performance.now();
         }
-        this.syncScene();
+        this.syncScene({ settledBlocks: false });
       }
       return;
     }
@@ -159,7 +160,7 @@ export class GameEngine {
     if (rotation) {
       event.preventDefault();
       if (this.state.rotateActiveTetromino(rotation.axis, rotation.direction)) {
-        this.syncScene();
+        this.syncScene({ settledBlocks: false });
       }
     }
   }
@@ -173,13 +174,15 @@ export class GameEngine {
       return;
     }
 
+    let settledBlocksChanged = false;
     if (!this.state.moveActiveTetromino(DROP_OFFSET) && this.state.getActiveTetromino()) {
       this.state.lockActiveTetromino();
       this.state.spawnTetromino();
+      settledBlocksChanged = true;
     }
 
     this.lastDropAt = timestamp;
-    this.syncScene();
+    this.syncScene({ settledBlocks: settledBlocksChanged });
   }
 
   private restart(): void {
@@ -188,14 +191,20 @@ export class GameEngine {
     this.startedAt = performance.now();
     this.pausedDuration = 0;
     this.pausedAt = 0;
+    this.lastHudElapsedSecond = -1;
     this.paused = false;
     this.settingsOpen = false;
     this.lastDropAt = performance.now();
     this.syncScene();
   }
 
-  private syncScene(): void {
-    this.renderer.updateSettledBlocks(this.state.getSettledBlocks());
+  private syncScene(options: SyncSceneOptions = {}): void {
+    const { settledBlocks = true } = options;
+    const elapsedMs = this.getElapsedMs();
+
+    if (settledBlocks) {
+      this.renderer.updateSettledBlocks(this.state.getSettledBlocks());
+    }
     this.renderer.updateActiveTetromino(this.state.getActiveTetromino());
     this.renderer.updateHud(
       this.state.getUpcomingQueue(),
@@ -204,11 +213,24 @@ export class GameEngine {
       this.state.getScore(),
       this.state.getLevel(),
       this.state.getDropIntervalMs(),
-      this.getElapsedMs(),
+      elapsedMs,
       this.paused,
       this.settingsOpen,
       this.state.getHeldPiece()
     );
+    this.lastHudElapsedSecond = Math.floor(elapsedMs / 1000);
+    this.renderer.renderFrame();
+  }
+
+  private syncElapsedHud(): void {
+    const elapsedMs = this.getElapsedMs();
+    const elapsedSecond = Math.floor(elapsedMs / 1000);
+    if (elapsedSecond === this.lastHudElapsedSecond) {
+      return;
+    }
+
+    this.lastHudElapsedSecond = elapsedSecond;
+    this.renderer.updateElapsedTime(elapsedMs);
   }
 
   private togglePause(): void {
@@ -225,12 +247,12 @@ export class GameEngine {
       this.pausedAt = performance.now();
     }
 
-    this.syncScene();
+    this.syncScene({ settledBlocks: false });
   }
 
   private toggleSettings(): void {
     this.settingsOpen = !this.settingsOpen;
-    this.syncScene();
+    this.syncScene({ settledBlocks: false });
   }
 
   private getElapsedMs(): number {
@@ -248,15 +270,19 @@ type RotationCommand = {
   direction: RotationDirection;
 };
 
+type SyncSceneOptions = {
+  settledBlocks?: boolean;
+};
+
 type RotationDirection = 1 | -1;
 
 const MOVEMENT_OFFSETS: Record<string, FieldCoordinate> = {
   ArrowLeft: { x: -1, y: 0, z: 0 },
   ArrowRight: { x: 1, y: 0, z: 0 },
-  ArrowUp: { x: 0, y: 1, z: 0 },
-  ArrowDown: { x: 0, y: -1, z: 0 },
-  KeyW: { x: 0, y: 0, z: -1 },
-  KeyS: { x: 0, y: 0, z: 1 }
+  ArrowUp: { x: 0, y: 0, z: -1 },
+  ArrowDown: { x: 0, y: 0, z: 1 },
+  KeyW: { x: 0, y: 1, z: 0 },
+  KeyS: { x: 0, y: -1, z: 0 }
 };
 
 const DROP_OFFSET: FieldCoordinate = { x: 0, y: -1, z: 0 };

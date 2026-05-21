@@ -17,11 +17,13 @@ import {
   Points,
   PointsMaterial,
   RingGeometry,
+  SRGBColorSpace,
   Scene,
   SphereGeometry,
   Vector3,
   WebGLRenderer
 } from 'three';
+import type { Material } from 'three';
 import type {
   ActiveTetrominoSnapshot,
   GamePhase,
@@ -115,6 +117,8 @@ export class Renderer {
   private wheelHandler: ((event: WheelEvent) => void) | null = null;
   private readonly cameraOrbit: CameraOrbitState;
   private readonly hudState: HudState;
+  private lastNextPreviewType: TetrominoType | null = null;
+  private lastHeldPreviewType: TetrominoType | null | undefined = undefined;
 
   constructor(gameState: GameState, callbacks: RendererCallbacks = {}) {
     this.gameState = gameState;
@@ -175,12 +179,16 @@ export class Renderer {
     const renderer = new WebGLRenderer({
       antialias: true,
       alpha: true,
-      powerPreference: 'high-performance',
-      preserveDrawingBuffer: true
+      powerPreference: 'high-performance'
     });
+    renderer.outputColorSpace = SRGBColorSpace;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setSize(
+      Math.max(1, container.clientWidth),
+      Math.max(1, container.clientHeight),
+      false
+    );
     renderer.domElement.className = 'scene-canvas';
     canvasHost.appendChild(renderer.domElement);
 
@@ -219,17 +227,25 @@ export class Renderer {
     }
 
     this.detachCameraControls();
+    if (this.scene) {
+      this.disposeObjectResources(this.scene);
+      this.scene.clear();
+    }
+    this.renderer?.domElement.remove();
     this.renderer?.dispose();
-    this.disposeActiveTetrominoGroup();
-    this.disposeSettledBlocksGroup();
-    this.disposeGlowGroup();
     this.hudElement?.remove();
+    this.canvasHost?.remove();
     this.renderer = null;
     this.scene = null;
     this.camera = null;
     this.hudElement = null;
     this.container = null;
     this.canvasHost = null;
+    this.activeTetrominoGroup = null;
+    this.settledBlocksGroup = null;
+    this.glowGroup = null;
+    this.lastNextPreviewType = null;
+    this.lastHeldPreviewType = undefined;
   }
 
   public updateActiveTetromino(tetromino: ActiveTetrominoSnapshot | null): void {
@@ -280,7 +296,6 @@ export class Renderer {
     this.glowGroup = glow;
     this.scene.add(group);
     this.scene.add(glow);
-    this.renderFrame();
   }
 
   public updateSettledBlocks(blocks: readonly SettledBlockSnapshot[]): void {
@@ -305,7 +320,15 @@ export class Renderer {
 
     this.settledBlocksGroup = group;
     this.scene.add(group);
-    this.renderFrame();
+  }
+
+  public updateElapsedTime(elapsedMs: number): void {
+    if (!this.hudElement) {
+      return;
+    }
+
+    this.hudState.elapsedMs = elapsedMs;
+    this.syncHudTimer(this.hudElement);
   }
 
   public updateHud(
@@ -349,7 +372,7 @@ export class Renderer {
     this.setText(root, '[data-role="lines"]', String(this.hudState.clearedLayerCount));
     this.setText(root, '[data-role="status-label"]', this.getStatusLabel());
     this.setText(root, '[data-role="speed"]', `${(1000 / this.hudState.dropIntervalMs).toFixed(2)}x`);
-    this.setText(root, '[data-role="timer"]', this.formatElapsed(this.hudState.elapsedMs));
+    this.syncHudTimer(root);
     this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? 'RESUME' : 'PAUSE');
     this.setText(
       root,
@@ -359,14 +382,17 @@ export class Renderer {
         : 'Clear more lines at once to earn higher scores!'
     );
 
-    this.renderPreview(
-      root.querySelector('[data-role="next-piece"]'),
-      this.hudState.queue[0] ?? 'T'
-    );
-    this.renderPreview(
-      root.querySelector('[data-role="hold-piece"]'),
-      this.hudState.heldPiece ?? null
-    );
+    const nextPreviewType = this.hudState.queue[0] ?? 'T';
+    if (nextPreviewType !== this.lastNextPreviewType) {
+      this.renderPreview(root.querySelector('[data-role="next-piece"]'), nextPreviewType);
+      this.lastNextPreviewType = nextPreviewType;
+    }
+
+    const heldPreviewType = this.hudState.heldPiece ?? null;
+    if (heldPreviewType !== this.lastHeldPreviewType) {
+      this.renderPreview(root.querySelector('[data-role="hold-piece"]'), heldPreviewType);
+      this.lastHeldPreviewType = heldPreviewType;
+    }
 
     const overlay = root.querySelector<HTMLElement>('[data-role="overlay"]');
     if (overlay) {
@@ -425,7 +451,7 @@ export class Renderer {
           <div class="control-grid">
             <div class="control-row"><span class="keys"><b>↑</b><b>↓</b><b>←</b><b>→</b></span><span>MOVE</span></div>
             <div class="control-row"><span class="keys"><b>A</b><b>D</b></span><span>ROTATE</span></div>
-            <div class="control-row"><span class="keys"><b>↓</b><b class="wide-key">SPACE</b></span><span>DROP</span></div>
+            <div class="control-row"><span class="keys"><b>S</b><b class="wide-key">SPACE</b></span><span>DROP</span></div>
             <div class="control-row"><span class="keys"><b>${icon('mouse')}</b></span><span>DRAG CAMERA</span></div>
           </div>
         </section>
@@ -893,15 +919,15 @@ export class Renderer {
 
     this.camera.aspect = this.getAspectRatio();
     this.camera.updateProjectionMatrix();
-    const width = this.container?.clientWidth ?? window.innerWidth;
-    const height = this.container?.clientHeight ?? window.innerHeight;
-    this.renderer.setSize(width, height);
+    const width = Math.max(1, this.container?.clientWidth ?? window.innerWidth);
+    const height = Math.max(1, this.container?.clientHeight ?? window.innerHeight);
+    this.renderer.setSize(width, height, false);
     this.renderFrame();
   }
 
   private getAspectRatio(): number {
-    const width = this.container?.clientWidth ?? window.innerWidth;
-    const height = this.container?.clientHeight ?? window.innerHeight;
+    const width = Math.max(1, this.container?.clientWidth ?? window.innerWidth);
+    const height = Math.max(1, this.container?.clientHeight ?? window.innerHeight);
     return width / height;
   }
 
@@ -909,7 +935,7 @@ export class Renderer {
     if (!this.scene || !this.activeTetrominoGroup) {
       return;
     }
-    this.disposeGroupMeshes(this.activeTetrominoGroup);
+    this.disposeObjectResources(this.activeTetrominoGroup);
     this.scene.remove(this.activeTetrominoGroup);
     this.activeTetrominoGroup = null;
   }
@@ -918,7 +944,7 @@ export class Renderer {
     if (!this.scene || !this.settledBlocksGroup) {
       return;
     }
-    this.disposeGroupMeshes(this.settledBlocksGroup);
+    this.disposeObjectResources(this.settledBlocksGroup);
     this.scene.remove(this.settledBlocksGroup);
     this.settledBlocksGroup = null;
   }
@@ -927,23 +953,30 @@ export class Renderer {
     if (!this.scene || !this.glowGroup) {
       return;
     }
-    this.disposeGroupMeshes(this.glowGroup);
+    this.disposeObjectResources(this.glowGroup);
     this.scene.remove(this.glowGroup);
     this.glowGroup = null;
   }
 
-  private disposeGroupMeshes(group: Group): void {
-    group.traverse((child) => {
-      if (!(child instanceof Mesh) && !(child instanceof LineSegments)) {
+  private disposeObjectResources(root: Group | Scene): void {
+    const geometries = new Set<BufferGeometry>();
+    const materials = new Set<Material>();
+
+    root.traverse((child) => {
+      if (!(child instanceof Mesh) && !(child instanceof LineSegments) && !(child instanceof Points)) {
         return;
       }
-      child.geometry.dispose();
+
+      geometries.add(child.geometry);
       if (Array.isArray(child.material)) {
-        child.material.forEach((material) => material.dispose());
+        child.material.forEach((material) => materials.add(material));
       } else {
-        child.material.dispose();
+        materials.add(child.material);
       }
     });
+
+    geometries.forEach((geometry) => geometry.dispose());
+    materials.forEach((material) => material.dispose());
   }
 
   private renderPreview(container: Element | null, type: TetrominoType | null): void {
@@ -1014,6 +1047,12 @@ export class Renderer {
     if (element) {
       element.textContent = text;
     }
+  }
+
+  private syncHudTimer(root: ParentNode): void {
+    const elapsed = this.formatElapsed(this.hudState.elapsedMs);
+    this.setText(root, '[data-role="timer"]', elapsed);
+    this.setText(root, '[data-role="overlay-time"]', elapsed);
   }
 
   private getStatusLabel(): string {
