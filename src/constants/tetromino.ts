@@ -41,7 +41,7 @@ const DEFINITIONS: Record<TetrominoType, TetrominoDefinition> = {
   },
   L: {
     type: 'L',
-    color: 0xffb22e,
+    color: 0xff7f1a,
     cells: Object.freeze([
       { x: -1, y: 0, z: 0 },
       { x: 0, y: 0, z: 0 },
@@ -51,7 +51,7 @@ const DEFINITIONS: Record<TetrominoType, TetrominoDefinition> = {
   },
   O: {
     type: 'O',
-    color: 0xffcf3f,
+    color: 0xf4c72f,
     cells: Object.freeze([
       { x: 0, y: 0, z: 0 },
       { x: 1, y: 0, z: 0 },

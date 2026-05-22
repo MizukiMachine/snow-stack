@@ -472,9 +472,9 @@ export interface SettledBlockSnapshot {
 }
 
 const DROP_VECTOR: FieldCoordinate = { x: 0, y: -1, z: 0 };
-const BASE_DROP_INTERVAL_MS = 700;
-const MIN_DROP_INTERVAL_MS = 120;
-const DROP_SPEED_STEP_MS = 55;
+const BASE_DROP_INTERVAL_MS = 3000;
+const MIN_DROP_INTERVAL_MS = 600;
+const DROP_SPEED_STEP_MS = 150;
 const LAYERS_PER_LEVEL = 5;
 const GENERIC_KICK_OFFSETS: readonly FieldCoordinate[] = [
   { x: 0, y: 0, z: 0 },

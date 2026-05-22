@@ -101,6 +101,11 @@ export class GameEngine {
   }
 
   private handleKeyDown(event: KeyboardEvent): void {
+    if (event.repeat && ONE_SHOT_CODES.has(event.code)) {
+      event.preventDefault();
+      return;
+    }
+
     if (event.code === 'KeyR') {
       event.preventDefault();
       this.restart();
@@ -121,7 +126,7 @@ export class GameEngine {
       return;
     }
 
-    if (event.code === 'Space') {
+    if (event.code === 'KeyE') {
       event.preventDefault();
       const distance = this.state.hardDropActiveTetromino();
       this.state.addHardDropScore(distance);
@@ -147,7 +152,7 @@ export class GameEngine {
     if (move) {
       event.preventDefault();
       if (this.state.moveActiveTetromino(move)) {
-        if (event.code === 'KeyS') {
+        if (SOFT_DROP_CODES.has(event.code)) {
           this.state.addSoftDropScore();
           this.lastDropAt = performance.now();
         }
@@ -156,7 +161,7 @@ export class GameEngine {
       return;
     }
 
-    const rotation = ROTATION_COMMANDS[event.code];
+    const rotation = getRotationCommand(event);
     if (rotation) {
       event.preventDefault();
       if (this.state.rotateActiveTetromino(rotation.axis, rotation.direction)) {
@@ -277,21 +282,32 @@ type SyncSceneOptions = {
 type RotationDirection = 1 | -1;
 
 const MOVEMENT_OFFSETS: Record<string, FieldCoordinate> = {
-  ArrowLeft: { x: -1, y: 0, z: 0 },
-  ArrowRight: { x: 1, y: 0, z: 0 },
-  ArrowUp: { x: 0, y: 0, z: -1 },
-  ArrowDown: { x: 0, y: 0, z: 1 },
-  KeyW: { x: 0, y: 1, z: 0 },
-  KeyS: { x: 0, y: -1, z: 0 }
+  ArrowLeft: { x: 1, y: 0, z: 0 },
+  ArrowRight: { x: -1, y: 0, z: 0 },
+  ArrowUp: { x: 0, y: 0, z: 1 },
+  ArrowDown: { x: 0, y: 0, z: -1 },
+  KeyD: { x: 0, y: -1, z: 0 }
 };
 
 const DROP_OFFSET: FieldCoordinate = { x: 0, y: -1, z: 0 };
 
-const ROTATION_COMMANDS: Record<string, RotationCommand> = {
-  KeyQ: { axis: 'y', direction: -1 },
-  KeyE: { axis: 'y', direction: 1 },
-  KeyA: { axis: 'z', direction: -1 },
-  KeyD: { axis: 'z', direction: 1 },
-  KeyZ: { axis: 'x', direction: -1 },
-  KeyX: { axis: 'x', direction: 1 }
+const SOFT_DROP_CODES = new Set(['KeyD']);
+const ONE_SHOT_CODES = new Set(['KeyE', 'KeyC', 'KeyP', 'Escape', 'KeyR']);
+
+const ROTATION_AXES: Record<string, Axis> = {
+  KeyQ: 'y',
+  KeyA: 'z',
+  KeyZ: 'x'
 };
+
+function getRotationCommand(event: KeyboardEvent): RotationCommand | null {
+  const axis = ROTATION_AXES[event.code];
+  if (!axis) {
+    return null;
+  }
+
+  return {
+    axis,
+    direction: event.shiftKey ? 1 : -1
+  };
+}

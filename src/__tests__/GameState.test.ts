@@ -50,6 +50,12 @@ describe('GameState', () => {
 
     expect(state.getScore()).toBe(7);
   });
+
+  it('starts with the slower base drop interval', () => {
+    const state = new GameState();
+
+    expect(state.getDropIntervalMs()).toBe(3000);
+  });
 });
 
 function sortCoordinates(coordinates: { x: number; y: number; z: number }[]) {

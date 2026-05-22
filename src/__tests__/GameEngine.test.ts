@@ -31,11 +31,21 @@ describe('GameEngine', () => {
     vi.restoreAllMocks();
   });
 
-  it('maps KeyS to a downward Y-axis soft drop and awards score', () => {
+  it('does not map Shift by itself to movement', () => {
+    const { state } = startEngineWithPiece('I');
+    const beforeBlocks = state.getActiveTetromino()?.blocks ?? [];
+
+    pressKey('ShiftLeft');
+
+    expect(state.getActiveTetromino()?.blocks).toEqual(beforeBlocks);
+    expect(state.getScore()).toBe(0);
+  });
+
+  it('maps KeyD to a downward Y-axis soft drop and awards score', () => {
     const { state, renderer } = startEngineWithPiece('I');
     const beforeBlocks = state.getActiveTetromino()?.blocks ?? [];
 
-    pressKey('KeyS');
+    pressKey('KeyD');
 
     const afterBlocks = state.getActiveTetromino()?.blocks ?? [];
     expect(afterBlocks).toEqual(translateBlocks(beforeBlocks, { x: 0, y: -1, z: 0 }));
@@ -44,18 +54,33 @@ describe('GameEngine', () => {
   });
 
   it('maps ArrowUp and ArrowDown to Z-axis movement', () => {
-    const { state } = startEngineWithPiece('I');
+    const state = new GameState();
+    state.spawnTetromino('I');
+    expect(state.moveActiveTetromino({ x: 0, y: 0, z: -1 })).toBe(true);
+    startEngine(state);
     const startBlocks = state.getActiveTetromino()?.blocks ?? [];
 
     pressKey('ArrowUp');
     const movedUpBlocks = state.getActiveTetromino()?.blocks ?? [];
-    expect(movedUpBlocks).toEqual(translateBlocks(startBlocks, { x: 0, y: 0, z: -1 }));
+    expect(movedUpBlocks).toEqual(translateBlocks(startBlocks, { x: 0, y: 0, z: 1 }));
 
     pressKey('ArrowDown');
     expect(state.getActiveTetromino()?.blocks).toEqual(startBlocks);
   });
 
-  it('maps KeyW to upward Y-axis movement', () => {
+  it('maps ArrowLeft and ArrowRight to the front-view horizontal direction', () => {
+    const { state } = startEngineWithPiece('I');
+    const startBlocks = state.getActiveTetromino()?.blocks ?? [];
+
+    pressKey('ArrowLeft');
+    const movedLeftBlocks = state.getActiveTetromino()?.blocks ?? [];
+    expect(movedLeftBlocks).toEqual(translateBlocks(startBlocks, { x: 1, y: 0, z: 0 }));
+
+    pressKey('ArrowRight');
+    expect(state.getActiveTetromino()?.blocks).toEqual(startBlocks);
+  });
+
+  it('does not map KeyW to upward Y-axis movement', () => {
     const state = new GameState();
     state.spawnTetromino('I');
     expect(state.moveActiveTetromino({ x: 0, y: -1, z: 0 })).toBe(true);
@@ -65,19 +90,47 @@ describe('GameEngine', () => {
 
     pressKey('KeyW');
 
-    expect(state.getActiveTetromino()?.blocks).toEqual(
-      translateBlocks(beforeBlocks, { x: 0, y: 1, z: 0 })
-    );
+    expect(state.getActiveTetromino()?.blocks).toEqual(beforeBlocks);
   });
 
-  it('hard drops with Space, locks the current tetromino, and spawns the next one', () => {
+  it.each([
+    ['KeyQ', false, 'y', -1],
+    ['KeyQ', true, 'y', 1],
+    ['KeyA', false, 'z', -1],
+    ['KeyA', true, 'z', 1],
+    ['KeyZ', false, 'x', -1],
+    ['KeyZ', true, 'x', 1]
+  ] as const)(
+    'maps %s with shift=%s to %s-axis rotation direction %s',
+    (code, shiftKey, axis, direction) => {
+      const state = new GameState();
+      state.spawnTetromino('L');
+      const rotateSpy = vi.spyOn(state, 'rotateActiveTetromino');
+      startEngine(state);
+
+      pressKey(code, { shiftKey });
+
+      expect(rotateSpy).toHaveBeenCalledWith(axis, direction);
+    }
+  );
+
+  it('hard drops with KeyE, locks the current tetromino, and spawns the next one', () => {
     const { state } = startEngineWithPiece('I');
 
-    pressKey('Space');
+    pressKey('KeyE');
 
     expect(state.getSettledBlocks()).toHaveLength(4);
     expect(state.getActiveTetromino()).not.toBeNull();
     expect(state.getScore()).toBe(28);
+  });
+
+  it('ignores repeated KeyE keydown events after a hard drop', () => {
+    const { state } = startEngineWithPiece('I');
+
+    pressKey('KeyE');
+    pressKey('KeyE', { repeat: true });
+
+    expect(state.getSettledBlocks()).toHaveLength(4);
   });
 
   it('reflects KeyC hold state in GameState and HUD sync', () => {
@@ -104,7 +157,7 @@ describe('GameEngine', () => {
 
     engine.stop();
     renderer.updateActiveTetromino.mockClear();
-    pressKey('KeyS');
+    pressKey('ArrowDown');
 
     expect(renderer.dispose).toHaveBeenCalledTimes(1);
     expect(state.getActiveTetromino()?.blocks).toEqual(blocksBeforeStop);
@@ -150,10 +203,12 @@ function createRendererMock(): RendererMock {
   };
 }
 
-function pressKey(code: string): void {
+function pressKey(code: string, options: { repeat?: boolean; shiftKey?: boolean } = {}): void {
   window.dispatchEvent(
     new KeyboardEvent('keydown', {
       code,
+      repeat: options.repeat ?? false,
+      shiftKey: options.shiftKey ?? false,
       bubbles: true,
       cancelable: true
     })

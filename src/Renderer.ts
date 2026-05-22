@@ -3,10 +3,13 @@ import {
   AmbientLight,
   BufferGeometry,
   BoxGeometry,
+  CanvasTexture,
   DirectionalLight,
+  DoubleSide,
   EdgesGeometry,
   Float32BufferAttribute,
   Group,
+  LinearFilter,
   LineBasicMaterial,
   LineSegments,
   Mesh,
@@ -20,6 +23,8 @@ import {
   SRGBColorSpace,
   Scene,
   SphereGeometry,
+  Sprite,
+  SpriteMaterial,
   Vector3,
   WebGLRenderer
 } from 'three';
@@ -152,7 +157,7 @@ export class Renderer {
       clearedLayerCount: 0,
       score: 0,
       level: 1,
-      dropIntervalMs: 700,
+      dropIntervalMs: 3000,
       elapsedMs: 0,
       isPaused: false,
       settingsOpen: false,
@@ -207,7 +212,7 @@ export class Renderer {
 
     this.updateActiveTetromino(this.gameState.getActiveTetromino());
     this.updateSettledBlocks(this.gameState.getSettledBlocks());
-    this.updateHud([], 'running', 0, 0, 1, 700, 0, false, false, null);
+    this.updateHud([], 'running', 0, 0, 1, 3000, 0, false, false, null);
     this.renderFrame();
   }
 
@@ -262,7 +267,7 @@ export class Renderer {
     group.position.set(FIELD_ORIGIN.x, FIELD_ORIGIN.y, FIELD_ORIGIN.z);
 
     tetromino.blocks.forEach((block) => {
-      const mesh = this.createBlockMesh(tetromino.color, true);
+      const mesh = this.createBlockMesh(tetromino.color, true, block.z);
       mesh.position.set(
         (block.x + 0.5) * CELL_SIZE,
         (block.y + 0.5) * CELL_SIZE,
@@ -307,7 +312,7 @@ export class Renderer {
     group.position.set(FIELD_ORIGIN.x, FIELD_ORIGIN.y, FIELD_ORIGIN.z);
 
     blocks.forEach((block) => {
-      const mesh = this.createBlockMesh(block.color, false);
+      const mesh = this.createBlockMesh(block.color, false, block.coordinate.z);
       mesh.position.set(
         (block.coordinate.x + 0.5) * CELL_SIZE,
         (block.coordinate.y + 0.5) * CELL_SIZE,
@@ -467,13 +472,13 @@ export class Renderer {
           <section class="panel controls-panel">
             <h3>${icon('snowflake')}<span>CONTROLS</span></h3>
             <div class="control-grid">
-              <div class="control-row"><span class="keys"><b>←</b><b>→</b></span><span>Move X / Z</span></div>
-              <div class="control-row"><span class="keys"><b>W</b></span><span>Move Up (Y+)</span></div>
-              <div class="control-row"><span class="keys"><b>S</b></span><span>Move Down (Y-)</span></div>
-              <div class="control-row"><span class="keys"><b>Q</b><b>E</b></span><span>Rotate Y Axis</span></div>
-              <div class="control-row"><span class="keys"><b>A</b><b>D</b></span><span>Rotate Z Axis</span></div>
-              <div class="control-row"><span class="keys"><b>Z</b><b>X</b></span><span>Rotate X Axis</span></div>
-              <div class="control-row"><span class="keys"><b class="wide-key">Space</b></span><span>Hard Drop</span></div>
+              <div class="control-row"><span class="keys"><b>←</b><b>→</b></span><span>Move Left / Right</span></div>
+              <div class="control-row"><span class="keys"><b>↑</b><b>↓</b></span><span>Move Back / Front</span></div>
+              <div class="control-row"><span class="keys"><b>Q</b><b class="wide-key">Shift+Q</b></span><span>Yaw Y Axis</span></div>
+              <div class="control-row"><span class="keys"><b>A</b><b class="wide-key">Shift+A</b></span><span>Roll Z Axis</span></div>
+              <div class="control-row"><span class="keys"><b>Z</b><b class="wide-key">Shift+Z</b></span><span>Pitch X Axis</span></div>
+              <div class="control-row"><span class="keys"><b>D</b></span><span>Soft Drop</span></div>
+              <div class="control-row"><span class="keys"><b>E</b></span><span>Hard Drop</span></div>
               <div class="control-row"><span class="keys"><b>C</b></span><span>Hold Piece</span></div>
               <div class="control-row"><span class="keys"><b class="wide-key">P / Esc</b></span><span>Pause</span></div>
               <div class="control-row"><span class="keys"><b>R</b></span><span>Restart</span></div>
@@ -504,6 +509,8 @@ export class Renderer {
         <div class="settings-copy">
           <p>Drag to orbit the tower.</p>
           <p>Wheel to zoom the camera.</p>
+          <p>Hold Shift with Q, A, or Z for reverse rotation.</p>
+          <p>D soft drops; E hard drops once per press.</p>
           <p>Press <strong>R</strong> at any time to restart.</p>
         </div>
       </section>
@@ -614,6 +621,8 @@ export class Renderer {
     group.add(this.createFaceGrid('yz', depth, height, width, 0x4ca6ff));
     group.add(this.createFaceGrid('xz', width, depth, 0, 0x2a7cff));
     group.add(this.createFaceGrid('xz', width, depth, height, 0x62c4ff));
+    group.add(this.createDepthSeparators(width, height, depth));
+    group.add(this.createGridNumberLabels(width, height));
     group.add(this.createLayerScanBand(width, depth, Math.max(1, Math.round(height * 0.4))));
     group.add(this.createCornerGlow(width, height, depth));
     return group;
@@ -663,15 +672,19 @@ export class Renderer {
     return group;
   }
 
-  private createBlockMesh(color: number, isActive: boolean): Group {
+  private createBlockMesh(color: number, isActive: boolean, depthLayer = 0): Group {
     const cube = new Group();
+    const isBehindSeparator = depthLayer > 0;
+    const blockColor = isBehindSeparator ? mixColorNumber(color, 0xb8f6ff, 0.06) : color;
+    const highlightColor = mixColorNumber(blockColor, 0xffffff, isActive ? 0.16 : 0.1);
+    const seamColor = mixColorNumber(blockColor, 0x001a36, isActive ? 0.46 : 0.54);
 
     const glowShell = new Mesh(
-      new BoxGeometry(CELL_SIZE * 1.1, CELL_SIZE * 1.1, CELL_SIZE * 1.1),
+      new BoxGeometry(CELL_SIZE * 0.98, CELL_SIZE * 0.98, CELL_SIZE * 0.98),
       new MeshBasicMaterial({
-        color,
+        color: blockColor,
         transparent: true,
-        opacity: isActive ? 0.18 : 0.1,
+        opacity: isActive ? 0.12 : 0.07,
         depthWrite: false,
         blending: AdditiveBlending
       })
@@ -679,41 +692,137 @@ export class Renderer {
     cube.add(glowShell);
 
     const solid = new Mesh(
-      new BoxGeometry(CELL_SIZE * 0.92, CELL_SIZE * 0.92, CELL_SIZE * 0.92),
+      new BoxGeometry(CELL_SIZE * 0.9, CELL_SIZE * 0.9, CELL_SIZE * 0.9),
       new MeshStandardMaterial({
-        color,
-        emissive: color,
-        emissiveIntensity: isActive ? 1.08 : 0.62,
-        metalness: 0.22,
-        roughness: 0.16,
-        transparent: true,
-        opacity: isActive ? 0.94 : 0.88
+        color: blockColor,
+        emissive: blockColor,
+        emissiveIntensity: isActive ? 0.48 : 0.26,
+        metalness: 0.16,
+        roughness: 0.36
       })
     );
     cube.add(solid);
 
     const inner = new Mesh(
-      new BoxGeometry(CELL_SIZE * 0.72, CELL_SIZE * 0.72, CELL_SIZE * 0.72),
+      new BoxGeometry(CELL_SIZE * 0.66, CELL_SIZE * 0.66, CELL_SIZE * 0.66),
       new MeshBasicMaterial({
-        color,
+        color: highlightColor,
         transparent: true,
-        opacity: isActive ? 0.3 : 0.24
+        opacity: isActive ? 0.18 : 0.11,
+        depthWrite: false
       })
     );
     cube.add(inner);
 
+    if (isBehindSeparator) {
+      const depthGlaze = new Mesh(
+        new BoxGeometry(CELL_SIZE * 0.96, CELL_SIZE * 0.96, CELL_SIZE * 0.96),
+        new MeshBasicMaterial({
+          color: 0xbffaff,
+          transparent: true,
+          opacity: isActive ? 0.055 : 0.035,
+          depthWrite: false,
+          blending: AdditiveBlending
+        })
+      );
+      depthGlaze.renderOrder = 18;
+      cube.add(depthGlaze);
+    }
+
+    const contactMarker = this.createSeparatorContactMarker(depthLayer);
+    if (contactMarker) {
+      cube.add(contactMarker);
+    }
+
     cube.add(
       new LineSegments(
-        new EdgesGeometry(new BoxGeometry(CELL_SIZE, CELL_SIZE, CELL_SIZE)),
+        new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.96, CELL_SIZE * 0.96, CELL_SIZE * 0.96)),
         new LineBasicMaterial({
-          color: 0xf5fbff,
+          color: seamColor,
           transparent: true,
-          opacity: isActive ? 0.98 : 0.78
+          opacity: isActive ? 0.9 : 0.72,
+          depthWrite: false
         })
       )
     );
 
     return cube;
+  }
+
+  private createSeparatorContactMarker(depthLayer: number): Group | null {
+    const { depth } = this.gameState.getDimensions();
+    if (depth <= 1) {
+      return null;
+    }
+
+    const faceOffsets: number[] = [];
+    if (depthLayer > 0) {
+      faceOffsets.push(-CELL_SIZE * 0.515);
+    }
+    if (depthLayer < depth - 1) {
+      faceOffsets.push(CELL_SIZE * 0.515);
+    }
+    if (faceOffsets.length === 0) {
+      return null;
+    }
+
+    const group = new Group();
+    faceOffsets.forEach((faceZ) => group.add(this.createSeparatorContactFrame(faceZ)));
+    return group;
+  }
+
+  private createSeparatorContactFrame(faceZ: number): Group {
+    const group = new Group();
+    const lineMaterial = new MeshBasicMaterial({
+      color: 0xf7ffff,
+      transparent: true,
+      opacity: 0.5,
+      depthTest: true,
+      depthWrite: false,
+      side: DoubleSide,
+      blending: AdditiveBlending
+    });
+    const glowMaterial = new MeshBasicMaterial({
+      color: 0x8df9ff,
+      transparent: true,
+      opacity: 0.1,
+      depthTest: true,
+      depthWrite: false,
+      side: DoubleSide,
+      blending: AdditiveBlending
+    });
+
+    const coreLength = CELL_SIZE * 0.86;
+    const glowLength = CELL_SIZE * 0.92;
+    const coreWidth = CELL_SIZE * 0.018;
+    const glowWidth = CELL_SIZE * 0.06;
+    const edge = CELL_SIZE * 0.47;
+
+    const strips = [
+      new Mesh(new PlaneGeometry(glowLength, glowWidth), glowMaterial),
+      new Mesh(new PlaneGeometry(glowLength, glowWidth), glowMaterial),
+      new Mesh(new PlaneGeometry(glowWidth, glowLength), glowMaterial),
+      new Mesh(new PlaneGeometry(glowWidth, glowLength), glowMaterial),
+      new Mesh(new PlaneGeometry(coreLength, coreWidth), lineMaterial),
+      new Mesh(new PlaneGeometry(coreLength, coreWidth), lineMaterial),
+      new Mesh(new PlaneGeometry(coreWidth, coreLength), lineMaterial),
+      new Mesh(new PlaneGeometry(coreWidth, coreLength), lineMaterial)
+    ];
+
+    strips[0].position.set(0, edge, faceZ);
+    strips[1].position.set(0, -edge, faceZ);
+    strips[2].position.set(-edge, 0, faceZ);
+    strips[3].position.set(edge, 0, faceZ);
+    strips[4].position.copy(strips[0].position);
+    strips[5].position.copy(strips[1].position);
+    strips[6].position.copy(strips[2].position);
+    strips[7].position.copy(strips[3].position);
+
+    strips.forEach((mesh) => {
+      mesh.renderOrder = 32;
+      group.add(mesh);
+    });
+    return group;
   }
 
   private createFaceGrid(
@@ -772,6 +881,155 @@ export class Renderer {
     }
 
     return group;
+  }
+
+  private createDepthSeparators(width: number, height: number, depth: number): Group {
+    const group = new Group();
+    if (depth <= 1) {
+      return group;
+    }
+
+    for (let z = 1; z < depth; z += 1) {
+      group.add(this.createDepthSeparatorPlane(width, height, z));
+    }
+
+    return group;
+  }
+
+  private createDepthSeparatorPlane(width: number, height: number, z: number): Group {
+    const group = new Group();
+    const zPosition = z * CELL_SIZE;
+
+    const panel = new Mesh(
+      new PlaneGeometry(width * CELL_SIZE, height * CELL_SIZE),
+      new MeshBasicMaterial({
+        color: 0xe8fdff,
+        transparent: true,
+        opacity: 0.075,
+        depthTest: true,
+        depthWrite: false,
+        side: DoubleSide,
+        blending: AdditiveBlending
+      })
+    );
+    panel.position.set((width * CELL_SIZE) / 2, (height * CELL_SIZE) / 2, zPosition);
+    panel.renderOrder = 26;
+    group.add(panel);
+
+    const grid = this.createFaceGrid('xy', width, height, z, 0x76f7ff);
+    grid.traverse((child) => {
+      if (child instanceof LineSegments) {
+        const material = child.material as LineBasicMaterial;
+        material.opacity = 0.74;
+        material.color.setHex(0xc9fbff);
+        material.depthTest = true;
+        child.renderOrder = 27;
+      }
+      if (child instanceof Points) {
+        const material = child.material as PointsMaterial;
+        material.opacity = 0.94;
+        material.color.setHex(0xf5feff);
+        material.depthTest = true;
+        child.renderOrder = 28;
+      }
+    });
+    group.add(grid);
+
+    const baseStrip = new Mesh(
+      new PlaneGeometry(width * CELL_SIZE, CELL_SIZE * 0.08),
+      new MeshBasicMaterial({
+        color: 0xf6ffff,
+        transparent: true,
+        opacity: 0.62,
+        depthTest: true,
+        depthWrite: false,
+        side: DoubleSide,
+        blending: AdditiveBlending
+      })
+    );
+    baseStrip.rotation.x = -Math.PI / 2;
+    baseStrip.position.set((width * CELL_SIZE) / 2, CELL_SIZE * 0.035, zPosition);
+    baseStrip.renderOrder = 29;
+    group.add(baseStrip);
+
+    const centerFlash = new Mesh(
+      new PlaneGeometry(width * CELL_SIZE, CELL_SIZE * 0.34),
+      new MeshBasicMaterial({
+        color: 0x8cfaff,
+        transparent: true,
+        opacity: 0.13,
+        depthTest: true,
+        depthWrite: false,
+        side: DoubleSide,
+        blending: AdditiveBlending
+      })
+    );
+    centerFlash.position.set((width * CELL_SIZE) / 2, (height * CELL_SIZE) * 0.5, zPosition);
+    centerFlash.renderOrder = 25;
+    group.add(centerFlash);
+
+    return group;
+  }
+
+  private createGridNumberLabels(width: number, height: number): Group {
+    const group = new Group();
+    const frontOffset = -0.18 * CELL_SIZE;
+    const leftLabelX = (width - 0.2) * CELL_SIZE;
+    const bottomLabelY = -0.42 * CELL_SIZE;
+
+    for (let y = 1; y <= height; y += 1) {
+      const label = this.createGridNumberSprite(String(y));
+      label.position.set(leftLabelX, (y - 0.5) * CELL_SIZE, frontOffset);
+      group.add(label);
+    }
+
+    for (let x = 1; x <= width; x += 1) {
+      const label = this.createGridNumberSprite(String(x));
+      label.position.set((width - x + 0.5) * CELL_SIZE, bottomLabelY, frontOffset);
+      group.add(label);
+    }
+
+    return group;
+  }
+
+  private createGridNumberSprite(text: string): Sprite {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 96;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      return new Sprite();
+    }
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.font = '800 48px "Bahnschrift", "Segoe UI", sans-serif';
+    context.lineJoin = 'round';
+    context.shadowColor = 'rgba(72, 218, 255, 0.9)';
+    context.shadowBlur = 18;
+    context.strokeStyle = 'rgba(18, 123, 212, 0.72)';
+    context.lineWidth = 6;
+    context.strokeText(text, canvas.width / 2, canvas.height / 2 + 1);
+    context.fillStyle = 'rgba(244, 253, 255, 0.98)';
+    context.fillText(text, canvas.width / 2, canvas.height / 2 + 1);
+
+    const texture = new CanvasTexture(canvas);
+    texture.colorSpace = SRGBColorSpace;
+    texture.minFilter = LinearFilter;
+    texture.magFilter = LinearFilter;
+
+    const material = new SpriteMaterial({
+      map: texture,
+      transparent: true,
+      opacity: 0.98,
+      depthTest: false,
+      depthWrite: false
+    });
+    const sprite = new Sprite(material);
+    sprite.scale.set(text.length > 1 ? 0.9 : 0.66, 0.58, 1);
+    sprite.renderOrder = 30;
+    return sprite;
   }
 
   private createFieldFrameGlow(width: number, height: number, depth: number): Group {
@@ -941,7 +1199,7 @@ export class Renderer {
       }
 
       if (this.cameraOrbit.dragAxis === 'horizontal') {
-        this.cameraOrbit.theta -= deltaX * CAMERA_SETTINGS.rotateSpeedX;
+        this.cameraOrbit.theta += deltaX * CAMERA_SETTINGS.rotateSpeedX;
       } else if (this.cameraOrbit.dragAxis === 'vertical') {
         this.cameraOrbit.phi = clamp(
           this.cameraOrbit.phi - deltaY * CAMERA_SETTINGS.rotateSpeedY,
@@ -1094,21 +1352,34 @@ export class Renderer {
   private disposeObjectResources(root: Group | Scene): void {
     const geometries = new Set<BufferGeometry>();
     const materials = new Set<Material>();
+    const textures = new Set<{ dispose: () => void }>();
 
     root.traverse((child) => {
-      if (!(child instanceof Mesh) && !(child instanceof LineSegments) && !(child instanceof Points)) {
+      if (child instanceof Mesh || child instanceof LineSegments || child instanceof Points) {
+        geometries.add(child.geometry);
+      }
+
+      if (
+        !(child instanceof Mesh) &&
+        !(child instanceof LineSegments) &&
+        !(child instanceof Points) &&
+        !(child instanceof Sprite)
+      ) {
         return;
       }
 
-      geometries.add(child.geometry);
-      if (Array.isArray(child.material)) {
-        child.material.forEach((material) => materials.add(material));
-      } else {
-        materials.add(child.material);
-      }
+      const childMaterials = Array.isArray(child.material) ? child.material : [child.material];
+      childMaterials.forEach((material) => {
+        materials.add(material);
+        const map = (material as Material & { map?: { dispose: () => void } | null }).map;
+        if (map) {
+          textures.add(map);
+        }
+      });
     });
 
     geometries.forEach((geometry) => geometry.dispose());
+    textures.forEach((texture) => texture.dispose());
     materials.forEach((material) => material.dispose());
   }
 
@@ -1252,6 +1523,15 @@ function mixColor(color: number, target: number, amount: number): string {
     Math.round(value + (targetRgb[index] - value) * amount)
   );
   return `rgb(${mixed[0]}, ${mixed[1]}, ${mixed[2]})`;
+}
+
+function mixColorNumber(color: number, target: number, amount: number): number {
+  const sourceRgb = numberToRgb(color);
+  const targetRgb = numberToRgb(target);
+  const mixed = sourceRgb.map((value, index) =>
+    Math.round(value + (targetRgb[index] - value) * amount)
+  );
+  return (mixed[0] << 16) | (mixed[1] << 8) | mixed[2];
 }
 
 function numberToRgb(color: number): [number, number, number] {
