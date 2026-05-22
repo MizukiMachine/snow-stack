@@ -77,12 +77,13 @@ type HudIconName =
   | 'pause'
   | 'restart'
   | 'settings'
+  | 'snowflake'
   | 'trophy';
 
 const CAMERA_SETTINGS = {
-  targetHeightFactor: 0.46,
-  initialTheta: -2.32,
-  initialPhi: 0.82,
+  targetHeightFactor: 0.5,
+  initialTheta: -1.58,
+  initialPhi: 0.74,
   minPhi: 0.22,
   maxPhi: 1.42,
   rotateSpeedX: 0.0022,
@@ -90,7 +91,7 @@ const CAMERA_SETTINGS = {
   zoomSpeed: 0.01,
   minRadius: 14,
   maxRadius: 38,
-  initialRadiusMultiplier: 1.26,
+  initialRadiusMultiplier: 1.04,
   axisLockThresholdPx: 6
 } as const;
 
@@ -167,12 +168,13 @@ export class Renderer {
     const canvasHost = document.createElement('div');
     canvasHost.className = 'scene-layer';
     container.appendChild(canvasHost);
+    this.canvasHost = canvasHost;
 
     const scene = new Scene();
     scene.background = null;
     scene.fog = null;
 
-    const camera = new PerspectiveCamera(36, this.getAspectRatio(), 0.1, 1000);
+    const camera = new PerspectiveCamera(34, this.getAspectRatio(), 0.1, 1000);
     this.configureInitialCameraOrbit(camera);
     this.applyCameraOrbit(camera);
 
@@ -184,11 +186,8 @@ export class Renderer {
     renderer.outputColorSpace = SRGBColorSpace;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
-    renderer.setSize(
-      Math.max(1, container.clientWidth),
-      Math.max(1, container.clientHeight),
-      false
-    );
+    const renderSize = this.getRenderSize();
+    renderer.setSize(renderSize.width, renderSize.height, false);
     renderer.domElement.className = 'scene-canvas';
     canvasHost.appendChild(renderer.domElement);
 
@@ -201,7 +200,6 @@ export class Renderer {
     this.scene = scene;
     this.camera = camera;
     this.renderer = renderer;
-    this.canvasHost = canvasHost;
 
     this.resizeHandler = () => this.onResize();
     window.addEventListener('resize', this.resizeHandler);
@@ -367,19 +365,33 @@ export class Renderer {
     }
 
     const root = this.hudElement;
+    root.dataset.phase = this.hudState.phase;
+    root.dataset.paused = String(this.hudState.isPaused);
     this.setText(root, '[data-role="score"]', this.formatNumber(this.hudState.score));
-    this.setText(root, '[data-role="level"]', String(this.hudState.level));
-    this.setText(root, '[data-role="lines"]', String(this.hudState.clearedLayerCount));
+    this.setText(root, '[data-role="level"]', String(this.hudState.level).padStart(2, '0'));
+    this.setText(
+      root,
+      '[data-role="lines"]',
+      String(this.hudState.clearedLayerCount).padStart(3, '0')
+    );
     this.setText(root, '[data-role="status-label"]', this.getStatusLabel());
     this.setText(root, '[data-role="speed"]', `${(1000 / this.hudState.dropIntervalMs).toFixed(2)}x`);
     this.syncHudTimer(root);
     this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? 'RESUME' : 'PAUSE');
+    this.setMeter(root, '[data-role="level-meter"]', Math.min(7, this.hudState.level));
+    this.setMeter(
+      root,
+      '[data-role="layers-meter"]',
+      this.hudState.clearedLayerCount === 0
+        ? 0
+        : Math.min(8, Math.max(1, this.hudState.clearedLayerCount % 9))
+    );
     this.setText(
       root,
       '[data-role="footer-tip"]',
       this.hudState.phase === 'game-over'
         ? 'Rotate the view and start a fresh run.'
-        : 'Clear more lines at once to earn higher scores!'
+        : 'Complete horizontal Y-layers to clear them.'
     );
 
     const nextPreviewType = this.hudState.queue[0] ?? 'T';
@@ -415,59 +427,80 @@ export class Renderer {
     hud.className = 'ui-layer';
     hud.innerHTML = `
       <div class="brand-panel">
-        <div class="brand-mark"><span>3D</span> TETRIS</div>
+        <div class="brand-emblem">${icon('snowflake')}</div>
+        <div class="brand-copy">
+          <div class="brand-title">VOXEL<br />TETRIS</div>
+          <div class="brand-subtitle">3D VOXEL PUZZLE GAME</div>
+        </div>
       </div>
       <section class="info-card tip-card">
-        <div class="card-icon">${icon('cube')}</div>
+        <div class="card-title">${icon('snowflake')}<span>TIP</span></div>
         <div>
-          <div class="card-title">TIP</div>
           <p>This is 3D. Move, rotate, and think in every direction.</p>
+          <div class="tip-dots" aria-hidden="true"><span class="is-active"></span><span></span><span></span><span></span></div>
         </div>
       </section>
-      <section class="axis-card">
-        <div class="axis axis-y"></div>
-        <div class="axis axis-x"></div>
-        <div class="axis axis-z"></div>
-        <span class="axis-label axis-label-y">Y</span>
-        <span class="axis-label axis-label-x">X</span>
-        <span class="axis-label axis-label-z">Z</span>
-      </section>
       <aside class="right-rail">
-        <section class="panel stat-panel">
-          <div class="metric-row"><span>${icon('trophy')} SCORE</span><strong data-role="score">0</strong></div>
-          <div class="metric-row"><span>${icon('chart')} LEVEL</span><strong data-role="level">1</strong></div>
-          <div class="metric-row"><span>${icon('layers')} LINES</span><strong data-role="lines">0</strong></div>
-        </section>
-        <section class="panel preview-panel">
-          <h3>NEXT PIECE</h3>
-          <div class="piece-preview" data-role="next-piece"></div>
-        </section>
-        <section class="panel preview-panel">
-          <h3>HOLD PIECE</h3>
-          <div class="piece-preview" data-role="hold-piece"></div>
-        </section>
-        <section class="panel controls-panel">
-          <h3>CONTROLS</h3>
-          <div class="control-grid">
-            <div class="control-row"><span class="keys"><b>↑</b><b>↓</b><b>←</b><b>→</b></span><span>MOVE</span></div>
-            <div class="control-row"><span class="keys"><b>A</b><b>D</b></span><span>ROTATE</span></div>
-            <div class="control-row"><span class="keys"><b>S</b><b class="wide-key">SPACE</b></span><span>DROP</span></div>
-            <div class="control-row"><span class="keys"><b>${icon('mouse')}</b></span><span>DRAG CAMERA</span></div>
+        <div class="telemetry-stack">
+          <section class="panel metric-card">
+            <div class="panel-heading">${icon('snowflake')}<span>SCORE</span></div>
+            <strong class="metric-value" data-role="score">0</strong>
+          </section>
+          <section class="panel metric-card">
+            <div class="panel-heading">${icon('snowflake')}<span>LEVEL</span></div>
+            <div class="metric-inline"><strong class="metric-value" data-role="level">01</strong><div class="meter meter-dots" data-role="level-meter">${renderMeterSegments(7)}</div></div>
+          </section>
+          <section class="panel metric-card">
+            <div class="panel-heading">${icon('snowflake')}<span>LAYERS</span></div>
+            <div class="metric-inline"><strong class="metric-value" data-role="lines">000</strong><div class="meter meter-bars" data-role="layers-meter">${renderMeterSegments(8)}</div></div>
+          </section>
+          <section class="panel preview-panel">
+            <h3>${icon('snowflake')}<span>NEXT PIECE</span></h3>
+            <div class="piece-preview" data-role="next-piece"></div>
+          </section>
+          <section class="panel preview-panel">
+            <h3>${icon('snowflake')}<span>HOLD PIECE</span></h3>
+            <div class="piece-preview" data-role="hold-piece"></div>
+          </section>
+        </div>
+        <div class="command-stack">
+          <section class="panel controls-panel">
+            <h3>${icon('snowflake')}<span>CONTROLS</span></h3>
+            <div class="control-grid">
+              <div class="control-row"><span class="keys"><b>←</b><b>→</b></span><span>Move X / Z</span></div>
+              <div class="control-row"><span class="keys"><b>W</b></span><span>Move Up (Y+)</span></div>
+              <div class="control-row"><span class="keys"><b>S</b></span><span>Move Down (Y-)</span></div>
+              <div class="control-row"><span class="keys"><b>Q</b><b>E</b></span><span>Rotate Y Axis</span></div>
+              <div class="control-row"><span class="keys"><b>A</b><b>D</b></span><span>Rotate Z Axis</span></div>
+              <div class="control-row"><span class="keys"><b>Z</b><b>X</b></span><span>Rotate X Axis</span></div>
+              <div class="control-row"><span class="keys"><b class="wide-key">Space</b></span><span>Hard Drop</span></div>
+              <div class="control-row"><span class="keys"><b>C</b></span><span>Hold Piece</span></div>
+              <div class="control-row"><span class="keys"><b class="wide-key">P / Esc</b></span><span>Pause</span></div>
+              <div class="control-row"><span class="keys"><b>R</b></span><span>Restart</span></div>
+              <div class="control-separator"></div>
+              <div class="control-row"><span class="keys"><b class="wide-key key-icon">${icon('mouse')}Mouse</b></span><span>Rotate View</span></div>
+              <div class="control-row"><span class="keys"><b class="wide-key">Wheel</b></span><span>Zoom</span></div>
+            </div>
+          </section>
+          <div class="action-row">
+            <button class="action-button" data-action="pause" type="button"><span class="button-icon">${icon('pause')}</span><span data-role="pause-label">PAUSE</span></button>
+            <button class="action-button" data-action="restart" type="button"><span class="button-icon">${icon('restart')}</span><span>RESTART</span></button>
+            <button class="action-button" data-action="settings" type="button"><span class="button-icon">${icon('settings')}</span><span>SETTINGS</span></button>
           </div>
-        </section>
-        <div class="action-row">
-          <button class="action-button" data-action="pause" type="button"><span class="button-icon">${icon('pause')}</span><span data-role="pause-label">PAUSE</span></button>
-          <button class="action-button" data-action="restart" type="button"><span class="button-icon">${icon('restart')}</span><span>RESTART</span></button>
-          <button class="action-button" data-action="settings" type="button"><span class="button-icon">${icon('settings')}</span><span>SETTINGS</span></button>
         </div>
       </aside>
       <section class="status-bar">
-        <div class="status-pill"><span class="status-label">STATUS</span><span class="status-dot"></span><span data-role="status-label">RUNNING</span></div>
-        <div class="status-hint">${icon('lightbulb')}<span data-role="footer-tip"></span></div>
-        <div class="status-meta"><span data-role="timer">00:00:00</span></div>
+        <div class="status-pill">${icon('snowflake')}<div><span class="status-label">STATUS</span><span class="status-state"><span class="status-dot"></span><span data-role="status-label">RUNNING</span></span></div></div>
+        <div class="status-hint">${icon('snowflake')}<div><span class="status-label">HINT</span><span data-role="footer-tip"></span></div></div>
+        <div class="status-meta"><span class="status-label">TIME</span><span data-role="timer">00:00:00</span></div>
+        <div class="status-actions">
+          <button class="status-button" data-action="pause" type="button">${icon('pause')}<span data-role="pause-label">PAUSE</span></button>
+          <button class="status-button" data-action="restart" type="button">${icon('restart')}<span>RESTART</span></button>
+          <button class="status-button" data-action="settings" type="button">${icon('settings')}<span>SETTINGS</span></button>
+        </div>
       </section>
       <section class="panel settings-panel" data-role="settings-panel" hidden>
-        <h3>VIEW SETTINGS</h3>
+        <h3>${icon('snowflake')}<span>VIEW SETTINGS</span></h3>
         <div class="settings-copy">
           <p>Drag to orbit the tower.</p>
           <p>Wheel to zoom the camera.</p>
@@ -522,21 +555,23 @@ export class Renderer {
 
     const { width, height, depth } = this.gameState.getDimensions();
     const panelMaterial = new MeshStandardMaterial({
-      color: 0x0a1330,
+      color: 0xe8fbff,
       transparent: true,
-      opacity: 0.08,
-      roughness: 0.35,
-      metalness: 0.25
+      opacity: 0.22,
+      roughness: 0.14,
+      metalness: 0.42,
+      depthWrite: false
     });
 
     const floor = new Mesh(
       new PlaneGeometry(width * CELL_SIZE, depth * CELL_SIZE),
       new MeshStandardMaterial({
-        color: 0x081326,
-        roughness: 0.5,
-        metalness: 0.3,
+        color: 0xf2fdff,
+        roughness: 0.18,
+        metalness: 0.48,
         transparent: true,
-        opacity: 0.14
+        opacity: 0.34,
+        depthWrite: false
       })
     );
     floor.rotation.x = -Math.PI / 2;
@@ -568,33 +603,35 @@ export class Renderer {
     );
     const bounds = new LineSegments(
       new EdgesGeometry(boundsGeometry),
-      new LineBasicMaterial({ color: 0x9ce9ff, transparent: true, opacity: 0.98 })
+      new LineBasicMaterial({ color: 0xf7feff, transparent: true, opacity: 0.98 })
     );
 
     group.add(floor, leftWall, rightWall, backWall, bounds);
+    group.add(this.createFieldFrameGlow(width, height, depth));
     group.add(this.createFaceGrid('xy', width, height, 0, 0x58c9ff));
     group.add(this.createFaceGrid('xy', width, height, depth, 0x62c4ff));
     group.add(this.createFaceGrid('yz', depth, height, 0, 0x4ca6ff));
     group.add(this.createFaceGrid('yz', depth, height, width, 0x4ca6ff));
     group.add(this.createFaceGrid('xz', width, depth, 0, 0x2a7cff));
     group.add(this.createFaceGrid('xz', width, depth, height, 0x62c4ff));
+    group.add(this.createLayerScanBand(width, depth, Math.max(1, Math.round(height * 0.4))));
     group.add(this.createCornerGlow(width, height, depth));
     return group;
   }
 
   private createLighting(): Group {
     const group = new Group();
-    group.add(new AmbientLight(0xb9d5ff, 0.72));
+    group.add(new AmbientLight(0xe6f6ff, 1.08));
 
-    const key = new DirectionalLight(0x8fd7ff, 1.7);
+    const key = new DirectionalLight(0xc9f4ff, 1.85);
     key.position.set(14, 22, 10);
     group.add(key);
 
-    const rim = new DirectionalLight(0x6f7cff, 1.3);
+    const rim = new DirectionalLight(0x6dbdff, 1.1);
     rim.position.set(-12, 16, -8);
     group.add(rim);
 
-    const warm = new DirectionalLight(0xffb44a, 0.86);
+    const warm = new DirectionalLight(0xffd184, 0.44);
     warm.position.set(4, 8, 14);
     group.add(warm);
 
@@ -613,9 +650,9 @@ export class Renderer {
       const ring = new Mesh(
         new RingGeometry(innerRadius, outerRadius, 96),
         new MeshBasicMaterial({
-          color: i % 2 === 0 ? 0x1e84ff : 0xab43ff,
+          color: i % 2 === 0 ? 0x18d6ff : 0x7da7ff,
           transparent: true,
-          opacity: i === 0 ? 0.22 : 0.08
+          opacity: i === 0 ? 0.34 : 0.11
         })
       );
       ring.rotation.x = -Math.PI / 2;
@@ -703,9 +740,10 @@ export class Renderer {
         pointsGeometry,
         new PointsMaterial({
           color,
-          size: 0.052,
+          size: 0.07,
           transparent: true,
-          opacity: 0.64
+          opacity: 0.86,
+          depthWrite: false
         })
       )
     );
@@ -713,7 +751,8 @@ export class Renderer {
     const lineMaterial = new LineBasicMaterial({
       color,
       transparent: true,
-      opacity: 0.18
+      opacity: 0.42,
+      depthWrite: false
     });
 
     for (let a = 0; a <= spanA; a += 1) {
@@ -731,6 +770,94 @@ export class Renderer {
       ]);
       group.add(new LineSegments(geometry, lineMaterial));
     }
+
+    return group;
+  }
+
+  private createFieldFrameGlow(width: number, height: number, depth: number): Group {
+    const group = new Group();
+    const boundsGeometry = new BoxGeometry(width * CELL_SIZE, height * CELL_SIZE, depth * CELL_SIZE);
+    boundsGeometry.translate(
+      (width * CELL_SIZE) / 2,
+      (height * CELL_SIZE) / 2,
+      (depth * CELL_SIZE) / 2
+    );
+
+    group.add(
+      new LineSegments(
+        new EdgesGeometry(boundsGeometry),
+        new LineBasicMaterial({
+          color: 0x70f4ff,
+          transparent: true,
+          opacity: 0.82,
+          depthWrite: false
+        })
+      )
+    );
+
+    const baseGeometry = new BufferGeometry().setFromPoints([
+      new Vector3(0, 0, 0),
+      new Vector3(width * CELL_SIZE, 0, 0),
+      new Vector3(width * CELL_SIZE, 0, 0),
+      new Vector3(width * CELL_SIZE, 0, depth * CELL_SIZE),
+      new Vector3(width * CELL_SIZE, 0, depth * CELL_SIZE),
+      new Vector3(0, 0, depth * CELL_SIZE),
+      new Vector3(0, 0, depth * CELL_SIZE),
+      new Vector3(0, 0, 0)
+    ]);
+    group.add(
+      new LineSegments(
+        baseGeometry,
+        new LineBasicMaterial({
+          color: 0x28e8ff,
+          transparent: true,
+          opacity: 1,
+          depthWrite: false
+        })
+      )
+    );
+
+    return group;
+  }
+
+  private createLayerScanBand(width: number, depth: number, layer: number): Group {
+    const group = new Group();
+    const y = layer * CELL_SIZE;
+    const points = [
+      new Vector3(0, y, 0),
+      new Vector3(width * CELL_SIZE, y, 0),
+      new Vector3(width * CELL_SIZE, y, 0),
+      new Vector3(width * CELL_SIZE, y, depth * CELL_SIZE),
+      new Vector3(width * CELL_SIZE, y, depth * CELL_SIZE),
+      new Vector3(0, y, depth * CELL_SIZE),
+      new Vector3(0, y, depth * CELL_SIZE),
+      new Vector3(0, y, 0)
+    ];
+
+    group.add(
+      new LineSegments(
+        new BufferGeometry().setFromPoints(points),
+        new LineBasicMaterial({
+          color: 0x56f6ff,
+          transparent: true,
+          opacity: 0.98,
+          depthWrite: false
+        })
+      )
+    );
+
+    const scanPlane = new Mesh(
+      new PlaneGeometry(width * CELL_SIZE, depth * CELL_SIZE),
+      new MeshBasicMaterial({
+        color: 0x4ef4ff,
+        transparent: true,
+        opacity: 0.08,
+        depthWrite: false
+      })
+    );
+    scanPlane.rotation.x = -Math.PI / 2;
+    scanPlane.position.set((width * CELL_SIZE) / 2, y, (depth * CELL_SIZE) / 2);
+    group.add(scanPlane);
 
     return group;
   }
@@ -762,7 +889,7 @@ export class Renderer {
       const orb = new Mesh(
         new SphereGeometry(0.14, 10, 10),
         new MeshBasicMaterial({
-          color: 0x7fd9ff,
+          color: 0xe7fbff,
           transparent: true,
           opacity: 0.9
         })
@@ -919,16 +1046,22 @@ export class Renderer {
 
     this.camera.aspect = this.getAspectRatio();
     this.camera.updateProjectionMatrix();
-    const width = Math.max(1, this.container?.clientWidth ?? window.innerWidth);
-    const height = Math.max(1, this.container?.clientHeight ?? window.innerHeight);
-    this.renderer.setSize(width, height, false);
+    const renderSize = this.getRenderSize();
+    this.renderer.setSize(renderSize.width, renderSize.height, false);
     this.renderFrame();
   }
 
   private getAspectRatio(): number {
-    const width = Math.max(1, this.container?.clientWidth ?? window.innerWidth);
-    const height = Math.max(1, this.container?.clientHeight ?? window.innerHeight);
+    const { width, height } = this.getRenderSize();
     return width / height;
+  }
+
+  private getRenderSize(): { width: number; height: number } {
+    const element = this.canvasHost ?? this.container;
+    return {
+      width: Math.max(1, element?.clientWidth ?? window.innerWidth),
+      height: Math.max(1, element?.clientHeight ?? window.innerHeight)
+    };
   }
 
   private disposeActiveTetrominoGroup(): void {
@@ -1043,10 +1176,16 @@ export class Renderer {
   }
 
   private setText(root: ParentNode, selector: string, text: string): void {
-    const element = root.querySelector<HTMLElement>(selector);
-    if (element) {
+    root.querySelectorAll<HTMLElement>(selector).forEach((element) => {
       element.textContent = text;
-    }
+    });
+  }
+
+  private setMeter(root: ParentNode, selector: string, activeCount: number): void {
+    const meter = root.querySelector<HTMLElement>(selector);
+    meter?.querySelectorAll<HTMLElement>('span').forEach((element, index) => {
+      element.classList.toggle('is-active', index < activeCount);
+    });
   }
 
   private syncHudTimer(root: ParentNode): void {
@@ -1057,12 +1196,12 @@ export class Renderer {
 
   private getStatusLabel(): string {
     if (this.hudState.phase === 'game-over') {
-      return 'Game Over';
+      return 'GAME OVER';
     }
     if (this.hudState.isPaused) {
-      return 'Paused';
+      return 'PAUSED';
     }
-    return 'Playing';
+    return 'RUNNING';
   }
 
   private formatNumber(value: number): string {
@@ -1084,6 +1223,10 @@ export class Renderer {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function renderMeterSegments(count: number): string {
+  return Array.from({ length: count }, () => '<span></span>').join('');
 }
 
 function renderPreviewCube(
@@ -1139,6 +1282,8 @@ function renderHudIcon(name: HudIconName): string {
       '<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v6h-6"/>',
     settings:
       '<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M4 12h2"/><path d="M18 12h2"/><path d="m6.3 6.3 1.4 1.4"/><path d="m16.3 16.3 1.4 1.4"/><path d="m17.7 6.3-1.4 1.4"/><path d="m7.7 16.3-1.4 1.4"/><path d="M12 2v2"/><path d="M12 20v2"/>',
+    snowflake:
+      '<path d="M12 2v20"/><path d="m4.9 4.9 14.2 14.2"/><path d="m19.1 4.9-14.2 14.2"/><path d="m8 4 4 4 4-4"/><path d="m8 20 4-4 4 4"/><path d="m4 8 4 4-4 4"/><path d="m20 8-4 4 4 4"/>',
     trophy:
       '<path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5a3 3 0 0 0 3 3"/><path d="M16 6h3a3 3 0 0 1-3 3"/><path d="M12 12v5"/><path d="M8 21h8"/><path d="M10 17h4"/>'
   };
