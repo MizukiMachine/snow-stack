@@ -26,7 +26,8 @@ import {
   Vector3,
   WebGLRenderer
 } from 'three';
-import type { Material } from 'three';
+import type { Material, Texture } from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type {
   ActivePolyCubeSnapshot,
   GamePhase,
@@ -82,6 +83,34 @@ type HudIconName =
   | 'snowflake'
   | 'trophy';
 
+type CubeWorldAssetKey =
+  | 'wallIce'
+  | 'floorIce'
+  | 'blockCore'
+  | 'railStraight'
+  | 'railCorner'
+  | 'button'
+  | 'leverLeft'
+  | 'leverRight'
+  | 'crystalSmall';
+
+type CubeWorldAssetDefinition = {
+  readonly path: string;
+  readonly tint?: number;
+  readonly opacity?: number;
+  readonly depthWrite?: boolean;
+};
+
+type AssetPlacement = {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly scale?: number;
+  readonly rotationX?: number;
+  readonly rotationY?: number;
+  readonly rotationZ?: number;
+};
+
 const CAMERA_SETTINGS = {
   targetHeightFactor: 0.5,
   initialTheta: -Math.PI / 2,
@@ -97,6 +126,64 @@ const CAMERA_SETTINGS = {
   axisLockThresholdPx: 6
 } as const;
 
+const CUBE_WORLD_ASSET_ROOT = '/assets/Cube%20World%20-%20Aug%202023';
+const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, CubeWorldAssetDefinition> = Object.freeze({
+  wallIce: {
+    path: `${CUBE_WORLD_ASSET_ROOT}/Pixel%20Blocks/glTF/Ice.gltf`,
+    tint: 0xc3f3ff,
+    opacity: 0.82,
+    depthWrite: false
+  },
+  floorIce: {
+    path: `${CUBE_WORLD_ASSET_ROOT}/Pixel%20Blocks/glTF/Ice.gltf`,
+    tint: 0xa9e5f8,
+    opacity: 0.56,
+    depthWrite: false
+  },
+  blockCore: {
+    path: `${CUBE_WORLD_ASSET_ROOT}/Blocks/glTF/Block_Blank.gltf`,
+    tint: 0xffffff,
+    opacity: 0.12,
+    depthWrite: false
+  },
+  railStraight: {
+    path: `${CUBE_WORLD_ASSET_ROOT}/Environment/glTF/Rail_Straight.gltf`,
+    tint: 0xbbeaff,
+    opacity: 0.95,
+    depthWrite: true
+  },
+  railCorner: {
+    path: `${CUBE_WORLD_ASSET_ROOT}/Environment/glTF/Rail_Corner.gltf`,
+    tint: 0xbbeaff,
+    opacity: 0.95,
+    depthWrite: true
+  },
+  button: {
+    path: `${CUBE_WORLD_ASSET_ROOT}/Environment/glTF/Button.gltf`,
+    tint: 0xd5f5ff,
+    opacity: 0.98,
+    depthWrite: true
+  },
+  leverLeft: {
+    path: `${CUBE_WORLD_ASSET_ROOT}/Environment/glTF/Lever_Left.gltf`,
+    tint: 0xd8f1ff,
+    opacity: 0.98,
+    depthWrite: true
+  },
+  leverRight: {
+    path: `${CUBE_WORLD_ASSET_ROOT}/Environment/glTF/Lever_Right.gltf`,
+    tint: 0xd8f1ff,
+    opacity: 0.98,
+    depthWrite: true
+  },
+  crystalSmall: {
+    path: `${CUBE_WORLD_ASSET_ROOT}/Environment/glTF/Crystal_Small.gltf`,
+    tint: 0x9df4ff,
+    opacity: 0.9,
+    depthWrite: true
+  }
+});
+
 /**
  * Three.js scene rendering and DOM-based HUD for the BlockOut pit.
  */
@@ -109,9 +196,17 @@ export class Renderer {
   private container: HTMLElement | null = null;
   private canvasHost: HTMLDivElement | null = null;
   private hudElement: HTMLDivElement | null = null;
+  private fieldBoundsGroup: Group | null = null;
+  private assetFieldLayer: Group | null = null;
   private activePolyCubeGroup: Group | null = null;
   private settledBlocksGroup: Group | null = null;
   private glowGroup: Group | null = null;
+  private readonly gltfLoader = new GLTFLoader();
+  private readonly assetTemplates = new Map<CubeWorldAssetKey, Group>();
+  private assetLoadPromise: Promise<void> | null = null;
+  private assetLoadGeneration = 0;
+  private assetsReady = false;
+  private disposed = false;
   private resizeHandler: (() => void) | null = null;
   private controlsBound = false;
   private pointerDownHandler: ((event: PointerEvent) => void) | null = null;
@@ -162,6 +257,8 @@ export class Renderer {
   }
 
   public initialize(container: HTMLElement): void {
+    this.disposed = false;
+    this.assetLoadGeneration += 1;
     this.container = container;
     container.innerHTML = '';
     container.classList.add('game-shell');
@@ -195,7 +292,9 @@ export class Renderer {
     container.appendChild(this.createHudElement());
 
     scene.add(this.createLighting());
-    scene.add(this.createFieldBounds());
+    const fieldBounds = this.createFieldBounds();
+    this.fieldBoundsGroup = fieldBounds;
+    scene.add(fieldBounds);
     scene.add(this.createFloorHalo());
 
     this.scene = scene;
@@ -210,6 +309,7 @@ export class Renderer {
     this.updateSettledBlocks(this.gameState.getSettledBlocks());
     this.updateHud([], 'running', 0, 0, 1, 3000, 0, false, false);
     this.renderFrame();
+    void this.loadCubeWorldAssets(this.assetLoadGeneration);
   }
 
   public renderFrame(): void {
@@ -220,6 +320,8 @@ export class Renderer {
   }
 
   public dispose(): void {
+    this.disposed = true;
+    this.assetLoadGeneration += 1;
     if (this.resizeHandler) {
       window.removeEventListener('resize', this.resizeHandler);
       this.resizeHandler = null;
@@ -230,6 +332,7 @@ export class Renderer {
       this.disposeObjectResources(this.scene);
       this.scene.clear();
     }
+    this.disposeLoadedCubeWorldAssets();
     this.renderer?.domElement.remove();
     this.renderer?.dispose();
     this.hudElement?.remove();
@@ -240,6 +343,8 @@ export class Renderer {
     this.hudElement = null;
     this.container = null;
     this.canvasHost = null;
+    this.fieldBoundsGroup = null;
+    this.assetFieldLayer = null;
     this.activePolyCubeGroup = null;
     this.settledBlocksGroup = null;
     this.glowGroup = null;
@@ -532,9 +637,9 @@ export class Renderer {
     const { width, height, depth } = this.gameState.getDimensions();
     const panelMaterial = new MeshBasicMaterial({
       map: this.createSnowWallTexture(),
-      color: 0xd9f2fb,
+      color: 0xaac7d7,
       transparent: true,
-      opacity: 0.52,
+      opacity: 0.28,
       depthWrite: false,
       side: DoubleSide
     });
@@ -544,7 +649,7 @@ export class Renderer {
       new MeshBasicMaterial({
         color: 0x123d66,
         transparent: true,
-        opacity: 0.26,
+        opacity: 0.16,
         depthWrite: false,
         side: DoubleSide
       })
@@ -589,6 +694,10 @@ export class Renderer {
     group.add(this.createFaceGrid('yz', depth, height, width, 0x4ca6ff));
     group.add(this.createFaceGrid('xz', width, depth, 0, 0x2a7cff));
     group.add(this.createFaceGrid('xz', width, depth, height, 0x62c4ff));
+    if (this.assetsReady) {
+      this.assetFieldLayer = this.createCubeWorldFieldLayer();
+      group.add(this.assetFieldLayer);
+    }
     return group;
   }
 
@@ -653,6 +762,322 @@ export class Renderer {
     return texture;
   }
 
+  private async loadCubeWorldAssets(generation: number): Promise<void> {
+    if (this.assetLoadPromise) {
+      return this.assetLoadPromise;
+    }
+
+    this.assetLoadPromise = this.loadCubeWorldAssetTemplates(generation);
+    return this.assetLoadPromise;
+  }
+
+  private async loadCubeWorldAssetTemplates(generation: number): Promise<void> {
+    const entries = Object.entries(CUBE_WORLD_ASSETS) as [
+      CubeWorldAssetKey,
+      CubeWorldAssetDefinition
+    ][];
+    const sourceTemplatePromises = new Map<string, Promise<Group>>();
+    const loadSourceTemplate = (path: string): Promise<Group> => {
+      const existing = sourceTemplatePromises.get(path);
+      if (existing) {
+        return existing;
+      }
+
+      const promise = this.gltfLoader.loadAsync(path).then((gltf) => gltf.scene);
+      sourceTemplatePromises.set(path, promise);
+      return promise;
+    };
+
+    const results = await Promise.allSettled(
+      entries.map(async ([key, definition]) => {
+        const source = await loadSourceTemplate(definition.path);
+        const template = source.clone(true) as Group;
+        this.prepareCubeWorldTemplate(template, definition);
+        return [key, template] as const;
+      })
+    );
+
+    if (this.disposed || generation !== this.assetLoadGeneration) {
+      results.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          this.disposeObjectResources(result.value[1]);
+        }
+      });
+      return;
+    }
+
+    const failures: string[] = [];
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        const [key, template] = result.value;
+        this.assetTemplates.set(key, template);
+        return;
+      }
+      failures.push(`${entries[index][0]}: ${String(result.reason)}`);
+    });
+
+    if (failures.length > 0) {
+      console.warn(`Cube World assets failed to load: ${failures.join('; ')}`);
+    }
+
+    this.assetsReady = this.assetTemplates.size > 0;
+    if (!this.assetsReady) {
+      return;
+    }
+
+    if (!this.scene || !this.fieldBoundsGroup) {
+      return;
+    }
+
+    this.rebuildCubeWorldFieldLayer();
+    this.updateSettledBlocks(this.gameState.getSettledBlocks());
+    this.updateActivePolyCube(this.gameState.getActivePolyCube());
+    this.renderFrame();
+  }
+
+  private prepareCubeWorldTemplate(root: Group, definition: CubeWorldAssetDefinition): void {
+    root.traverse((child) => {
+      if (!(child instanceof Mesh)) {
+        return;
+      }
+
+      child.castShadow = false;
+      child.receiveShadow = true;
+      const sourceMaterials = Array.isArray(child.material) ? child.material : [child.material];
+      const convertedMaterials = sourceMaterials.map((material) =>
+        this.createCubeWorldMaterial(material, definition)
+      );
+      child.material = Array.isArray(child.material) ? convertedMaterials : convertedMaterials[0];
+    });
+  }
+
+  private createCubeWorldMaterial(
+    sourceMaterial: Material,
+    definition: CubeWorldAssetDefinition
+  ): MeshBasicMaterial {
+    const source = sourceMaterial as Material & {
+      map?: Texture | null;
+      color?: { getHex: () => number };
+    };
+    const map = source.map ?? null;
+    if (map) {
+      map.colorSpace = SRGBColorSpace;
+      map.minFilter = LinearFilter;
+      map.magFilter = LinearFilter;
+    }
+
+    const opacity = definition.opacity ?? 1;
+    const material = new MeshBasicMaterial({
+      map,
+      color: definition.tint ?? source.color?.getHex() ?? 0xffffff,
+      transparent: opacity < 1,
+      opacity,
+      depthWrite: definition.depthWrite ?? opacity >= 1,
+      side: DoubleSide
+    });
+    return material;
+  }
+
+  private rebuildCubeWorldFieldLayer(): void {
+    if (!this.fieldBoundsGroup) {
+      return;
+    }
+
+    if (this.assetFieldLayer) {
+      this.fieldBoundsGroup.remove(this.assetFieldLayer);
+      this.disposeObjectResources(this.assetFieldLayer);
+    }
+
+    this.assetFieldLayer = this.createCubeWorldFieldLayer();
+    this.fieldBoundsGroup.add(this.assetFieldLayer);
+  }
+
+  private createCubeWorldFieldLayer(): Group {
+    const group = new Group();
+    group.name = 'cube-world-field-assets';
+    const { width, height, depth } = this.gameState.getDimensions();
+
+    for (let z = 0; z < depth; z += 1) {
+      for (let y = 0; y < height; y += 1) {
+        this.addCubeWorldAsset(group, 'wallIce', {
+          x: -0.5 * CELL_SIZE,
+          y: (y + 0.5) * CELL_SIZE,
+          z: (z + 0.5) * CELL_SIZE,
+          scale: CELL_SIZE * 0.5
+        });
+        this.addCubeWorldAsset(group, 'wallIce', {
+          x: (width + 0.5) * CELL_SIZE,
+          y: (y + 0.5) * CELL_SIZE,
+          z: (z + 0.5) * CELL_SIZE,
+          scale: CELL_SIZE * 0.5
+        });
+      }
+    }
+
+    for (let x = 0; x < width; x += 1) {
+      for (let y = 0; y < height; y += 1) {
+        this.addCubeWorldAsset(group, 'wallIce', {
+          x: (x + 0.5) * CELL_SIZE,
+          y: (y + 0.5) * CELL_SIZE,
+          z: (depth + 0.5) * CELL_SIZE,
+          scale: CELL_SIZE * 0.5
+        });
+      }
+    }
+
+    for (let x = 0; x < width; x += 1) {
+      for (let z = 0; z < depth; z += 1) {
+        this.addCubeWorldAsset(group, 'floorIce', {
+          x: (x + 0.5) * CELL_SIZE,
+          y: -0.5 * CELL_SIZE,
+          z: (z + 0.5) * CELL_SIZE,
+          scale: CELL_SIZE * 0.5
+        });
+      }
+    }
+
+    this.addCubeWorldPitRails(group, width, depth);
+    this.addCubeWorldSceneAccents(group, width, depth);
+    return group;
+  }
+
+  private addCubeWorldPitRails(group: Group, width: number, depth: number): void {
+    for (let x = 0; x < width; x += 1) {
+      this.addCubeWorldAsset(group, 'railStraight', {
+        x: (x + 0.5) * CELL_SIZE,
+        y: 0.08 * CELL_SIZE,
+        z: -0.62 * CELL_SIZE,
+        scale: CELL_SIZE * 0.48
+      });
+      this.addCubeWorldAsset(group, 'railStraight', {
+        x: (x + 0.5) * CELL_SIZE,
+        y: 0.08 * CELL_SIZE,
+        z: (depth + 0.62) * CELL_SIZE,
+        scale: CELL_SIZE * 0.48
+      });
+    }
+
+    for (let z = 0; z < depth; z += 1) {
+      this.addCubeWorldAsset(group, 'railStraight', {
+        x: -0.62 * CELL_SIZE,
+        y: 0.08 * CELL_SIZE,
+        z: (z + 0.5) * CELL_SIZE,
+        scale: CELL_SIZE * 0.48,
+        rotationY: Math.PI / 2
+      });
+      this.addCubeWorldAsset(group, 'railStraight', {
+        x: (width + 0.62) * CELL_SIZE,
+        y: 0.08 * CELL_SIZE,
+        z: (z + 0.5) * CELL_SIZE,
+        scale: CELL_SIZE * 0.48,
+        rotationY: Math.PI / 2
+      });
+    }
+
+    const cornerPlacements: readonly AssetPlacement[] = [
+      { x: -0.62, y: 0.08, z: -0.62, scale: 0.48, rotationY: 0 },
+      { x: width + 0.62, y: 0.08, z: -0.62, scale: 0.48, rotationY: -Math.PI / 2 },
+      { x: -0.62, y: 0.08, z: depth + 0.62, scale: 0.48, rotationY: Math.PI / 2 },
+      { x: width + 0.62, y: 0.08, z: depth + 0.62, scale: 0.48, rotationY: Math.PI }
+    ];
+    cornerPlacements.forEach((placement) => {
+      this.addCubeWorldAsset(group, 'railCorner', {
+        x: placement.x * CELL_SIZE,
+        y: placement.y * CELL_SIZE,
+        z: placement.z * CELL_SIZE,
+        scale: (placement.scale ?? 0.48) * CELL_SIZE,
+        rotationY: placement.rotationY
+      });
+    });
+  }
+
+  private addCubeWorldSceneAccents(group: Group, width: number, depth: number): void {
+    this.addCubeWorldAsset(group, 'crystalSmall', {
+      x: -1.35 * CELL_SIZE,
+      y: 0,
+      z: -1.12 * CELL_SIZE,
+      scale: CELL_SIZE * 0.17,
+      rotationY: Math.PI * 0.12
+    });
+    this.addCubeWorldAsset(group, 'crystalSmall', {
+      x: (width + 1.25) * CELL_SIZE,
+      y: 0,
+      z: -1.1 * CELL_SIZE,
+      scale: CELL_SIZE * 0.14,
+      rotationY: -Math.PI * 0.16
+    });
+    this.addCubeWorldAsset(group, 'button', {
+      x: (width + 1.02) * CELL_SIZE,
+      y: 0.06 * CELL_SIZE,
+      z: (Math.min(2, depth - 1) + 0.2) * CELL_SIZE,
+      scale: CELL_SIZE * 0.18,
+      rotationY: -Math.PI * 0.25
+    });
+    this.addCubeWorldAsset(group, 'leverLeft', {
+      x: -1.04 * CELL_SIZE,
+      y: 0.08 * CELL_SIZE,
+      z: (Math.min(2, depth - 1) + 0.18) * CELL_SIZE,
+      scale: CELL_SIZE * 0.16,
+      rotationY: Math.PI * 0.22
+    });
+    this.addCubeWorldAsset(group, 'leverRight', {
+      x: (width + 1.18) * CELL_SIZE,
+      y: 0.08 * CELL_SIZE,
+      z: (Math.min(4, depth - 1) + 0.18) * CELL_SIZE,
+      scale: CELL_SIZE * 0.16,
+      rotationY: -Math.PI * 0.28
+    });
+  }
+
+  private addCubeWorldAsset(
+    group: Group,
+    key: CubeWorldAssetKey,
+    placement: AssetPlacement
+  ): void {
+    const asset = this.createCubeWorldAssetInstance(key, { preserveResources: true });
+    if (!asset) {
+      return;
+    }
+
+    asset.position.set(placement.x, placement.y, placement.z);
+    asset.rotation.set(
+      placement.rotationX ?? 0,
+      placement.rotationY ?? 0,
+      placement.rotationZ ?? 0
+    );
+    asset.scale.setScalar(placement.scale ?? CELL_SIZE * 0.5);
+    asset.traverse((child) => {
+      if (child instanceof Mesh) {
+        child.renderOrder = 4;
+      }
+    });
+    group.add(asset);
+  }
+
+  private createCubeWorldAssetInstance(
+    key: CubeWorldAssetKey,
+    options: { preserveResources?: boolean; preserveGeometry?: boolean } = {}
+  ): Group | null {
+    const template = this.assetTemplates.get(key);
+    if (!template) {
+      return null;
+    }
+
+    const instance = template.clone(true) as Group;
+    instance.traverse((child) => {
+      if (!(child instanceof Mesh) && !(child instanceof LineSegments) && !(child instanceof Points)) {
+        return;
+      }
+      if (options.preserveResources) {
+        child.userData.preserveResources = true;
+      }
+      if (options.preserveGeometry) {
+        child.userData.preserveGeometry = true;
+      }
+    });
+    return instance;
+  }
+
   private createLighting(): Group {
     const group = new Group();
     group.add(new AmbientLight(0xbadfff, 0.72));
@@ -712,39 +1137,60 @@ export class Renderer {
     const cube = new Group();
     const isBehindSeparator = depthLayer > 0;
     const blockColor = isBehindSeparator ? mixColorNumber(color, 0x7fdcff, 0.08) : color;
+    const assetCore = this.createBlockAssetCore(blockColor, isActive);
 
-    if (!isActive) {
-      const solid = new Mesh(
-        new BoxGeometry(CELL_SIZE * 0.9, CELL_SIZE * 0.9, CELL_SIZE * 0.9),
+    if (assetCore) {
+      cube.add(assetCore);
+    } else {
+      const fallbackCore = new Mesh(
+        new BoxGeometry(CELL_SIZE * 0.84, CELL_SIZE * 0.84, CELL_SIZE * 0.84),
         new MeshBasicMaterial({
-          color: blockColor
+          color: mixColorNumber(blockColor, 0xffffff, isActive ? 0.24 : 0.12),
+          transparent: true,
+          opacity: isActive ? 0.13 : 0.09,
+          depthWrite: false,
+          side: DoubleSide
         })
       );
-      solid.renderOrder = 20;
-      cube.add(solid);
+      fallbackCore.renderOrder = isActive ? 36 : 18;
+      cube.add(fallbackCore);
+    }
 
-      const darkEdges = new LineSegments(
+    if (!isActive) {
+      const shadowEdges = new LineSegments(
         new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.94, CELL_SIZE * 0.94, CELL_SIZE * 0.94)),
         new LineBasicMaterial({
-          color: mixColorNumber(blockColor, 0x000000, 0.76),
+          color: mixColorNumber(blockColor, 0x001a34, 0.58),
           transparent: true,
-          opacity: 0.92,
+          opacity: 0.52,
           depthWrite: false
         })
       );
-      darkEdges.renderOrder = 35;
-      cube.add(darkEdges);
+      shadowEdges.renderOrder = 34;
+      cube.add(shadowEdges);
+
+      const outerEdges = new LineSegments(
+        new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.96, CELL_SIZE * 0.96, CELL_SIZE * 0.96)),
+        new LineBasicMaterial({
+          color: mixColorNumber(blockColor, 0xffffff, 0.3),
+          transparent: true,
+          opacity: 0.98,
+          depthWrite: false
+        })
+      );
+      outerEdges.renderOrder = 36;
+      cube.add(outerEdges);
 
       const highlightEdges = new LineSegments(
         new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.82, CELL_SIZE * 0.82, CELL_SIZE * 0.82)),
         new LineBasicMaterial({
-          color: mixColorNumber(blockColor, 0xffffff, 0.3),
+          color: mixColorNumber(blockColor, 0xffffff, 0.62),
           transparent: true,
-          opacity: 0.28,
+          opacity: 0.3,
           depthWrite: false
         })
       );
-      highlightEdges.renderOrder = 34;
+      highlightEdges.renderOrder = 35;
       cube.add(highlightEdges);
       return cube;
     }
@@ -783,6 +1229,31 @@ export class Renderer {
     }
 
     return cube;
+  }
+
+  private createBlockAssetCore(color: number, isActive: boolean): Group | null {
+    const core = this.createCubeWorldAssetInstance('blockCore', { preserveGeometry: true });
+    if (!core) {
+      return null;
+    }
+
+    const material = new MeshBasicMaterial({
+      color: mixColorNumber(color, isActive ? 0xffffff : 0xbff4ff, isActive ? 0.3 : 0.16),
+      transparent: true,
+      opacity: isActive ? 0.14 : 0.1,
+      depthWrite: false,
+      side: DoubleSide
+    });
+    core.scale.setScalar(CELL_SIZE * (isActive ? 0.44 : 0.42));
+    core.traverse((child) => {
+      if (!(child instanceof Mesh)) {
+        return;
+      }
+      child.material = material;
+      child.renderOrder = isActive ? 36 : 18;
+      child.userData.preserveGeometry = true;
+    });
+    return core;
   }
 
   private createSeparatorContactMarker(
@@ -1390,7 +1861,9 @@ export class Renderer {
 
     root.traverse((child) => {
       if (child instanceof Mesh || child instanceof LineSegments || child instanceof Points) {
-        geometries.add(child.geometry);
+        if (!child.userData.preserveResources && !child.userData.preserveGeometry) {
+          geometries.add(child.geometry);
+        }
       }
 
       if (
@@ -1399,6 +1872,10 @@ export class Renderer {
         !(child instanceof Points) &&
         !(child instanceof Sprite)
       ) {
+        return;
+      }
+
+      if (child.userData.preserveResources || child.userData.preserveMaterial) {
         return;
       }
 
@@ -1415,6 +1892,15 @@ export class Renderer {
     geometries.forEach((geometry) => geometry.dispose());
     textures.forEach((texture) => texture.dispose());
     materials.forEach((material) => material.dispose());
+  }
+
+  private disposeLoadedCubeWorldAssets(): void {
+    this.assetTemplates.forEach((template) => {
+      this.disposeObjectResources(template);
+    });
+    this.assetTemplates.clear();
+    this.assetLoadPromise = null;
+    this.assetsReady = false;
   }
 
   private renderPreview(container: Element | null, type: number | null): void {
