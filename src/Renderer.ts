@@ -97,13 +97,7 @@ type HudIconName =
 type CubeWorldAssetKey =
   | 'wallIce'
   | 'blockCore'
-  | 'settledIceBlock'
-  | 'railStraight'
-  | 'railCorner'
-  | 'button'
-  | 'leverLeft'
-  | 'leverRight'
-  | 'crystalSmall';
+  | 'settledIceBlock';
 
 type CubeWorldAssetDefinition = {
   readonly path: string;
@@ -138,6 +132,9 @@ const CAMERA_SETTINGS = {
 } as const;
 
 const CUBE_WORLD_ASSET_ROOT = '/assets/Cube%20World%20-%20Aug%202023';
+const SETTLED_BLOCK_ASSET_SCALE = CELL_SIZE * 0.5;
+const SETTLED_BLOCK_FALLBACK_CORE_SIZE = CELL_SIZE;
+const DEFAULT_BLOCK_FALLBACK_CORE_SIZE = CELL_SIZE * 0.84;
 const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, CubeWorldAssetDefinition> = Object.freeze({
   wallIce: {
     path: `${CUBE_WORLD_ASSET_ROOT}/Pixel%20Blocks/glTF/Ice.gltf`,
@@ -154,42 +151,6 @@ const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, CubeWorldAssetDefinition> = O
   settledIceBlock: {
     path: `${CUBE_WORLD_ASSET_ROOT}/Blocks/glTF/Block_Ice.gltf`,
     opacity: 0.96,
-    depthWrite: true
-  },
-  railStraight: {
-    path: `${CUBE_WORLD_ASSET_ROOT}/Environment/glTF/Rail_Straight.gltf`,
-    tint: 0xbbeaff,
-    opacity: 0.95,
-    depthWrite: true
-  },
-  railCorner: {
-    path: `${CUBE_WORLD_ASSET_ROOT}/Environment/glTF/Rail_Corner.gltf`,
-    tint: 0xbbeaff,
-    opacity: 0.95,
-    depthWrite: true
-  },
-  button: {
-    path: `${CUBE_WORLD_ASSET_ROOT}/Environment/glTF/Button.gltf`,
-    tint: 0xd5f5ff,
-    opacity: 0.98,
-    depthWrite: true
-  },
-  leverLeft: {
-    path: `${CUBE_WORLD_ASSET_ROOT}/Environment/glTF/Lever_Left.gltf`,
-    tint: 0xd8f1ff,
-    opacity: 0.98,
-    depthWrite: true
-  },
-  leverRight: {
-    path: `${CUBE_WORLD_ASSET_ROOT}/Environment/glTF/Lever_Right.gltf`,
-    tint: 0xd8f1ff,
-    opacity: 0.98,
-    depthWrite: true
-  },
-  crystalSmall: {
-    path: `${CUBE_WORLD_ASSET_ROOT}/Environment/glTF/Crystal_Small.gltf`,
-    tint: 0x9df4ff,
-    opacity: 0.9,
     depthWrite: true
   }
 });
@@ -259,8 +220,8 @@ export class Renderer {
       phase: 'running',
       clearedLayerCount: 0,
       score: 0,
-      level: 1,
-      dropIntervalMs: 3000,
+      level: this.gameState.getLevel(),
+      dropIntervalMs: this.gameState.getDropIntervalMs(),
       elapsedMs: 0,
       isPaused: false,
       settingsOpen: false
@@ -306,7 +267,7 @@ export class Renderer {
     const fieldBounds = this.createFieldBounds();
     this.fieldBoundsGroup = fieldBounds;
     scene.add(fieldBounds);
-    scene.add(this.createFloorHalo());
+    scene.add(this.createDepthLandingGlow());
 
     this.scene = scene;
     this.camera = camera;
@@ -318,7 +279,17 @@ export class Renderer {
 
     this.updateActivePolyCube(this.gameState.getActivePolyCube());
     this.updateSettledBlocks(this.gameState.getSettledBlocks());
-    this.updateHud([], 'running', 0, 0, 1, 3000, 0, false, false);
+    this.updateHud(
+      [],
+      'running',
+      0,
+      0,
+      this.gameState.getLevel(),
+      this.gameState.getDropIntervalMs(),
+      0,
+      false,
+      false
+    );
     this.renderFrame();
     void this.loadCubeWorldAssets(this.assetLoadGeneration);
   }
@@ -569,7 +540,7 @@ export class Renderer {
           <section class="panel controls-panel">
             <h3>${icon('snowflake')}<span>CONTROLS</span></h3>
             <div class="control-grid">
-              <div class="control-row"><span class="keys"><b>←</b><b>→</b><b>↑</b><b>↓</b></span><span>Move On Pit Floor</span></div>
+              <div class="control-row"><span class="keys"><b>←</b><b>→</b><b>↑</b><b>↓</b></span><span>Move Across Pit Face</span></div>
               <div class="control-row"><span class="keys"><b>7</b><b>9</b><b>1</b><b>3</b></span><span>Diagonal Move</span></div>
               <div class="control-row"><span class="keys"><b>Q</b><b>A</b></span><span>Rotate X Axis</span></div>
               <div class="control-row"><span class="keys"><b>W</b><b>S</b></span><span>Rotate Y Axis</span></div>
@@ -690,7 +661,9 @@ export class Renderer {
     group.position.set(origin.x, origin.y, origin.z);
 
     const { width, height, depth } = this.gameState.getDimensions();
-    const panelMaterial = new MeshBasicMaterial({
+    // Spatial contract: x/y is the camera-facing pit face; +z is the fall direction.
+    // Do not use y=0 as a floor. The landing ground is the far depth plane at z=depth.
+    const sideWallMaterial = new MeshBasicMaterial({
       map: this.createSnowWallTexture(),
       color: 0xaac7d7,
       transparent: true,
@@ -698,23 +671,18 @@ export class Renderer {
       depthWrite: false,
       side: DoubleSide
     });
-
-    const floor = new Mesh(
-      new PlaneGeometry(width * CELL_SIZE, depth * CELL_SIZE),
-      new MeshBasicMaterial({
-        color: 0x123d66,
-        transparent: true,
-        opacity: 0.16,
-        depthWrite: false,
-        side: DoubleSide
-      })
-    );
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.set((width * CELL_SIZE) / 2, 0, (depth * CELL_SIZE) / 2);
+    const depthLandingMaterial = new MeshBasicMaterial({
+      map: this.createSnowWallTexture(),
+      color: 0x8fb9d2,
+      transparent: true,
+      opacity: 0.36,
+      depthWrite: false,
+      side: DoubleSide
+    });
 
     const leftWall = new Mesh(
       new PlaneGeometry(depth * CELL_SIZE, height * CELL_SIZE),
-      panelMaterial
+      sideWallMaterial
     );
     leftWall.position.set(0, (height * CELL_SIZE) / 2, (depth * CELL_SIZE) / 2);
     leftWall.rotation.y = Math.PI / 2;
@@ -723,12 +691,12 @@ export class Renderer {
     rightWall.position.set(width * CELL_SIZE, (height * CELL_SIZE) / 2, (depth * CELL_SIZE) / 2);
     rightWall.rotation.y = -Math.PI / 2;
 
-    const backWall = new Mesh(
+    const depthLanding = new Mesh(
       new PlaneGeometry(width * CELL_SIZE, height * CELL_SIZE),
-      panelMaterial
+      depthLandingMaterial
     );
-    backWall.position.set((width * CELL_SIZE) / 2, (height * CELL_SIZE) / 2, depth * CELL_SIZE);
-    backWall.rotation.y = Math.PI;
+    depthLanding.position.set((width * CELL_SIZE) / 2, (height * CELL_SIZE) / 2, depth * CELL_SIZE);
+    depthLanding.rotation.y = Math.PI;
 
     const boundsGeometry = new BoxGeometry(width * CELL_SIZE, height * CELL_SIZE, depth * CELL_SIZE);
     boundsGeometry.translate(
@@ -741,14 +709,12 @@ export class Renderer {
       new LineBasicMaterial({ color: 0x67d7ff, transparent: true, opacity: 0.68 })
     );
 
-    group.add(floor, leftWall, rightWall, backWall, bounds);
+    group.add(leftWall, rightWall, depthLanding, bounds);
     group.add(this.createFieldFrameGlow(width, height, depth));
     group.add(this.createFaceGrid('xy', width, height, 0, 0x58c9ff));
     group.add(this.createFaceGrid('xy', width, height, depth, 0x62c4ff));
     group.add(this.createFaceGrid('yz', depth, height, 0, 0x4ca6ff));
     group.add(this.createFaceGrid('yz', depth, height, width, 0x4ca6ff));
-    group.add(this.createFaceGrid('xz', width, depth, 0, 0x2a7cff));
-    group.add(this.createFaceGrid('xz', width, depth, height, 0x62c4ff));
     if (this.assetsReady) {
       this.assetFieldLayer = this.createCubeWorldFieldLayer();
       group.add(this.assetFieldLayer);
@@ -953,9 +919,6 @@ export class Renderer {
     const { width, height, depth } = this.gameState.getDimensions();
 
     this.addCubeWorldIceWell(group, width, height, depth);
-
-    this.addCubeWorldPitRails(group, width, depth);
-    this.addCubeWorldSceneAccents(group, width, depth);
     return group;
   }
 
@@ -1008,94 +971,6 @@ export class Renderer {
         }
       }
     }
-  }
-
-  private addCubeWorldPitRails(group: Group, width: number, depth: number): void {
-    for (let x = 0; x < width; x += 1) {
-      this.addCubeWorldAsset(group, 'railStraight', {
-        x: (x + 0.5) * CELL_SIZE,
-        y: 0.08 * CELL_SIZE,
-        z: -0.62 * CELL_SIZE,
-        scale: CELL_SIZE * 0.48
-      });
-      this.addCubeWorldAsset(group, 'railStraight', {
-        x: (x + 0.5) * CELL_SIZE,
-        y: 0.08 * CELL_SIZE,
-        z: (depth + 0.62) * CELL_SIZE,
-        scale: CELL_SIZE * 0.48
-      });
-    }
-
-    for (let z = 0; z < depth; z += 1) {
-      this.addCubeWorldAsset(group, 'railStraight', {
-        x: -0.62 * CELL_SIZE,
-        y: 0.08 * CELL_SIZE,
-        z: (z + 0.5) * CELL_SIZE,
-        scale: CELL_SIZE * 0.48,
-        rotationY: Math.PI / 2
-      });
-      this.addCubeWorldAsset(group, 'railStraight', {
-        x: (width + 0.62) * CELL_SIZE,
-        y: 0.08 * CELL_SIZE,
-        z: (z + 0.5) * CELL_SIZE,
-        scale: CELL_SIZE * 0.48,
-        rotationY: Math.PI / 2
-      });
-    }
-
-    const cornerPlacements: readonly AssetPlacement[] = [
-      { x: -0.62, y: 0.08, z: -0.62, scale: 0.48, rotationY: 0 },
-      { x: width + 0.62, y: 0.08, z: -0.62, scale: 0.48, rotationY: -Math.PI / 2 },
-      { x: -0.62, y: 0.08, z: depth + 0.62, scale: 0.48, rotationY: Math.PI / 2 },
-      { x: width + 0.62, y: 0.08, z: depth + 0.62, scale: 0.48, rotationY: Math.PI }
-    ];
-    cornerPlacements.forEach((placement) => {
-      this.addCubeWorldAsset(group, 'railCorner', {
-        x: placement.x * CELL_SIZE,
-        y: placement.y * CELL_SIZE,
-        z: placement.z * CELL_SIZE,
-        scale: (placement.scale ?? 0.48) * CELL_SIZE,
-        rotationY: placement.rotationY
-      });
-    });
-  }
-
-  private addCubeWorldSceneAccents(group: Group, width: number, depth: number): void {
-    this.addCubeWorldAsset(group, 'crystalSmall', {
-      x: -1.35 * CELL_SIZE,
-      y: 0,
-      z: -1.12 * CELL_SIZE,
-      scale: CELL_SIZE * 0.17,
-      rotationY: Math.PI * 0.12
-    });
-    this.addCubeWorldAsset(group, 'crystalSmall', {
-      x: (width + 1.25) * CELL_SIZE,
-      y: 0,
-      z: -1.1 * CELL_SIZE,
-      scale: CELL_SIZE * 0.14,
-      rotationY: -Math.PI * 0.16
-    });
-    this.addCubeWorldAsset(group, 'button', {
-      x: (width + 1.02) * CELL_SIZE,
-      y: 0.06 * CELL_SIZE,
-      z: (Math.min(2, depth - 1) + 0.2) * CELL_SIZE,
-      scale: CELL_SIZE * 0.18,
-      rotationY: -Math.PI * 0.25
-    });
-    this.addCubeWorldAsset(group, 'leverLeft', {
-      x: -1.04 * CELL_SIZE,
-      y: 0.08 * CELL_SIZE,
-      z: (Math.min(2, depth - 1) + 0.18) * CELL_SIZE,
-      scale: CELL_SIZE * 0.16,
-      rotationY: Math.PI * 0.22
-    });
-    this.addCubeWorldAsset(group, 'leverRight', {
-      x: (width + 1.18) * CELL_SIZE,
-      y: 0.08 * CELL_SIZE,
-      z: (Math.min(4, depth - 1) + 0.18) * CELL_SIZE,
-      scale: CELL_SIZE * 0.16,
-      rotationY: -Math.PI * 0.28
-    });
   }
 
   private addCubeWorldAsset(
@@ -1166,27 +1041,29 @@ export class Renderer {
     return group;
   }
 
-  private createFloorHalo(): Group {
+  private createDepthLandingGlow(): Group {
     const group = new Group();
-    const { width, depth } = this.gameState.getDimensions();
+    const { width, height, depth } = this.gameState.getDimensions();
     const origin = this.getFieldOrigin();
     const centerX = origin.x + (width * CELL_SIZE) / 2;
-    const centerZ = origin.z + (depth * CELL_SIZE) / 2;
-    const fieldSpan = Math.max(width, depth);
+    const centerY = (height * CELL_SIZE) / 2;
+    const landingZ = origin.z + depth * CELL_SIZE - 0.018;
+    const fieldSpan = Math.max(width, height);
 
     for (let i = 0; i < 6; i += 1) {
-      const innerRadius = fieldSpan * 0.9 + i * 1.8;
-      const outerRadius = innerRadius + 0.12;
+      const innerRadius = fieldSpan * 0.42 + i * 0.35;
+      const outerRadius = innerRadius + 0.055;
       const ring = new Mesh(
         new RingGeometry(innerRadius, outerRadius, 96),
         new MeshBasicMaterial({
           color: i % 2 === 0 ? 0x18d6ff : 0x7da7ff,
           transparent: true,
-          opacity: i === 0 ? 0.34 : 0.11
+          opacity: i === 0 ? 0.22 : 0.075,
+          depthWrite: false,
+          side: DoubleSide
         })
       );
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.set(centerX, -0.04 - i * 0.003, centerZ);
+      ring.position.set(centerX, centerY, landingZ - i * 0.002);
       group.add(ring);
     }
 
@@ -1219,13 +1096,16 @@ export class Renderer {
     if (assetCore) {
       cube.add(assetCore);
     } else {
+      const fallbackCoreSize = settledAssetKey
+        ? SETTLED_BLOCK_FALLBACK_CORE_SIZE
+        : DEFAULT_BLOCK_FALLBACK_CORE_SIZE;
       const fallbackCore = new Mesh(
-        new BoxGeometry(CELL_SIZE * 0.84, CELL_SIZE * 0.84, CELL_SIZE * 0.84),
+        new BoxGeometry(fallbackCoreSize, fallbackCoreSize, fallbackCoreSize),
         new MeshBasicMaterial({
           color: mixColorNumber(surfaceColor, 0xffffff, isActive ? 0.24 : 0.12),
           transparent: true,
-          opacity: isActive ? 0.035 : 0.88,
-          depthWrite: false,
+          opacity: isActive ? 0.035 : settledAssetKey ? 0.96 : 0.88,
+          depthWrite: Boolean(settledAssetKey),
           side: DoubleSide
         })
       );
@@ -1407,7 +1287,7 @@ export class Renderer {
       return null;
     }
 
-    core.scale.setScalar(CELL_SIZE * 0.42);
+    core.scale.setScalar(SETTLED_BLOCK_ASSET_SCALE);
     core.traverse((child) => {
       if (!(child instanceof Mesh)) {
         return;
@@ -1575,19 +1455,19 @@ export class Renderer {
       )
     );
 
-    const baseGeometry = new BufferGeometry().setFromPoints([
-      new Vector3(0, 0, 0),
-      new Vector3(width * CELL_SIZE, 0, 0),
-      new Vector3(width * CELL_SIZE, 0, 0),
+    const depthLandingGeometry = new BufferGeometry().setFromPoints([
+      new Vector3(0, 0, depth * CELL_SIZE),
       new Vector3(width * CELL_SIZE, 0, depth * CELL_SIZE),
       new Vector3(width * CELL_SIZE, 0, depth * CELL_SIZE),
-      new Vector3(0, 0, depth * CELL_SIZE),
-      new Vector3(0, 0, depth * CELL_SIZE),
-      new Vector3(0, 0, 0)
+      new Vector3(width * CELL_SIZE, height * CELL_SIZE, depth * CELL_SIZE),
+      new Vector3(width * CELL_SIZE, height * CELL_SIZE, depth * CELL_SIZE),
+      new Vector3(0, height * CELL_SIZE, depth * CELL_SIZE),
+      new Vector3(0, height * CELL_SIZE, depth * CELL_SIZE),
+      new Vector3(0, 0, depth * CELL_SIZE)
     ]);
     group.add(
       new LineSegments(
-        baseGeometry,
+        depthLandingGeometry,
         new LineBasicMaterial({
           color: 0x28e8ff,
           transparent: true,

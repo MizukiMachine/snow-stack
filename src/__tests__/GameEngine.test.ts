@@ -30,7 +30,7 @@ describe('GameEngine BlockOut controls', () => {
     vi.restoreAllMocks();
   });
 
-  it('moves the polycube on the pit floor with arrow keys', () => {
+  it('moves the polycube across the camera-facing pit plane with arrow keys', () => {
     const { state } = startEngineWithPiece(0);
 
     pressKey('ArrowRight');

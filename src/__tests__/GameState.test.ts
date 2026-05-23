@@ -8,7 +8,7 @@ describe('GameState BlockOut rules', () => {
     expect(state.getDimensions()).toEqual({ width: 5, height: 5, depth: 10 });
     expect(state.getBlockSet()).toBe('flat');
     expect(state.getLevel()).toBe(0);
-    expect(state.getDropIntervalMs()).toBe(5510);
+    expect(state.getDropIntervalMs()).toBe(1837);
   });
 
   it('clamps setup options to BlockOut limits', () => {

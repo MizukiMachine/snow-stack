@@ -25,8 +25,8 @@ npm run dev
 
 ## 操作
 
-- `ArrowLeft` / `ArrowRight`: 左右に移動
-- `ArrowUp` / `ArrowDown`: 奥 / 手前に移動
+- `ArrowLeft` / `ArrowRight`: 入口面を左右に移動
+- `ArrowUp` / `ArrowDown`: 入口面を上下に移動
 - `7` / `9` / `1` / `3`: 斜め移動
 - `Q` / `A`: X 軸回転
 - `W` / `S`: Y 軸回転
@@ -40,6 +40,7 @@ npm run dev
 
 ## 現状の仕様メモ
 
+- 座標系は `x/y` がカメラ正面の入口面、`z` が井戸の奥行きです。カメラ手前の `z=0` 側が空・入口、奥の `z=depth` 側が地面・着地点です。
 - 消去判定は `Z` プレーン単位です。
 - 回転時は BlockOut II の回転中心に近い補正を行います。
 - スコアとレベルは `/home/mizuki2/dev/BlockOut` の係数を移植しています。

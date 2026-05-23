@@ -63,8 +63,9 @@ export interface ScoreStatistics {
 }
 
 /**
- * BlockOut-style rules model. The pit is indexed as x/y on the visible plane and
- * z as depth; pieces fall toward increasing z and full x/y planes are removed.
+ * BlockOut-style rules model. The pit is indexed as x/y on the camera-facing
+ * entry plane and z as depth. Camera-near z=0 is the sky/entry side; pieces fall
+ * toward increasing z, where the far z side is the landing ground.
  */
 export class GameState {
   private dimensions: FieldDimensions;
@@ -619,7 +620,9 @@ interface ActivePolyCube {
 }
 
 const DEPTH_DROP_VECTOR: FieldCoordinate = { x: 0, y: 0, z: 1 };
-const TIME_BASE_MS = 5510;
+const BLOCKOUT_TIME_BASE_MS = 5510;
+const DROP_SPEED_MULTIPLIER = 3;
+const TIME_BASE_MS = Math.round(BLOCKOUT_TIME_BASE_MS / DROP_SPEED_MULTIPLIER);
 const TIME_LEVEL_FACTOR = 0.64;
 const MAX_START_LEVEL = MAX_LEVEL - 1;
 

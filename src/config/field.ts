@@ -23,23 +23,24 @@ const HALF_WIDTH = (FIELD_DIMENSIONS.width * CELL_SIZE) / 2;
 const HALF_DEPTH = (FIELD_DIMENSIONS.depth * CELL_SIZE) / 2;
 
 /**
- * Shared description of the right-handed coordinate system used across the engine.
+ * Shared description of the BlockOut pit coordinate system. Semantic up/down
+ * follows the fall axis, not the Three.js screen-vertical y axis.
  *
  * - +X: right, -X: left
- * - +Y: back, -Y: front
- * - +Z: deeper into the pit, -Z: toward the player
+ * - +Y: higher on the camera-facing pit face, -Y: lower on that face
+ * - +Z: deeper into the pit toward the landing ground, -Z: sky/entry toward the camera
  */
 export const COORDINATE_SYSTEM: CoordinateSystemDescription = Object.freeze({
   up: 'z-',
   down: 'z+',
   left: 'x-',
   right: 'x+',
-  forward: 'y-',
-  backward: 'y+',
+  forward: 'z-',
+  backward: 'z+',
 });
 
 /**
- * The minimum world-space corner (left, bottom, front) of the field's bounding box.
+ * The minimum world-space corner (left, low-y, sky-side) of the field's bounding box.
  */
 export const FIELD_MIN_CORNER: WorldVector3 = Object.freeze({
   x: -HALF_WIDTH,
@@ -48,7 +49,7 @@ export const FIELD_MIN_CORNER: WorldVector3 = Object.freeze({
 });
 
 /**
- * The maximum world-space corner (right, top, back) of the field's bounding box.
+ * The maximum world-space corner (right, high-y, landing-ground side) of the field's bounding box.
  */
 export const FIELD_MAX_CORNER: WorldVector3 = Object.freeze({
   x: HALF_WIDTH,
@@ -66,7 +67,7 @@ export const GRID_ORIGIN: WorldVector3 = Object.freeze({
 });
 
 /**
- * Converts grid-space coordinates (indexed from the front-left-bottom corner) to world-space.
+ * Converts grid-space coordinates (indexed from the sky-side left low-y corner) to world-space.
  */
 export function gridToWorld(grid: GridVector3): WorldVector3 {
   return {
