@@ -6,3 +6,23 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 docs/
+
+# Keep the committed Cube World GLTF files that the renderer uses, but ignore
+# the rest of the extracted asset pack if it is present locally.
+public/assets/Cube World - Aug 2023/**
+!public/assets/Cube World - Aug 2023/
+!public/assets/Cube World - Aug 2023/Blocks/
+!public/assets/Cube World - Aug 2023/Blocks/glTF/
+!public/assets/Cube World - Aug 2023/Blocks/glTF/Block_Blank.gltf
+!public/assets/Cube World - Aug 2023/Blocks/glTF/Block_Ice.gltf
+!public/assets/Cube World - Aug 2023/Environment/
+!public/assets/Cube World - Aug 2023/Environment/glTF/
+!public/assets/Cube World - Aug 2023/Environment/glTF/Button.gltf
+!public/assets/Cube World - Aug 2023/Environment/glTF/Crystal_Small.gltf
+!public/assets/Cube World - Aug 2023/Environment/glTF/Lever_Left.gltf
+!public/assets/Cube World - Aug 2023/Environment/glTF/Lever_Right.gltf
+!public/assets/Cube World - Aug 2023/Environment/glTF/Rail_Corner.gltf
+!public/assets/Cube World - Aug 2023/Environment/glTF/Rail_Straight.gltf
+!public/assets/Cube World - Aug 2023/Pixel Blocks/
+!public/assets/Cube World - Aug 2023/Pixel Blocks/glTF/
+!public/assets/Cube World - Aug 2023/Pixel Blocks/glTF/Ice.gltf

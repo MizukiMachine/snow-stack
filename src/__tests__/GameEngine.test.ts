@@ -99,10 +99,10 @@ describe('GameEngine BlockOut controls', () => {
     expect(state.getSettledBlocks()).toHaveLength(0);
     expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 11 }]);
 
-    advanceGame(engine, 1_159);
+    advanceGame(engine, 1_209);
     expect(state.getSettledBlocks()).toHaveLength(0);
 
-    advanceGame(engine, 1_160);
+    advanceGame(engine, 1_210);
     expect(state.getSettledBlocks()).toHaveLength(1);
     expect(state.getSettledBlocks()[0].coordinate.z).toBe(11);
     expect(state.getActivePolyCube()).not.toBeNull();
@@ -118,7 +118,7 @@ describe('GameEngine BlockOut controls', () => {
     pressKey('Space', { repeat: true });
 
     expect(state.getSettledBlocks()).toHaveLength(0);
-    advanceGame(engine, 1_160);
+    advanceGame(engine, 1_210);
     expect(state.getSettledBlocks()).toHaveLength(1);
   });
 

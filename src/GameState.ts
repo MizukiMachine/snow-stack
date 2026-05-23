@@ -125,11 +125,13 @@ export class GameState {
   }
 
   public configure(options: GameStateOptions): void {
+    const nextSeed =
+      options.randomSeed ?? (this.fixedRandomSeed ? this.randomSeed : createRandomSeed());
     const setup = normalizeSetup({
       dimensions: options.dimensions ?? this.dimensions,
       blockSet: options.blockSet ?? this.blockSet,
       startLevel: options.startLevel ?? this.startLevel,
-      randomSeed: options.randomSeed ?? this.randomSeed
+      randomSeed: nextSeed
     });
     this.dimensions = setup.dimensions;
     this.blockSet = setup.blockSet;

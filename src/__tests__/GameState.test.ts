@@ -63,6 +63,16 @@ describe('GameState BlockOut rules', () => {
     expect(state.getUpcomingQueue(8)).toEqual(queue);
   });
 
+  it('generates a fresh bag seed when unseeded setup changes start a new run', () => {
+    const state = new GameState();
+    const originalSeed = state.getSetup().randomSeed;
+
+    state.configure({ startLevel: 3 });
+
+    expect(state.getSetup().randomSeed).not.toBe(originalSeed);
+    expect(state.getLevel()).toBe(3);
+  });
+
   it('deals each eligible polycube once before refilling the random bag', () => {
     const state = new GameState();
 

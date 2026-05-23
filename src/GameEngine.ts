@@ -468,7 +468,9 @@ const MOVEMENT_OFFSETS: Record<string, FieldCoordinate> = {
 };
 
 const ONE_SHOT_CODES = new Set(['Space', 'KeyP', 'Escape', 'KeyR']);
-const HARD_DROP_LOCK_DELAY_MS = 160;
+const HARD_DROP_ANIMATION_MS = 160;
+const HARD_DROP_SETTLE_MS = 50;
+const HARD_DROP_LOCK_DELAY_MS = HARD_DROP_ANIMATION_MS + HARD_DROP_SETTLE_MS;
 const NATURAL_LOCK_DELAY_MS = 50;
 const INPUT_REPEAT_INTERVAL_MS = 80;
 
