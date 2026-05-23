@@ -84,7 +84,7 @@ button {
 
 .scene-layer {
   position: absolute;
-  inset: 0;
+  inset: 0 0 102px 0;
   z-index: 2;
 }
 
@@ -175,7 +175,7 @@ button {
 .brand-panel {
   top: 22px;
   left: 18px;
-  width: clamp(286px, 19vw, 330px);
+  width: 330px;
   min-height: 176px;
   padding: 28px 26px 24px;
   display: grid;
@@ -204,7 +204,7 @@ button {
 
 .brand-title {
   color: #f8fdff;
-  font-size: clamp(42px, 3.25vw, 56px);
+  font-size: 38px;
   font-weight: 900;
   line-height: 0.86;
   text-transform: uppercase;
@@ -331,6 +331,11 @@ button {
   font-weight: 900;
   text-align: center;
   text-shadow: 0 0 10px rgba(255, 255, 255, 0.95);
+}
+
+.metric-value-small {
+  font-size: 28px;
+  letter-spacing: 0;
 }
 
 .metric-inline {
@@ -766,7 +771,7 @@ button {
   }
 
   .brand-title {
-    font-size: 42px;
+    font-size: 34px;
   }
 
   .brand-subtitle {
@@ -1017,7 +1022,7 @@ button {
   }
 
   .brand-title {
-    font-size: 34px;
+    font-size: 30px;
   }
 
   .scene-layer {

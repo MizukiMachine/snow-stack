@@ -8,9 +8,9 @@ import type {
  * Logical dimensions of the play field measured in whole grid cells.
  */
 export const FIELD_DIMENSIONS = Object.freeze({
-  width: 10,
-  height: 20,
-  depth: 10,
+  width: 5,
+  height: 5,
+  depth: 12,
 });
 
 /**
@@ -26,16 +26,16 @@ const HALF_DEPTH = (FIELD_DIMENSIONS.depth * CELL_SIZE) / 2;
  * Shared description of the right-handed coordinate system used across the engine.
  *
  * - +X: right, -X: left
- * - +Y: up, -Y: down
- * - +Z: backward (away from the camera), -Z: forward (toward the camera)
+ * - +Y: back, -Y: front
+ * - +Z: deeper into the pit, -Z: toward the player
  */
 export const COORDINATE_SYSTEM: CoordinateSystemDescription = Object.freeze({
-  up: 'y+',
-  down: 'y-',
+  up: 'z-',
+  down: 'z+',
   left: 'x-',
   right: 'x+',
-  forward: 'z-',
-  backward: 'z+',
+  forward: 'y-',
+  backward: 'y+',
 });
 
 /**

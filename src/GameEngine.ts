@@ -1,5 +1,6 @@
 import type { FieldCoordinate } from './constants/field';
 import type { Axis } from './types/coordinates';
+import type { RotationDirection } from './GameState';
 import { GameState } from './GameState';
 import { Renderer } from './Renderer';
 
@@ -34,7 +35,7 @@ export class GameEngine {
    * 指定したコンテナに Three.js のキャンバスを初期化し、レンダリングループを開始する。
    */
   public start(container: HTMLElement): void {
-    this.state.ensureActiveTetromino();
+    this.state.ensureActivePolyCube();
     this.startedAt = performance.now();
     this.pausedDuration = 0;
     this.pausedAt = 0;
@@ -126,36 +127,22 @@ export class GameEngine {
       return;
     }
 
-    if (event.code === 'KeyE') {
+    if (event.code === 'Space') {
       event.preventDefault();
-      const distance = this.state.hardDropActiveTetromino();
-      this.state.addHardDropScore(distance);
-      if (this.state.getActiveTetromino()) {
-        this.state.lockActiveTetromino();
-        this.state.spawnTetromino();
+      this.state.hardDropActivePolyCube();
+      if (this.state.getActivePolyCube()) {
+        this.state.lockActivePolyCube();
+        this.state.spawnPolyCube();
       }
       this.lastDropAt = performance.now();
       this.syncScene();
       return;
     }
 
-    if (event.code === 'KeyC') {
-      event.preventDefault();
-      if (this.state.holdActiveTetromino()) {
-        this.lastDropAt = performance.now();
-        this.syncScene({ settledBlocks: false });
-      }
-      return;
-    }
-
     const move = MOVEMENT_OFFSETS[event.code];
     if (move) {
       event.preventDefault();
-      if (this.state.moveActiveTetromino(move)) {
-        if (SOFT_DROP_CODES.has(event.code)) {
-          this.state.addSoftDropScore();
-          this.lastDropAt = performance.now();
-        }
+      if (this.moveActivePolyCube(move)) {
         this.syncScene({ settledBlocks: false });
       }
       return;
@@ -164,7 +151,7 @@ export class GameEngine {
     const rotation = getRotationCommand(event);
     if (rotation) {
       event.preventDefault();
-      if (this.state.rotateActiveTetromino(rotation.axis, rotation.direction)) {
+      if (this.state.rotateActivePolyCube(rotation.axis, rotation.direction)) {
         this.syncScene({ settledBlocks: false });
       }
     }
@@ -180,9 +167,9 @@ export class GameEngine {
     }
 
     let settledBlocksChanged = false;
-    if (!this.state.moveActiveTetromino(DROP_OFFSET) && this.state.getActiveTetromino()) {
-      this.state.lockActiveTetromino();
-      this.state.spawnTetromino();
+    if (!this.state.moveActivePolyCube(DROP_OFFSET) && this.state.getActivePolyCube()) {
+      this.state.lockActivePolyCube();
+      this.state.spawnPolyCube();
       settledBlocksChanged = true;
     }
 
@@ -192,7 +179,7 @@ export class GameEngine {
 
   private restart(): void {
     this.state.reset();
-    this.state.ensureActiveTetromino();
+    this.state.ensureActivePolyCube();
     this.startedAt = performance.now();
     this.pausedDuration = 0;
     this.pausedAt = 0;
@@ -210,7 +197,7 @@ export class GameEngine {
     if (settledBlocks) {
       this.renderer.updateSettledBlocks(this.state.getSettledBlocks());
     }
-    this.renderer.updateActiveTetromino(this.state.getActiveTetromino());
+    this.renderer.updateActivePolyCube(this.state.getActivePolyCube());
     this.renderer.updateHud(
       this.state.getUpcomingQueue(),
       this.state.getPhase(),
@@ -220,8 +207,7 @@ export class GameEngine {
       this.state.getDropIntervalMs(),
       elapsedMs,
       this.paused,
-      this.settingsOpen,
-      this.state.getHeldPiece()
+      this.settingsOpen
     );
     this.lastHudElapsedSecond = Math.floor(elapsedMs / 1000);
     this.renderer.renderFrame();
@@ -260,6 +246,21 @@ export class GameEngine {
     this.syncScene({ settledBlocks: false });
   }
 
+  private moveActivePolyCube(move: FieldCoordinate): boolean {
+    if (this.state.moveActivePolyCube(move)) {
+      return true;
+    }
+
+    if (move.x !== 0 && move.y !== 0 && move.z === 0) {
+      return (
+        this.state.moveActivePolyCube({ x: move.x, y: 0, z: 0 }) ||
+        this.state.moveActivePolyCube({ x: 0, y: move.y, z: 0 })
+      );
+    }
+
+    return false;
+  }
+
   private getElapsedMs(): number {
     if (this.startedAt === 0) {
       return 0;
@@ -279,35 +280,46 @@ type SyncSceneOptions = {
   settledBlocks?: boolean;
 };
 
-type RotationDirection = 1 | -1;
-
 const MOVEMENT_OFFSETS: Record<string, FieldCoordinate> = {
   ArrowLeft: { x: 1, y: 0, z: 0 },
   ArrowRight: { x: -1, y: 0, z: 0 },
-  ArrowUp: { x: 0, y: 0, z: 1 },
-  ArrowDown: { x: 0, y: 0, z: -1 },
-  KeyD: { x: 0, y: -1, z: 0 }
+  ArrowUp: { x: 0, y: 1, z: 0 },
+  ArrowDown: { x: 0, y: -1, z: 0 },
+  Home: { x: 1, y: 1, z: 0 },
+  PageUp: { x: -1, y: 1, z: 0 },
+  End: { x: 1, y: -1, z: 0 },
+  PageDown: { x: -1, y: -1, z: 0 },
+  Numpad4: { x: 1, y: 0, z: 0 },
+  Numpad6: { x: -1, y: 0, z: 0 },
+  Numpad8: { x: 0, y: 1, z: 0 },
+  Numpad2: { x: 0, y: -1, z: 0 },
+  Numpad7: { x: 1, y: 1, z: 0 },
+  Numpad9: { x: -1, y: 1, z: 0 },
+  Numpad1: { x: 1, y: -1, z: 0 },
+  Numpad3: { x: -1, y: -1, z: 0 },
+  Digit4: { x: 1, y: 0, z: 0 },
+  Digit6: { x: -1, y: 0, z: 0 },
+  Digit8: { x: 0, y: 1, z: 0 },
+  Digit2: { x: 0, y: -1, z: 0 },
+  Digit7: { x: 1, y: 1, z: 0 },
+  Digit9: { x: -1, y: 1, z: 0 },
+  Digit1: { x: 1, y: -1, z: 0 },
+  Digit3: { x: -1, y: -1, z: 0 }
 };
 
-const DROP_OFFSET: FieldCoordinate = { x: 0, y: -1, z: 0 };
+const DROP_OFFSET: FieldCoordinate = { x: 0, y: 0, z: 1 };
 
-const SOFT_DROP_CODES = new Set(['KeyD']);
-const ONE_SHOT_CODES = new Set(['KeyE', 'KeyC', 'KeyP', 'Escape', 'KeyR']);
+const ONE_SHOT_CODES = new Set(['Space', 'KeyP', 'Escape', 'KeyR']);
 
-const ROTATION_AXES: Record<string, Axis> = {
-  KeyQ: 'y',
-  KeyA: 'z',
-  KeyZ: 'x'
+const ROTATION_COMMANDS: Record<string, RotationCommand> = {
+  KeyQ: { axis: 'x', direction: -1 },
+  KeyA: { axis: 'x', direction: 1 },
+  KeyW: { axis: 'y', direction: -1 },
+  KeyS: { axis: 'y', direction: 1 },
+  KeyE: { axis: 'z', direction: -1 },
+  KeyD: { axis: 'z', direction: 1 }
 };
 
 function getRotationCommand(event: KeyboardEvent): RotationCommand | null {
-  const axis = ROTATION_AXES[event.code];
-  if (!axis) {
-    return null;
-  }
-
-  return {
-    axis,
-    direction: event.shiftKey ? 1 : -1
-  };
+  return ROTATION_COMMANDS[event.code] ?? null;
 }

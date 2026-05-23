@@ -1,63 +1,84 @@
 import { describe, expect, it } from 'vitest';
 import { GameState } from '../GameState';
 
-describe('GameState', () => {
-  it('prevents active tetromino movement outside the field bounds', () => {
-    const state = new GameState();
-    state.spawnTetromino('I');
-
-    expect(state.moveActiveTetromino({ x: -1, y: 0, z: 0 })).toBe(true);
-    expect(state.moveActiveTetromino({ x: -1, y: 0, z: 0 })).toBe(true);
-    expect(state.moveActiveTetromino({ x: -1, y: 0, z: 0 })).toBe(true);
-
-    const blocksAtLeftWall = state.getActiveTetromino()?.blocks;
-
-    expect(state.moveActiveTetromino({ x: -1, y: 0, z: 0 })).toBe(false);
-    expect(state.getActiveTetromino()?.blocks).toEqual(blocksAtLeftWall);
-  });
-
-  it('locks the active tetromino into settled blocks', () => {
-    const state = new GameState();
-    state.spawnTetromino('O');
-
-    const activeBlocks = state.getActiveTetromino()?.blocks ?? [];
-
-    expect(state.lockActiveTetromino()).toBe(0);
-    expect(state.getActiveTetromino()).toBeNull();
-    expect(sortCoordinates(state.getSettledBlocks().map((block) => block.coordinate))).toEqual(
-      sortCoordinates(activeBlocks)
-    );
-  });
-
-  it('clears a filled layer and awards layer-clear score', () => {
-    const state = new GameState({ width: 4, height: 4, depth: 1 });
-
-    state.spawnTetromino('I');
-    expect(state.lockActiveTetromino()).toBe(1);
-
-    expect(state.getClearedLayerCount()).toBe(1);
-    expect(state.getScore()).toBe(100);
-    expect(state.getSettledBlocks()).toHaveLength(0);
-  });
-
-  it('adds soft-drop and hard-drop score without accepting negative steps', () => {
+describe('GameState BlockOut rules', () => {
+  it('uses BlockOut default pit dimensions, block set, level, and speed', () => {
     const state = new GameState();
 
-    state.addSoftDropScore();
-    state.addHardDropScore(3);
-    state.addSoftDropScore(-5);
-    state.addHardDropScore(-5);
-
-    expect(state.getScore()).toBe(7);
+    expect(state.getDimensions()).toEqual({ width: 5, height: 5, depth: 12 });
+    expect(state.getBlockSet()).toBe('flat');
+    expect(state.getLevel()).toBe(0);
+    expect(state.getDropIntervalMs()).toBe(5510);
   });
 
-  it('starts with the slower base drop interval', () => {
-    const state = new GameState();
+  it('spawns polycubes at the front of the pit and prevents out-of-bounds movement', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
+    state.spawnPolyCube(2);
 
-    expect(state.getDropIntervalMs()).toBe(3000);
+    expect(state.getActivePolyCube()?.blocks).toEqual([
+      { x: 4, y: 0, z: 0 },
+      { x: 4, y: 1, z: 0 },
+      { x: 4, y: 2, z: 0 }
+    ]);
+    expect(state.moveActivePolyCube({ x: 1, y: 0, z: 0 })).toBe(false);
+    expect(state.moveActivePolyCube({ x: -1, y: 0, z: 0 })).toBe(true);
+  });
+
+  it('hard drops along increasing Z depth and scores the locked polycube', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
+    state.spawnPolyCube(0);
+
+    expect(state.hardDropActivePolyCube()).toBe(5);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 5 }]);
+
+    expect(state.lockActivePolyCube()).toBe(0);
+    expect(state.getSettledBlocks()).toEqual([
+      {
+        id: 0,
+        label: 'P00',
+        color: expect.any(Number),
+        coordinate: { x: 4, y: 0, z: 5 }
+      }
+    ]);
+    expect(state.getScore()).toBeGreaterThan(1);
+  });
+
+  it('clears full Z planes and compacts shallower planes deeper into the pit', () => {
+    const state = new GameState({ dimensions: { width: 2, height: 2, depth: 3 } });
+    seedCells(state, [
+      { x: 0, y: 0, z: 2 },
+      { x: 1, y: 0, z: 2 },
+      { x: 0, y: 1, z: 2 },
+      { x: 1, y: 1, z: 2 },
+      { x: 0, y: 0, z: 1 }
+    ]);
+
+    expect(state.clearCompletedPlanes()).toBe(1);
+    expect(state.getClearedPlaneCount()).toBe(1);
+    expect(coordinates(state.getSettledBlocks())).toEqual([{ x: 0, y: 0, z: 2 }]);
+    expect(state.getCell({ x: 0, y: 0, z: 0 })).toBe('empty');
+  });
+
+  it('sets game over when a newly spawned polycube overlaps the front plane', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
+    state.setCell({ x: 4, y: 0, z: 0 }, 0);
+
+    state.spawnPolyCube(0);
+
+    expect(state.getActivePolyCube()).toBeNull();
+    expect(state.getPhase()).toBe('game-over');
+    expect(state.isGameOver()).toBe(true);
   });
 });
 
-function sortCoordinates(coordinates: { x: number; y: number; z: number }[]) {
-  return [...coordinates].sort((a, b) => a.y - b.y || a.x - b.x || a.z - b.z);
+function seedCells(state: GameState, cells: { x: number; y: number; z: number }[]): void {
+  cells.forEach((cell) => {
+    expect(state.setCell(cell, 0)).toBe(true);
+  });
+}
+
+function coordinates(blocks: ReturnType<GameState['getSettledBlocks']>) {
+  return blocks
+    .map((block) => block.coordinate)
+    .sort((a, b) => a.z - b.z || a.y - b.y || a.x - b.x);
 }

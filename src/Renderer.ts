@@ -30,12 +30,12 @@ import {
 } from 'three';
 import type { Material } from 'three';
 import type {
-  ActiveTetrominoSnapshot,
+  ActivePolyCubeSnapshot,
   GamePhase,
   SettledBlockSnapshot
 } from './GameState';
-import { getTetrominoDefinition, type TetrominoType } from './constants/tetromino';
-import { CELL_SIZE, FIELD_DIMENSIONS, FIELD_ORIGIN } from './constants/field';
+import { getPolyCubeDefinition } from './constants/blockout';
+import { CELL_SIZE } from './constants/field';
 import { GameState } from './GameState';
 
 type RendererCallbacks = {
@@ -45,7 +45,7 @@ type RendererCallbacks = {
 };
 
 type HudState = {
-  queue: readonly TetrominoType[];
+  queue: readonly number[];
   phase: GamePhase;
   clearedLayerCount: number;
   score: number;
@@ -54,7 +54,6 @@ type HudState = {
   elapsedMs: number;
   isPaused: boolean;
   settingsOpen: boolean;
-  heldPiece: TetrominoType | null;
 };
 
 type CameraOrbitState = {
@@ -87,21 +86,21 @@ type HudIconName =
 
 const CAMERA_SETTINGS = {
   targetHeightFactor: 0.5,
-  initialTheta: -1.58,
-  initialPhi: 0.74,
-  minPhi: 0.22,
-  maxPhi: 1.42,
+  initialTheta: -Math.PI / 2,
+  initialPhi: Math.PI / 2,
+  minPhi: 0.34,
+  maxPhi: Math.PI / 2,
   rotateSpeedX: 0.0022,
   rotateSpeedY: 0.002,
   zoomSpeed: 0.01,
-  minRadius: 14,
-  maxRadius: 38,
-  initialRadiusMultiplier: 1.04,
+  minRadius: 8,
+  maxRadius: 42,
+  initialRadiusMultiplier: 1.12,
   axisLockThresholdPx: 6
 } as const;
 
 /**
- * Three.js scene rendering and DOM-based HUD for the 3D Tetris playfield.
+ * Three.js scene rendering and DOM-based HUD for the BlockOut pit.
  */
 export class Renderer {
   private readonly gameState: GameState;
@@ -112,7 +111,7 @@ export class Renderer {
   private container: HTMLElement | null = null;
   private canvasHost: HTMLDivElement | null = null;
   private hudElement: HTMLDivElement | null = null;
-  private activeTetrominoGroup: Group | null = null;
+  private activePolyCubeGroup: Group | null = null;
   private settledBlocksGroup: Group | null = null;
   private glowGroup: Group | null = null;
   private resizeHandler: (() => void) | null = null;
@@ -123,18 +122,18 @@ export class Renderer {
   private wheelHandler: ((event: WheelEvent) => void) | null = null;
   private readonly cameraOrbit: CameraOrbitState;
   private readonly hudState: HudState;
-  private lastNextPreviewType: TetrominoType | null = null;
-  private lastHeldPreviewType: TetrominoType | null | undefined = undefined;
+  private lastNextPreviewType: number | null = null;
 
   constructor(gameState: GameState, callbacks: RendererCallbacks = {}) {
     this.gameState = gameState;
     this.callbacks = callbacks;
 
     const { width, height, depth } = this.gameState.getDimensions();
+    const origin = this.getFieldOrigin();
     const target = new Vector3(
-      FIELD_ORIGIN.x + (width * CELL_SIZE) / 2,
+      origin.x + (width * CELL_SIZE) / 2,
       height * CELL_SIZE * CAMERA_SETTINGS.targetHeightFactor,
-      FIELD_ORIGIN.z + (depth * CELL_SIZE) / 2
+      origin.z + (depth * CELL_SIZE) / 2
     );
 
     this.cameraOrbit = {
@@ -160,8 +159,7 @@ export class Renderer {
       dropIntervalMs: 3000,
       elapsedMs: 0,
       isPaused: false,
-      settingsOpen: false,
-      heldPiece: null
+      settingsOpen: false
     };
   }
 
@@ -179,7 +177,7 @@ export class Renderer {
     scene.background = null;
     scene.fog = null;
 
-    const camera = new PerspectiveCamera(34, this.getAspectRatio(), 0.1, 1000);
+    const camera = new PerspectiveCamera(60, this.getAspectRatio(), 0.1, 1000);
     this.configureInitialCameraOrbit(camera);
     this.applyCameraOrbit(camera);
 
@@ -210,9 +208,9 @@ export class Renderer {
     window.addEventListener('resize', this.resizeHandler);
     this.attachCameraControls();
 
-    this.updateActiveTetromino(this.gameState.getActiveTetromino());
+    this.updateActivePolyCube(this.gameState.getActivePolyCube());
     this.updateSettledBlocks(this.gameState.getSettledBlocks());
-    this.updateHud([], 'running', 0, 0, 1, 3000, 0, false, false, null);
+    this.updateHud([], 'running', 0, 0, 1, 3000, 0, false, false);
     this.renderFrame();
   }
 
@@ -244,30 +242,30 @@ export class Renderer {
     this.hudElement = null;
     this.container = null;
     this.canvasHost = null;
-    this.activeTetrominoGroup = null;
+    this.activePolyCubeGroup = null;
     this.settledBlocksGroup = null;
     this.glowGroup = null;
     this.lastNextPreviewType = null;
-    this.lastHeldPreviewType = undefined;
   }
 
-  public updateActiveTetromino(tetromino: ActiveTetrominoSnapshot | null): void {
+  public updateActivePolyCube(polyCube: ActivePolyCubeSnapshot | null): void {
     if (!this.scene) {
       return;
     }
 
-    this.disposeActiveTetrominoGroup();
+    this.disposeActivePolyCubeGroup();
     this.disposeGlowGroup();
 
-    if (!tetromino) {
+    if (!polyCube) {
       return;
     }
 
     const group = new Group();
-    group.position.set(FIELD_ORIGIN.x, FIELD_ORIGIN.y, FIELD_ORIGIN.z);
+    const origin = this.getFieldOrigin();
+    group.position.set(origin.x, origin.y, origin.z);
 
-    tetromino.blocks.forEach((block) => {
-      const mesh = this.createBlockMesh(tetromino.color, true, block.z);
+    polyCube.blocks.forEach((block) => {
+      const mesh = this.createBlockMesh(polyCube.color, true, block.z);
       mesh.position.set(
         (block.x + 0.5) * CELL_SIZE,
         (block.y + 0.5) * CELL_SIZE,
@@ -278,11 +276,11 @@ export class Renderer {
 
     const glow = new Group();
     glow.position.copy(group.position);
-    tetromino.blocks.forEach((block) => {
+    polyCube.blocks.forEach((block) => {
       const orb = new Mesh(
         new SphereGeometry(0.42, 16, 16),
         new MeshBasicMaterial({
-          color: tetromino.color,
+          color: polyCube.color,
           transparent: true,
           opacity: 0.22
         })
@@ -295,7 +293,7 @@ export class Renderer {
       glow.add(orb);
     });
 
-    this.activeTetrominoGroup = group;
+    this.activePolyCubeGroup = group;
     this.glowGroup = glow;
     this.scene.add(group);
     this.scene.add(glow);
@@ -309,7 +307,8 @@ export class Renderer {
     this.disposeSettledBlocksGroup();
 
     const group = new Group();
-    group.position.set(FIELD_ORIGIN.x, FIELD_ORIGIN.y, FIELD_ORIGIN.z);
+    const origin = this.getFieldOrigin();
+    group.position.set(origin.x, origin.y, origin.z);
 
     blocks.forEach((block) => {
       const mesh = this.createBlockMesh(block.color, false, block.coordinate.z);
@@ -335,7 +334,7 @@ export class Renderer {
   }
 
   public updateHud(
-    queue: readonly TetrominoType[],
+    queue: readonly number[],
     phase: GamePhase,
     clearedLayerCount: number,
     score: number,
@@ -343,8 +342,7 @@ export class Renderer {
     dropIntervalMs: number,
     elapsedMs: number,
     isPaused: boolean,
-    settingsOpen: boolean,
-    heldPiece: TetrominoType | null
+    settingsOpen: boolean
   ): void {
     if (!this.hudElement) {
       return;
@@ -359,7 +357,6 @@ export class Renderer {
     this.hudState.elapsedMs = elapsedMs;
     this.hudState.isPaused = isPaused;
     this.hudState.settingsOpen = settingsOpen;
-    this.hudState.heldPiece = heldPiece;
 
     this.syncHud();
   }
@@ -381,6 +378,7 @@ export class Renderer {
     );
     this.setText(root, '[data-role="status-label"]', this.getStatusLabel());
     this.setText(root, '[data-role="speed"]', `${(1000 / this.hudState.dropIntervalMs).toFixed(2)}x`);
+    this.setText(root, '[data-role="block-set"]', this.gameState.getBlockSetLabel());
     this.syncHudTimer(root);
     this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? 'RESUME' : 'PAUSE');
     this.setMeter(root, '[data-role="level-meter"]', Math.min(7, this.hudState.level));
@@ -396,19 +394,13 @@ export class Renderer {
       '[data-role="footer-tip"]',
       this.hudState.phase === 'game-over'
         ? 'Rotate the view and start a fresh run.'
-        : 'Complete horizontal Y-layers to clear them.'
+        : 'Fill complete depth planes across the pit to clear them.'
     );
 
-    const nextPreviewType = this.hudState.queue[0] ?? 'T';
+    const nextPreviewType = this.hudState.queue[0] ?? null;
     if (nextPreviewType !== this.lastNextPreviewType) {
       this.renderPreview(root.querySelector('[data-role="next-piece"]'), nextPreviewType);
       this.lastNextPreviewType = nextPreviewType;
-    }
-
-    const heldPreviewType = this.hudState.heldPiece ?? null;
-    if (heldPreviewType !== this.lastHeldPreviewType) {
-      this.renderPreview(root.querySelector('[data-role="hold-piece"]'), heldPreviewType);
-      this.lastHeldPreviewType = heldPreviewType;
     }
 
     const overlay = root.querySelector<HTMLElement>('[data-role="overlay"]');
@@ -434,8 +426,8 @@ export class Renderer {
       <div class="brand-panel">
         <div class="brand-emblem">${icon('snowflake')}</div>
         <div class="brand-copy">
-          <div class="brand-title">VOXEL<br />TETRIS</div>
-          <div class="brand-subtitle">3D VOXEL PUZZLE GAME</div>
+          <div class="brand-title">VOXEL<br />BLOCK<br />OUT</div>
+          <div class="brand-subtitle">3D POLYCUBE PUZZLE</div>
         </div>
       </div>
       <section class="info-card tip-card">
@@ -460,26 +452,24 @@ export class Renderer {
             <div class="metric-inline"><strong class="metric-value" data-role="lines">000</strong><div class="meter meter-bars" data-role="layers-meter">${renderMeterSegments(8)}</div></div>
           </section>
           <section class="panel preview-panel">
-            <h3>${icon('snowflake')}<span>NEXT PIECE</span></h3>
+            <h3>${icon('snowflake')}<span>NEXT POLYCUBE</span></h3>
             <div class="piece-preview" data-role="next-piece"></div>
           </section>
-          <section class="panel preview-panel">
-            <h3>${icon('snowflake')}<span>HOLD PIECE</span></h3>
-            <div class="piece-preview" data-role="hold-piece"></div>
+          <section class="panel metric-card">
+            <div class="panel-heading">${icon('snowflake')}<span>BLOCK SET</span></div>
+            <strong class="metric-value metric-value-small" data-role="block-set">FLAT</strong>
           </section>
         </div>
         <div class="command-stack">
           <section class="panel controls-panel">
             <h3>${icon('snowflake')}<span>CONTROLS</span></h3>
             <div class="control-grid">
-              <div class="control-row"><span class="keys"><b>←</b><b>→</b></span><span>Move Left / Right</span></div>
-              <div class="control-row"><span class="keys"><b>↑</b><b>↓</b></span><span>Move Back / Front</span></div>
-              <div class="control-row"><span class="keys"><b>Q</b><b class="wide-key">Shift+Q</b></span><span>Yaw Y Axis</span></div>
-              <div class="control-row"><span class="keys"><b>A</b><b class="wide-key">Shift+A</b></span><span>Roll Z Axis</span></div>
-              <div class="control-row"><span class="keys"><b>Z</b><b class="wide-key">Shift+Z</b></span><span>Pitch X Axis</span></div>
-              <div class="control-row"><span class="keys"><b>D</b></span><span>Soft Drop</span></div>
-              <div class="control-row"><span class="keys"><b>E</b></span><span>Hard Drop</span></div>
-              <div class="control-row"><span class="keys"><b>C</b></span><span>Hold Piece</span></div>
+              <div class="control-row"><span class="keys"><b>←</b><b>→</b><b>↑</b><b>↓</b></span><span>Move On Pit Floor</span></div>
+              <div class="control-row"><span class="keys"><b>7</b><b>9</b><b>1</b><b>3</b></span><span>Diagonal Move</span></div>
+              <div class="control-row"><span class="keys"><b>Q</b><b>A</b></span><span>Rotate X Axis</span></div>
+              <div class="control-row"><span class="keys"><b>W</b><b>S</b></span><span>Rotate Y Axis</span></div>
+              <div class="control-row"><span class="keys"><b>E</b><b>D</b></span><span>Rotate Z Axis</span></div>
+              <div class="control-row"><span class="keys"><b class="wide-key">Space</b></span><span>Hard Drop</span></div>
               <div class="control-row"><span class="keys"><b class="wide-key">P / Esc</b></span><span>Pause</span></div>
               <div class="control-row"><span class="keys"><b>R</b></span><span>Restart</span></div>
               <div class="control-separator"></div>
@@ -507,24 +497,24 @@ export class Renderer {
       <section class="panel settings-panel" data-role="settings-panel" hidden>
         <h3>${icon('snowflake')}<span>VIEW SETTINGS</span></h3>
         <div class="settings-copy">
-          <p>Drag to orbit the tower.</p>
+          <p>Drag to orbit the pit.</p>
           <p>Wheel to zoom the camera.</p>
-          <p>Hold Shift with Q, A, or Z for reverse rotation.</p>
-          <p>D soft drops; E hard drops once per press.</p>
+          <p>Q/W/E and A/S/D rotate around the three axes.</p>
+          <p>Space drops the current polycube into the pit.</p>
           <p>Press <strong>R</strong> at any time to restart.</p>
         </div>
       </section>
       <section class="overlay-card" data-role="overlay" hidden>
         <div class="overlay-alert">${icon('alert')}</div>
         <h2>GAME OVER</h2>
-        <p>The tower has reached the top.</p>
+        <p>The pit has reached the top.</p>
         <div class="overlay-scorebox">
           <span>FINAL SCORE</span>
           <strong data-role="overlay-score">0</strong>
         </div>
         <div class="overlay-metrics">
-          <div><span>LEVEL REACHED</span><strong data-role="overlay-level">1</strong></div>
-          <div><span>LINES CLEARED</span><strong data-role="overlay-lines">0</strong></div>
+          <div><span>LEVEL REACHED</span><strong data-role="overlay-level">0</strong></div>
+          <div><span>PLANES CLEARED</span><strong data-role="overlay-lines">0</strong></div>
           <div><span>TIME PLAYED</span><strong data-role="overlay-time">00:00:00</strong></div>
         </div>
         <div class="overlay-actions">
@@ -558,7 +548,8 @@ export class Renderer {
 
   private createFieldBounds(): Group {
     const group = new Group();
-    group.position.set(FIELD_ORIGIN.x, FIELD_ORIGIN.y, FIELD_ORIGIN.z);
+    const origin = this.getFieldOrigin();
+    group.position.set(origin.x, origin.y, origin.z);
 
     const { width, height, depth } = this.gameState.getDimensions();
     const panelMaterial = new MeshStandardMaterial({
@@ -649,12 +640,14 @@ export class Renderer {
 
   private createFloorHalo(): Group {
     const group = new Group();
-    const { width, depth } = FIELD_DIMENSIONS;
-    const centerX = FIELD_ORIGIN.x + (width * CELL_SIZE) / 2;
-    const centerZ = FIELD_ORIGIN.z + (depth * CELL_SIZE) / 2;
+    const { width, depth } = this.gameState.getDimensions();
+    const origin = this.getFieldOrigin();
+    const centerX = origin.x + (width * CELL_SIZE) / 2;
+    const centerZ = origin.z + (depth * CELL_SIZE) / 2;
+    const fieldSpan = Math.max(width, depth);
 
     for (let i = 0; i < 6; i += 1) {
-      const innerRadius = width * 0.9 + i * 1.8;
+      const innerRadius = fieldSpan * 0.9 + i * 1.8;
       const outerRadius = innerRadius + 0.12;
       const ring = new Mesh(
         new RingGeometry(innerRadius, outerRadius, 96),
@@ -670,6 +663,15 @@ export class Renderer {
     }
 
     return group;
+  }
+
+  private getFieldOrigin(): { x: number; y: number; z: number } {
+    const { width, depth } = this.gameState.getDimensions();
+    return {
+      x: -((width * CELL_SIZE) / 2),
+      y: 0,
+      z: -((depth * CELL_SIZE) / 2)
+    };
   }
 
   private createBlockMesh(color: number, isActive: boolean, depthLayer = 0): Group {
@@ -1282,19 +1284,17 @@ export class Renderer {
 
   private configureInitialCameraOrbit(camera: PerspectiveCamera): void {
     const { width, height, depth } = this.gameState.getDimensions();
-    const paddedHeight = height + 2;
     const halfWidth = (width * CELL_SIZE) / 2;
-    const halfHeight = (paddedHeight * CELL_SIZE) / 2;
+    const halfHeight = ((height + 0.6) * CELL_SIZE) / 2;
     const halfDepth = (depth * CELL_SIZE) / 2;
     const halfVerticalFov = (camera.fov * Math.PI) / 360;
     const halfHorizontalFov = Math.atan(Math.tan(halfVerticalFov) * camera.aspect);
     const fitHeightDistance = halfHeight / Math.tan(halfVerticalFov);
     const fitWidthDistance = halfWidth / Math.tan(halfHorizontalFov);
-    const boundingRadius = Math.hypot(halfWidth, halfHeight, halfDepth);
+    const entranceFitDistance = Math.max(fitHeightDistance, fitWidthDistance);
 
     this.cameraOrbit.radius =
-      Math.max(fitHeightDistance, fitWidthDistance, boundingRadius) *
-      CAMERA_SETTINGS.initialRadiusMultiplier;
+      halfDepth + entranceFitDistance * CAMERA_SETTINGS.initialRadiusMultiplier;
   }
 
   private onResize(): void {
@@ -1322,13 +1322,13 @@ export class Renderer {
     };
   }
 
-  private disposeActiveTetrominoGroup(): void {
-    if (!this.scene || !this.activeTetrominoGroup) {
+  private disposeActivePolyCubeGroup(): void {
+    if (!this.scene || !this.activePolyCubeGroup) {
       return;
     }
-    this.disposeObjectResources(this.activeTetrominoGroup);
-    this.scene.remove(this.activeTetrominoGroup);
-    this.activeTetrominoGroup = null;
+    this.disposeObjectResources(this.activePolyCubeGroup);
+    this.scene.remove(this.activePolyCubeGroup);
+    this.activePolyCubeGroup = null;
   }
 
   private disposeSettledBlocksGroup(): void {
@@ -1383,33 +1383,33 @@ export class Renderer {
     materials.forEach((material) => material.dispose());
   }
 
-  private renderPreview(container: Element | null, type: TetrominoType | null): void {
+  private renderPreview(container: Element | null, type: number | null): void {
     if (!(container instanceof HTMLElement)) {
       return;
     }
 
-    if (!type) {
+    if (type === null) {
       container.innerHTML = '';
       return;
     }
 
-    const definition = getTetrominoDefinition(type);
+    const definition = getPolyCubeDefinition(type);
     const blockSize = 34;
     const gap = 4;
     const step = blockSize + gap;
     const minCellX = Math.min(...definition.cells.map((cell) => cell.x));
     const maxCellX = Math.max(...definition.cells.map((cell) => cell.x));
-    const minCellZ = Math.min(...definition.cells.map((cell) => cell.z));
-    const maxCellZ = Math.max(...definition.cells.map((cell) => cell.z));
+    const minCellY = Math.min(...definition.cells.map((cell) => cell.y));
+    const maxCellY = Math.max(...definition.cells.map((cell) => cell.y));
     const cubes = definition.cells
       .map((cell) => ({
         x: (cell.x - minCellX) * step,
-        y: (maxCellZ - cell.z) * step
+        y: (maxCellY - cell.y) * step
       }))
       .sort((a, b) => a.y - b.y || a.x - b.x);
 
     const previewWidth = (maxCellX - minCellX + 1) * step - gap;
-    const previewHeight = (maxCellZ - minCellZ + 1) * step - gap;
+    const previewHeight = (maxCellY - minCellY + 1) * step - gap;
     const padding = 20;
     const viewBox = [
       -padding,

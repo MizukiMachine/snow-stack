@@ -2,12 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GameEngine } from '../GameEngine';
 import { GameState } from '../GameState';
 import type { Renderer } from '../Renderer';
-import type { TetrominoType } from '../constants/tetromino';
 
 type RendererMock = {
   initialize: ReturnType<typeof vi.fn>;
   updateSettledBlocks: ReturnType<typeof vi.fn>;
-  updateActiveTetromino: ReturnType<typeof vi.fn>;
+  updateActivePolyCube: ReturnType<typeof vi.fn>;
   updateHud: ReturnType<typeof vi.fn>;
   updateElapsedTime: ReturnType<typeof vi.fn>;
   renderFrame: ReturnType<typeof vi.fn>;
@@ -16,7 +15,7 @@ type RendererMock = {
 
 const startedEngines: GameEngine[] = [];
 
-describe('GameEngine', () => {
+describe('GameEngine BlockOut controls', () => {
   beforeEach(() => {
     vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
@@ -31,148 +30,105 @@ describe('GameEngine', () => {
     vi.restoreAllMocks();
   });
 
-  it('does not map Shift by itself to movement', () => {
-    const { state } = startEngineWithPiece('I');
-    const beforeBlocks = state.getActiveTetromino()?.blocks ?? [];
-
-    pressKey('ShiftLeft');
-
-    expect(state.getActiveTetromino()?.blocks).toEqual(beforeBlocks);
-    expect(state.getScore()).toBe(0);
-  });
-
-  it('maps KeyD to a downward Y-axis soft drop and awards score', () => {
-    const { state, renderer } = startEngineWithPiece('I');
-    const beforeBlocks = state.getActiveTetromino()?.blocks ?? [];
-
-    pressKey('KeyD');
-
-    const afterBlocks = state.getActiveTetromino()?.blocks ?? [];
-    expect(afterBlocks).toEqual(translateBlocks(beforeBlocks, { x: 0, y: -1, z: 0 }));
-    expect(state.getScore()).toBe(1);
-    expect(lastHudCall(renderer)[3]).toBe(1);
-  });
-
-  it('maps ArrowUp and ArrowDown to Z-axis movement', () => {
-    const state = new GameState();
-    state.spawnTetromino('I');
-    expect(state.moveActiveTetromino({ x: 0, y: 0, z: -1 })).toBe(true);
-    startEngine(state);
-    const startBlocks = state.getActiveTetromino()?.blocks ?? [];
-
-    pressKey('ArrowUp');
-    const movedUpBlocks = state.getActiveTetromino()?.blocks ?? [];
-    expect(movedUpBlocks).toEqual(translateBlocks(startBlocks, { x: 0, y: 0, z: 1 }));
-
-    pressKey('ArrowDown');
-    expect(state.getActiveTetromino()?.blocks).toEqual(startBlocks);
-  });
-
-  it('maps ArrowLeft and ArrowRight to the front-view horizontal direction', () => {
-    const { state } = startEngineWithPiece('I');
-    const startBlocks = state.getActiveTetromino()?.blocks ?? [];
-
-    pressKey('ArrowLeft');
-    const movedLeftBlocks = state.getActiveTetromino()?.blocks ?? [];
-    expect(movedLeftBlocks).toEqual(translateBlocks(startBlocks, { x: 1, y: 0, z: 0 }));
+  it('moves the polycube on the pit floor with arrow keys', () => {
+    const { state } = startEngineWithPiece(0);
 
     pressKey('ArrowRight');
-    expect(state.getActiveTetromino()?.blocks).toEqual(startBlocks);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 0, z: 0 }]);
+
+    pressKey('ArrowUp');
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 1, z: 0 }]);
+
+    pressKey('ArrowDown');
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 0, z: 0 }]);
   });
 
-  it('does not map KeyW to upward Y-axis movement', () => {
-    const state = new GameState();
-    state.spawnTetromino('I');
-    expect(state.moveActiveTetromino({ x: 0, y: -1, z: 0 })).toBe(true);
+  it('supports BlockOut diagonal movement with numeric keys', () => {
+    const { state } = startEngineWithPiece(0);
 
-    startEngine(state);
-    const beforeBlocks = state.getActiveTetromino()?.blocks ?? [];
+    pressKey('Digit9');
 
-    pressKey('KeyW');
-
-    expect(state.getActiveTetromino()?.blocks).toEqual(beforeBlocks);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 1, z: 0 }]);
   });
 
   it.each([
-    ['KeyQ', false, 'y', -1],
-    ['KeyQ', true, 'y', 1],
-    ['KeyA', false, 'z', -1],
-    ['KeyA', true, 'z', 1],
-    ['KeyZ', false, 'x', -1],
-    ['KeyZ', true, 'x', 1]
-  ] as const)(
-    'maps %s with shift=%s to %s-axis rotation direction %s',
-    (code, shiftKey, axis, direction) => {
-      const state = new GameState();
-      state.spawnTetromino('L');
-      const rotateSpy = vi.spyOn(state, 'rotateActiveTetromino');
-      startEngine(state);
+    ['KeyQ', 'x', -1],
+    ['KeyA', 'x', 1],
+    ['KeyW', 'y', -1],
+    ['KeyS', 'y', 1],
+    ['KeyE', 'z', -1],
+    ['KeyD', 'z', 1]
+  ] as const)('maps %s to %s-axis rotation direction %s', (code, axis, direction) => {
+    const state = new GameState();
+    state.spawnPolyCube(5);
+    const rotateSpy = vi.spyOn(state, 'rotateActivePolyCube');
+    startEngine(state);
 
-      pressKey(code, { shiftKey });
+    pressKey(code);
 
-      expect(rotateSpy).toHaveBeenCalledWith(axis, direction);
-    }
-  );
-
-  it('hard drops with KeyE, locks the current tetromino, and spawns the next one', () => {
-    const { state } = startEngineWithPiece('I');
-
-    pressKey('KeyE');
-
-    expect(state.getSettledBlocks()).toHaveLength(4);
-    expect(state.getActiveTetromino()).not.toBeNull();
-    expect(state.getScore()).toBe(28);
+    expect(rotateSpy).toHaveBeenCalledWith(axis, direction);
   });
 
-  it('ignores repeated KeyE keydown events after a hard drop', () => {
-    const { state } = startEngineWithPiece('I');
+  it('hard drops with Space, locks the current polycube, and spawns the next one', () => {
+    const { state } = startEngineWithPiece(0);
 
-    pressKey('KeyE');
-    pressKey('KeyE', { repeat: true });
+    pressKey('Space');
 
-    expect(state.getSettledBlocks()).toHaveLength(4);
+    expect(state.getSettledBlocks()).toHaveLength(1);
+    expect(state.getSettledBlocks()[0].coordinate.z).toBe(11);
+    expect(state.getActivePolyCube()).not.toBeNull();
+    expect(state.getScore()).toBeGreaterThan(1);
   });
 
-  it('reflects KeyC hold state in GameState and HUD sync', () => {
-    const { state, renderer } = startEngineWithPiece('I');
+  it('ignores repeated Space keydown events after a hard drop', () => {
+    const { state } = startEngineWithPiece(0);
 
-    pressKey('KeyC');
+    pressKey('Space');
+    pressKey('Space', { repeat: true });
 
-    expect(state.getHeldPiece()).toBe('I');
-    expect(state.getActiveTetromino()).not.toBeNull();
-    expect(lastHudCall(renderer)[9]).toBe('I');
+    expect(state.getSettledBlocks()).toHaveLength(1);
   });
 
   it.each(['KeyP', 'Escape'])('syncs paused HUD state when %s toggles pause', (code) => {
-    const { renderer } = startEngineWithPiece('I');
+    const { renderer } = startEngineWithPiece(0);
 
     pressKey(code);
 
     expect(lastHudCall(renderer)[7]).toBe(true);
   });
 
+  it('restarts with KeyR and resets BlockOut score state', () => {
+    const { state } = startEngineWithPiece(0);
+    pressKey('Space');
+
+    pressKey('KeyR');
+
+    expect(state.getScore()).toBe(0);
+    expect(state.getSettledBlocks()).toHaveLength(0);
+    expect(state.getActivePolyCube()).not.toBeNull();
+  });
+
   it('disposes the renderer, detaches input handlers, and ignores keys after stop', () => {
-    const { engine, state, renderer } = startEngineWithPiece('I');
-    const blocksBeforeStop = state.getActiveTetromino()?.blocks;
+    const { engine, state, renderer } = startEngineWithPiece(0);
+    const blocksBeforeStop = state.getActivePolyCube()?.blocks;
 
     engine.stop();
-    renderer.updateActiveTetromino.mockClear();
-    pressKey('ArrowDown');
+    renderer.updateActivePolyCube.mockClear();
+    pressKey('ArrowRight');
 
     expect(renderer.dispose).toHaveBeenCalledTimes(1);
-    expect(state.getActiveTetromino()?.blocks).toEqual(blocksBeforeStop);
-    expect(state.getScore()).toBe(0);
-    expect(renderer.updateActiveTetromino).not.toHaveBeenCalled();
+    expect(state.getActivePolyCube()?.blocks).toEqual(blocksBeforeStop);
+    expect(renderer.updateActivePolyCube).not.toHaveBeenCalled();
   });
 });
 
-function startEngineWithPiece(type: TetrominoType): {
+function startEngineWithPiece(id: number): {
   engine: GameEngine;
   state: GameState;
   renderer: RendererMock;
 } {
   const state = new GameState();
-  state.spawnTetromino(type);
+  state.spawnPolyCube(id);
   return startEngine(state);
 }
 
@@ -195,7 +151,7 @@ function createRendererMock(): RendererMock {
   return {
     initialize: vi.fn(),
     updateSettledBlocks: vi.fn(),
-    updateActiveTetromino: vi.fn(),
+    updateActivePolyCube: vi.fn(),
     updateHud: vi.fn(),
     updateElapsedTime: vi.fn(),
     renderFrame: vi.fn(),
@@ -203,27 +159,15 @@ function createRendererMock(): RendererMock {
   };
 }
 
-function pressKey(code: string, options: { repeat?: boolean; shiftKey?: boolean } = {}): void {
+function pressKey(code: string, options: { repeat?: boolean } = {}): void {
   window.dispatchEvent(
     new KeyboardEvent('keydown', {
       code,
       repeat: options.repeat ?? false,
-      shiftKey: options.shiftKey ?? false,
       bubbles: true,
       cancelable: true
     })
   );
-}
-
-function translateBlocks(
-  blocks: NonNullable<ReturnType<GameState['getActiveTetromino']>>['blocks'],
-  delta: { x: number; y: number; z: number }
-) {
-  return blocks.map((block) => ({
-    x: block.x + delta.x,
-    y: block.y + delta.y,
-    z: block.z + delta.z
-  }));
 }
 
 function lastHudCall(renderer: RendererMock): unknown[] {
