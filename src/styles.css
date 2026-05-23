@@ -145,8 +145,7 @@ button {
 .status-bar,
 .overlay-card,
 .pause-card,
-.settings-panel,
-.status-button {
+.settings-panel {
   background:
     linear-gradient(180deg, rgba(247, 253, 255, 0.68), rgba(222, 239, 251, 0.5)),
     linear-gradient(120deg, rgba(255, 255, 255, 0.52), transparent 46%);
@@ -165,8 +164,7 @@ button {
 .status-bar::after,
 .settings-panel::after,
 .overlay-card::after,
-.pause-card::after,
-.status-button::after {
+.pause-card::after {
   content: "";
   position: absolute;
   inset: 7px;
@@ -409,7 +407,7 @@ button {
 
 .control-row {
   display: grid;
-  grid-template-columns: minmax(74px, auto) 1fr;
+  grid-template-columns: minmax(112px, 132px) 1fr;
   gap: 14px;
   align-items: center;
   color: #082a78;
@@ -444,6 +442,12 @@ button {
 
 .keys .wide-key {
   min-width: 56px;
+}
+
+.keys .combo-key {
+  min-width: 132px;
+  padding: 0 6px;
+  font-size: 11px;
 }
 
 .keys .key-icon {
@@ -493,8 +497,7 @@ button {
 }
 
 .action-button:hover,
-.overlay-button:hover,
-.status-button:hover {
+.overlay-button:hover {
   transform: translateY(-1px);
   filter: brightness(1.07);
   box-shadow:
@@ -522,7 +525,7 @@ button {
   min-height: 74px;
   padding: 14px 24px;
   display: grid;
-  grid-template-columns: 250px minmax(320px, 1fr) 142px 390px;
+  grid-template-columns: 250px minmax(320px, 1fr) 142px;
   align-items: center;
   gap: 22px;
   z-index: 4;
@@ -588,33 +591,6 @@ button {
 
 .status-meta {
   min-width: 0;
-}
-
-.status-actions {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-}
-
-.status-button {
-  position: relative;
-  min-height: 52px;
-  border: 1px solid rgba(105, 177, 231, 0.68);
-  color: #0b3b91;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
-}
-
-.status-button .hud-icon {
-  width: 25px;
-  height: 25px;
-  color: #1a76c7;
 }
 
 .settings-panel {
@@ -901,7 +877,7 @@ button {
   }
 
   .status-bar {
-    grid-template-columns: 210px minmax(260px, 1fr) 116px 326px;
+    grid-template-columns: 210px minmax(260px, 1fr) 116px;
     gap: 14px;
   }
 
@@ -1073,10 +1049,6 @@ button {
     gap: 12px;
   }
 
-  .status-actions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .settings-panel {
     top: 170px;
     right: 14px;
@@ -1127,7 +1099,7 @@ button {
   }
 
   .control-row {
-    grid-template-columns: 74px 1fr;
+    grid-template-columns: minmax(112px, 132px) 1fr;
     font-size: 13px;
   }
 
@@ -1135,12 +1107,4 @@ button {
     font-size: 16px;
   }
 
-  .status-actions {
-    gap: 8px;
-  }
-
-  .status-button {
-    min-height: 48px;
-    font-size: 11px;
-  }
 }

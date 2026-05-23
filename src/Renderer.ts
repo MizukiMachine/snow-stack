@@ -46,6 +46,7 @@ import {
   type BlockSet
 } from './constants/blockout';
 import { CELL_SIZE } from './constants/field';
+import { KEY_ASSIGNMENT_ROWS, type KeyAssignmentRow } from './config/controls';
 import { GameState } from './GameState';
 
 type RendererCallbacks = {
@@ -555,15 +556,7 @@ export class Renderer {
           <section class="panel controls-panel">
             <h3>${icon('snowflake')}<span>CONTROLS</span></h3>
             <div class="control-grid">
-              <div class="control-row"><span class="keys"><b>←</b><b>→</b><b>↑</b><b>↓</b></span><span>Move Across Pit Face</span></div>
-              <div class="control-row"><span class="keys"><b>7</b><b>9</b><b>1</b><b>3</b></span><span>Diagonal Move</span></div>
-              <div class="control-row"><span class="keys"><b>Q</b><b>A</b></span><span>Rotate X Axis</span></div>
-              <div class="control-row"><span class="keys"><b>W</b><b>S</b></span><span>Rotate Y Axis</span></div>
-              <div class="control-row"><span class="keys"><b>E</b><b>D</b></span><span>Rotate Z Axis</span></div>
-              <div class="control-row"><span class="keys"><b class="wide-key">Space</b></span><span>Hard Drop</span></div>
-              <div class="control-row"><span class="keys"><b>P</b></span><span>Pause</span></div>
-              <div class="control-row"><span class="keys"><b class="wide-key">Esc</b></span><span>End Run</span></div>
-              <div class="control-row"><span class="keys"><b>R</b></span><span>Restart</span></div>
+              ${KEY_ASSIGNMENT_ROWS.map(renderKeyAssignmentRow).join('')}
               <div class="control-separator"></div>
               <div class="control-row"><span class="keys"><b class="wide-key key-icon">${icon('mouse')}Mouse</b></span><span>Tilt View</span></div>
               <div class="control-row"><span class="keys"><b class="wide-key">Wheel</b></span><span>Zoom</span></div>
@@ -580,11 +573,6 @@ export class Renderer {
         <div class="status-pill">${icon('snowflake')}<div><span class="status-label">STATUS</span><span class="status-state"><span class="status-dot"></span><span data-role="status-label">RUNNING</span></span></div></div>
         <div class="status-hint">${icon('snowflake')}<div><span class="status-label">HINT</span><span data-role="footer-tip"></span></div></div>
         <div class="status-meta"><span class="status-label">TIME</span><span data-role="timer">00:00:00</span></div>
-        <div class="status-actions">
-          <button class="status-button" data-action="pause" type="button">${icon('pause')}<span data-role="pause-label">PAUSE</span></button>
-          <button class="status-button" data-action="restart" type="button">${icon('restart')}<span>RESTART</span></button>
-          <button class="status-button" data-action="settings" type="button">${icon('settings')}<span>SETTINGS</span></button>
-        </div>
       </section>
       <section class="panel settings-panel" data-role="settings-panel" hidden>
         <h3>${icon('settings')}<span>SETUP</span></h3>
@@ -1892,6 +1880,24 @@ function deterministicNoise(index: number, salt: number): number {
 
 function renderMeterSegments(count: number): string {
   return Array.from({ length: count }, () => '<span></span>').join('');
+}
+
+function renderKeyAssignmentRow(row: KeyAssignmentRow): string {
+  const keys = row.keys.map(renderKeycap).join('');
+  return `<div class="control-row"><span class="keys">${keys}</span><span>${row.label}</span></div>`;
+}
+
+function renderKeycap(label: string): string {
+  const classNames: string[] = [];
+  if (label.length > 1) {
+    classNames.push('wide-key');
+  }
+  if (label.length > 8) {
+    classNames.push('combo-key');
+  }
+
+  const classAttribute = classNames.length > 0 ? ` class="${classNames.join(' ')}"` : '';
+  return `<b${classAttribute}>${label}</b>`;
 }
 
 function mixColorNumber(color: number, target: number, amount: number): number {

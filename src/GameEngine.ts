@@ -1,6 +1,11 @@
 import type { FieldCoordinate } from './constants/field';
-import type { Axis } from './types/coordinates';
-import type { GameStateOptions, RotationDirection } from './GameState';
+import type { GameStateOptions } from './GameState';
+import {
+  MOVEMENT_OFFSETS,
+  ONE_SHOT_CODES,
+  ROTATION_COMMANDS,
+  isRepeatableGameplayCode
+} from './config/controls';
 import { GameState } from './GameState';
 import { Renderer } from './Renderer';
 
@@ -198,7 +203,7 @@ export class GameEngine {
       return;
     }
 
-    const rotation = getRotationCommand(event);
+    const rotation = ROTATION_COMMANDS[event.code];
     if (rotation) {
       event.preventDefault();
       if (this.state.rotateActivePolyCube(rotation.axis, rotation.direction)) {
@@ -431,65 +436,15 @@ export class GameEngine {
   }
 }
 
-type RotationCommand = {
-  axis: Axis;
-  direction: RotationDirection;
-};
-
 type SyncSceneOptions = {
   settledBlocks?: boolean;
 };
 
-const MOVEMENT_OFFSETS: Record<string, FieldCoordinate> = {
-  ArrowLeft: { x: 1, y: 0, z: 0 },
-  ArrowRight: { x: -1, y: 0, z: 0 },
-  ArrowUp: { x: 0, y: 1, z: 0 },
-  ArrowDown: { x: 0, y: -1, z: 0 },
-  Home: { x: 1, y: 1, z: 0 },
-  PageUp: { x: -1, y: 1, z: 0 },
-  End: { x: 1, y: -1, z: 0 },
-  PageDown: { x: -1, y: -1, z: 0 },
-  Numpad4: { x: 1, y: 0, z: 0 },
-  Numpad6: { x: -1, y: 0, z: 0 },
-  Numpad8: { x: 0, y: 1, z: 0 },
-  Numpad2: { x: 0, y: -1, z: 0 },
-  Numpad7: { x: 1, y: 1, z: 0 },
-  Numpad9: { x: -1, y: 1, z: 0 },
-  Numpad1: { x: 1, y: -1, z: 0 },
-  Numpad3: { x: -1, y: -1, z: 0 },
-  Digit4: { x: 1, y: 0, z: 0 },
-  Digit6: { x: -1, y: 0, z: 0 },
-  Digit8: { x: 0, y: 1, z: 0 },
-  Digit2: { x: 0, y: -1, z: 0 },
-  Digit7: { x: 1, y: 1, z: 0 },
-  Digit9: { x: -1, y: 1, z: 0 },
-  Digit1: { x: 1, y: -1, z: 0 },
-  Digit3: { x: -1, y: -1, z: 0 }
-};
-
-const ONE_SHOT_CODES = new Set(['Space', 'KeyP', 'Escape', 'KeyR']);
 const HARD_DROP_ANIMATION_MS = 160;
 const HARD_DROP_SETTLE_MS = 50;
 const HARD_DROP_LOCK_DELAY_MS = HARD_DROP_ANIMATION_MS + HARD_DROP_SETTLE_MS;
 const NATURAL_LOCK_DELAY_MS = 50;
 const INPUT_REPEAT_INTERVAL_MS = 80;
-
-const ROTATION_COMMANDS: Record<string, RotationCommand> = {
-  KeyQ: { axis: 'x', direction: -1 },
-  KeyA: { axis: 'x', direction: 1 },
-  KeyW: { axis: 'y', direction: -1 },
-  KeyS: { axis: 'y', direction: 1 },
-  KeyE: { axis: 'z', direction: -1 },
-  KeyD: { axis: 'z', direction: 1 }
-};
-
-function getRotationCommand(event: KeyboardEvent): RotationCommand | null {
-  return ROTATION_COMMANDS[event.code] ?? null;
-}
-
-function isRepeatableGameplayCode(code: string): boolean {
-  return code in MOVEMENT_OFFSETS || code in ROTATION_COMMANDS;
-}
 
 function isInteractiveInputTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
