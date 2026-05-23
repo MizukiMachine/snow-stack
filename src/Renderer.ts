@@ -20,9 +20,7 @@ import {
   RingGeometry,
   SRGBColorSpace,
   Scene,
-  SphereGeometry,
   Sprite,
-  SpriteMaterial,
   Vector3,
   WebGLRenderer
 } from 'three';
@@ -30,10 +28,22 @@ import type { Material, Texture } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type {
   ActivePolyCubeSnapshot,
+  GameStateOptions,
   GamePhase,
   SettledBlockSnapshot
 } from './GameState';
-import { getPolyCubeDefinition } from './constants/blockout';
+import {
+  BLOCK_SETS,
+  MAX_LEVEL,
+  MAX_PIT_DEPTH,
+  MAX_PIT_HEIGHT,
+  MAX_PIT_WIDTH,
+  MIN_PIT_DEPTH,
+  MIN_PIT_HEIGHT,
+  MIN_PIT_WIDTH,
+  getBlockSetLabel,
+  type BlockSet
+} from './constants/blockout';
 import { CELL_SIZE } from './constants/field';
 import { GameState } from './GameState';
 
@@ -41,6 +51,7 @@ type RendererCallbacks = {
   onRestart?: () => void;
   onTogglePause?: () => void;
   onToggleSettings?: () => void;
+  onApplySetup?: (setup: GameStateOptions) => void;
 };
 
 type HudState = {
@@ -85,8 +96,8 @@ type HudIconName =
 
 type CubeWorldAssetKey =
   | 'wallIce'
-  | 'floorIce'
   | 'blockCore'
+  | 'settledIceBlock'
   | 'railStraight'
   | 'railCorner'
   | 'button'
@@ -134,17 +145,16 @@ const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, CubeWorldAssetDefinition> = O
     opacity: 0.82,
     depthWrite: false
   },
-  floorIce: {
-    path: `${CUBE_WORLD_ASSET_ROOT}/Pixel%20Blocks/glTF/Ice.gltf`,
-    tint: 0xa9e5f8,
-    opacity: 0.56,
-    depthWrite: false
-  },
   blockCore: {
     path: `${CUBE_WORLD_ASSET_ROOT}/Blocks/glTF/Block_Blank.gltf`,
     tint: 0xffffff,
     opacity: 0.12,
     depthWrite: false
+  },
+  settledIceBlock: {
+    path: `${CUBE_WORLD_ASSET_ROOT}/Blocks/glTF/Block_Ice.gltf`,
+    opacity: 0.96,
+    depthWrite: true
   },
   railStraight: {
     path: `${CUBE_WORLD_ASSET_ROOT}/Environment/glTF/Rail_Straight.gltf`,
@@ -183,6 +193,7 @@ const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, CubeWorldAssetDefinition> = O
     depthWrite: true
   }
 });
+const CUBE_WIREFRAME_BEAM_GEOMETRY = new BoxGeometry(1, 1, 1);
 
 /**
  * Three.js scene rendering and DOM-based HUD for the BlockOut pit.
@@ -215,7 +226,7 @@ export class Renderer {
   private wheelHandler: ((event: WheelEvent) => void) | null = null;
   private readonly cameraOrbit: CameraOrbitState;
   private readonly hudState: HudState;
-  private lastNextPreviewType: number | null = null;
+  private lastSettingsOpen = false;
 
   constructor(gameState: GameState, callbacks: RendererCallbacks = {}) {
     this.gameState = gameState;
@@ -348,7 +359,7 @@ export class Renderer {
     this.activePolyCubeGroup = null;
     this.settledBlocksGroup = null;
     this.glowGroup = null;
-    this.lastNextPreviewType = null;
+    this.lastSettingsOpen = false;
   }
 
   public updateActivePolyCube(polyCube: ActivePolyCubeSnapshot | null): void {
@@ -393,7 +404,12 @@ export class Renderer {
     group.position.set(origin.x, origin.y, origin.z);
 
     blocks.forEach((block) => {
-      const mesh = this.createBlockMesh(block.color, false, block.coordinate.z);
+      const mesh = this.createBlockMesh(
+        block.color,
+        false,
+        block.coordinate.z,
+        'settledIceBlock'
+      );
       mesh.position.set(
         (block.coordinate.x + 0.5) * CELL_SIZE,
         (block.coordinate.y + 0.5) * CELL_SIZE,
@@ -462,6 +478,12 @@ export class Renderer {
     this.setText(root, '[data-role="block-set"]', this.gameState.getBlockSetLabel());
     this.syncHudTimer(root);
     this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? 'RESUME' : 'PAUSE');
+    this.setText(root, '[data-role="pit-size"]', this.formatPitSize());
+    this.setText(
+      root,
+      '[data-role="start-level"]',
+      String(this.gameState.getSetup().startLevel).padStart(2, '0')
+    );
     this.setMeter(root, '[data-role="level-meter"]', Math.min(7, this.hudState.level));
     this.setMeter(
       root,
@@ -478,15 +500,9 @@ export class Renderer {
         : 'Fill complete depth planes across the pit to clear them.'
     );
 
-    const nextPreviewType = this.hudState.queue[0] ?? null;
-    if (nextPreviewType !== this.lastNextPreviewType) {
-      this.renderPreview(root.querySelector('[data-role="next-piece"]'), nextPreviewType);
-      this.lastNextPreviewType = nextPreviewType;
-    }
-
     const overlay = root.querySelector<HTMLElement>('[data-role="overlay"]');
     if (overlay) {
-      overlay.hidden = this.hudState.phase !== 'game-over';
+      overlay.hidden = this.hudState.phase !== 'game-over' || this.hudState.settingsOpen;
       this.setText(overlay, '[data-role="overlay-score"]', this.formatNumber(this.hudState.score));
       this.setText(overlay, '[data-role="overlay-level"]', String(this.hudState.level));
       this.setText(overlay, '[data-role="overlay-lines"]', String(this.hudState.clearedLayerCount));
@@ -496,12 +512,20 @@ export class Renderer {
     const settings = root.querySelector<HTMLElement>('[data-role="settings-panel"]');
     if (settings) {
       settings.hidden = !this.hudState.settingsOpen;
+      if (this.hudState.settingsOpen && !this.lastSettingsOpen) {
+        this.syncSetupControls(root);
+      }
     }
+    this.lastSettingsOpen = this.hudState.settingsOpen;
   }
 
   private createHudElement(): HTMLDivElement {
     const hud = document.createElement('div');
     const icon = (name: HudIconName) => renderHudIcon(name);
+    const blockSetButtons = BLOCK_SETS.map(
+      (blockSet) =>
+        `<button class="segmented-button" data-block-set="${blockSet}" type="button">${getBlockSetLabel(blockSet)}</button>`
+    ).join('');
     hud.className = 'ui-layer';
     hud.innerHTML = `
       <div class="brand-panel">
@@ -532,13 +556,13 @@ export class Renderer {
             <div class="panel-heading">${icon('snowflake')}<span>PLANES</span></div>
             <div class="metric-inline"><strong class="metric-value" data-role="lines">000</strong><div class="meter meter-bars" data-role="layers-meter">${renderMeterSegments(8)}</div></div>
           </section>
-          <section class="panel preview-panel">
-            <h3>${icon('snowflake')}<span>NEXT POLYCUBE</span></h3>
-            <div class="piece-preview" data-role="next-piece"></div>
-          </section>
           <section class="panel metric-card">
             <div class="panel-heading">${icon('snowflake')}<span>BLOCK SET</span></div>
             <strong class="metric-value metric-value-small" data-role="block-set">FLAT</strong>
+          </section>
+          <section class="panel metric-card">
+            <div class="panel-heading">${icon('snowflake')}<span>PIT</span></div>
+            <strong class="metric-value metric-value-small" data-role="pit-size">5x5x10</strong>
           </section>
         </div>
         <div class="command-stack">
@@ -577,15 +601,30 @@ export class Renderer {
         </div>
       </section>
       <section class="panel settings-panel" data-role="settings-panel" hidden>
-        <h3>${icon('snowflake')}<span>VIEW SETTINGS</span></h3>
-        <div class="settings-copy">
-          <p>Drag to orbit the pit.</p>
-          <p>Wheel to zoom the camera.</p>
-          <p>Q/W/E and A/S/D rotate around the three axes.</p>
-          <p>Space drops the current polycube into the pit.</p>
-          <p>Esc ends the current run.</p>
-          <p>Press <strong>R</strong> at any time to restart.</p>
-        </div>
+        <h3>${icon('settings')}<span>SETUP</span></h3>
+        <form class="setup-form" data-role="setup-form">
+          <div class="setup-field setup-field-wide">
+            <span class="setup-label">BLOCK SET</span>
+            <div class="segmented-control" data-role="block-set-control">${blockSetButtons}</div>
+          </div>
+          <label class="setup-field">
+            <span class="setup-label">WIDTH</span>
+            <input data-setup-field="width" type="number" min="${MIN_PIT_WIDTH}" max="${MAX_PIT_WIDTH}" step="1" />
+          </label>
+          <label class="setup-field">
+            <span class="setup-label">HEIGHT</span>
+            <input data-setup-field="height" type="number" min="${MIN_PIT_HEIGHT}" max="${MAX_PIT_HEIGHT}" step="1" />
+          </label>
+          <label class="setup-field">
+            <span class="setup-label">DEPTH</span>
+            <input data-setup-field="depth" type="number" min="${MIN_PIT_DEPTH}" max="${MAX_PIT_DEPTH}" step="1" />
+          </label>
+          <label class="setup-field">
+            <span class="setup-label">START</span>
+            <input data-setup-field="startLevel" type="number" min="0" max="${MAX_LEVEL - 1}" step="1" />
+          </label>
+          <button class="setup-submit" type="submit">${icon('restart')}<span>APPLY</span></button>
+        </form>
       </section>
       <section class="overlay-card" data-role="overlay" hidden>
         <div class="overlay-alert">${icon('alert')}</div>
@@ -625,7 +664,23 @@ export class Renderer {
       });
     });
 
+    hud.querySelectorAll<HTMLButtonElement>('[data-block-set]').forEach((button) => {
+      button.addEventListener('click', () => {
+        hud.querySelectorAll<HTMLButtonElement>('[data-block-set]').forEach((item) => {
+          const isActive = item === button;
+          item.classList.toggle('is-active', isActive);
+          item.setAttribute('aria-pressed', String(isActive));
+        });
+      });
+    });
+
+    hud.querySelector<HTMLFormElement>('[data-role="setup-form"]')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      this.callbacks.onApplySetup?.(this.collectSetupValues(hud));
+    });
+
     this.hudElement = hud;
+    this.syncSetupControls(hud);
     return hud;
   }
 
@@ -897,48 +952,62 @@ export class Renderer {
     group.name = 'cube-world-field-assets';
     const { width, height, depth } = this.gameState.getDimensions();
 
+    this.addCubeWorldIceWell(group, width, height, depth);
+
+    this.addCubeWorldPitRails(group, width, depth);
+    this.addCubeWorldSceneAccents(group, width, depth);
+    return group;
+  }
+
+  private addCubeWorldIceWell(group: Group, width: number, height: number, depth: number): void {
+    const addedCells = new Set<string>();
+    const addWallCell = (x: number, y: number, z: number) => {
+      const key = `${x},${y},${z}`;
+      if (addedCells.has(key)) {
+        return;
+      }
+      addedCells.add(key);
+      this.addCubeWorldAsset(group, 'wallIce', {
+        x: (x + 0.5) * CELL_SIZE,
+        y: (y + 0.5) * CELL_SIZE,
+        z: (z + 0.5) * CELL_SIZE,
+        scale: CELL_SIZE * 0.5
+      });
+    };
+
     for (let z = 0; z < depth; z += 1) {
       for (let y = 0; y < height; y += 1) {
-        this.addCubeWorldAsset(group, 'wallIce', {
-          x: -0.5 * CELL_SIZE,
-          y: (y + 0.5) * CELL_SIZE,
-          z: (z + 0.5) * CELL_SIZE,
-          scale: CELL_SIZE * 0.5
-        });
-        this.addCubeWorldAsset(group, 'wallIce', {
-          x: (width + 0.5) * CELL_SIZE,
-          y: (y + 0.5) * CELL_SIZE,
-          z: (z + 0.5) * CELL_SIZE,
-          scale: CELL_SIZE * 0.5
-        });
+        addWallCell(-1, y, z);
+        addWallCell(width, y, z);
       }
     }
 
     for (let x = 0; x < width; x += 1) {
       for (let y = 0; y < height; y += 1) {
-        this.addCubeWorldAsset(group, 'wallIce', {
-          x: (x + 0.5) * CELL_SIZE,
-          y: (y + 0.5) * CELL_SIZE,
-          z: (depth + 0.5) * CELL_SIZE,
-          scale: CELL_SIZE * 0.5
-        });
+        addWallCell(x, y, depth);
       }
     }
 
     for (let x = 0; x < width; x += 1) {
       for (let z = 0; z < depth; z += 1) {
-        this.addCubeWorldAsset(group, 'floorIce', {
-          x: (x + 0.5) * CELL_SIZE,
-          y: -0.5 * CELL_SIZE,
-          z: (z + 0.5) * CELL_SIZE,
-          scale: CELL_SIZE * 0.5
-        });
+        addWallCell(x, -1, z);
+        addWallCell(x, height, z);
       }
     }
 
-    this.addCubeWorldPitRails(group, width, depth);
-    this.addCubeWorldSceneAccents(group, width, depth);
-    return group;
+    for (let x = -1; x <= width; x += 1) {
+      for (let y = -1; y <= height; y += 1) {
+        for (let z = 0; z <= depth; z += 1) {
+          const boundaryAxes =
+            (x === -1 || x === width ? 1 : 0) +
+            (y === -1 || y === height ? 1 : 0) +
+            (z === depth ? 1 : 0);
+          if (boundaryAxes >= 2) {
+            addWallCell(x, y, z);
+          }
+        }
+      }
+    }
   }
 
   private addCubeWorldPitRails(group: Group, width: number, depth: number): void {
@@ -1133,11 +1202,19 @@ export class Renderer {
     };
   }
 
-  private createBlockMesh(color: number, isActive: boolean, depthLayer = 0): Group {
+  private createBlockMesh(
+    color: number,
+    isActive: boolean,
+    depthLayer = 0,
+    settledAssetKey?: Extract<CubeWorldAssetKey, 'settledIceBlock'>
+  ): Group {
     const cube = new Group();
     const isBehindSeparator = depthLayer > 0;
-    const blockColor = isBehindSeparator ? mixColorNumber(color, 0x7fdcff, 0.08) : color;
-    const assetCore = this.createBlockAssetCore(blockColor, isActive);
+    const surfaceColor = isBehindSeparator ? mixColorNumber(color, 0x7fdcff, 0.08) : color;
+    const wireColor = color;
+    const assetCore = settledAssetKey
+      ? this.createSettledBlockAssetCore(settledAssetKey)
+      : this.createBlockAssetCore(surfaceColor, isActive);
 
     if (assetCore) {
       cube.add(assetCore);
@@ -1145,9 +1222,9 @@ export class Renderer {
       const fallbackCore = new Mesh(
         new BoxGeometry(CELL_SIZE * 0.84, CELL_SIZE * 0.84, CELL_SIZE * 0.84),
         new MeshBasicMaterial({
-          color: mixColorNumber(blockColor, 0xffffff, isActive ? 0.24 : 0.12),
+          color: mixColorNumber(surfaceColor, 0xffffff, isActive ? 0.24 : 0.12),
           transparent: true,
-          opacity: isActive ? 0.13 : 0.09,
+          opacity: isActive ? 0.035 : 0.88,
           depthWrite: false,
           side: DoubleSide
         })
@@ -1157,12 +1234,14 @@ export class Renderer {
     }
 
     if (!isActive) {
+      cube.add(this.createThickCubeWireframe(wireColor, CELL_SIZE * 0.067, CELL_SIZE * 0.038, 35));
+
       const shadowEdges = new LineSegments(
         new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.94, CELL_SIZE * 0.94, CELL_SIZE * 0.94)),
         new LineBasicMaterial({
-          color: mixColorNumber(blockColor, 0x001a34, 0.58),
+          color: mixColorNumber(wireColor, 0x001a34, 0.42),
           transparent: true,
-          opacity: 0.52,
+          opacity: 0.72,
           depthWrite: false
         })
       );
@@ -1172,9 +1251,9 @@ export class Renderer {
       const outerEdges = new LineSegments(
         new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.96, CELL_SIZE * 0.96, CELL_SIZE * 0.96)),
         new LineBasicMaterial({
-          color: mixColorNumber(blockColor, 0xffffff, 0.3),
+          color: wireColor,
           transparent: true,
-          opacity: 0.98,
+          opacity: 1,
           depthWrite: false
         })
       );
@@ -1184,9 +1263,9 @@ export class Renderer {
       const highlightEdges = new LineSegments(
         new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.82, CELL_SIZE * 0.82, CELL_SIZE * 0.82)),
         new LineBasicMaterial({
-          color: mixColorNumber(blockColor, 0xffffff, 0.62),
+          color: mixColorNumber(wireColor, 0xffffff, 0.38),
           transparent: true,
-          opacity: 0.3,
+          opacity: 0.52,
           depthWrite: false
         })
       );
@@ -1195,14 +1274,16 @@ export class Renderer {
       return cube;
     }
 
-    const mainLineColor = mixColorNumber(blockColor, 0xffffff, 0.35);
+    cube.add(this.createThickCubeWireframe(wireColor, CELL_SIZE * 0.058, CELL_SIZE * 0.033, 43));
+
+    const mainLineColor = wireColor;
 
     const outerEdges = new LineSegments(
       new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.94, CELL_SIZE * 0.94, CELL_SIZE * 0.94)),
       new LineBasicMaterial({
         color: mainLineColor,
         transparent: true,
-        opacity: 0.98,
+        opacity: 1,
         depthWrite: false
       })
     );
@@ -1213,9 +1294,9 @@ export class Renderer {
       const depthEdges = new LineSegments(
         new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.98, CELL_SIZE * 0.98, CELL_SIZE * 0.98)),
         new LineBasicMaterial({
-          color: mixColorNumber(blockColor, 0xbffaff, 0.26),
+          color: mixColorNumber(wireColor, 0xffffff, 0.18),
           transparent: true,
-          opacity: 0.26,
+          opacity: 0.82,
           depthWrite: false
         })
       );
@@ -1223,7 +1304,7 @@ export class Renderer {
       cube.add(depthEdges);
     }
 
-    const contactMarker = this.createSeparatorContactMarker(depthLayer, blockColor);
+    const contactMarker = this.createSeparatorContactMarker(depthLayer, wireColor);
     if (contactMarker) {
       cube.add(contactMarker);
     }
@@ -1240,7 +1321,7 @@ export class Renderer {
     const material = new MeshBasicMaterial({
       color: mixColorNumber(color, isActive ? 0xffffff : 0xbff4ff, isActive ? 0.3 : 0.16),
       transparent: true,
-      opacity: isActive ? 0.14 : 0.1,
+      opacity: isActive ? 0.035 : 0.1,
       depthWrite: false,
       side: DoubleSide
     });
@@ -1252,6 +1333,86 @@ export class Renderer {
       child.material = material;
       child.renderOrder = isActive ? 36 : 18;
       child.userData.preserveGeometry = true;
+    });
+    return core;
+  }
+
+  private createThickCubeWireframe(
+    color: number,
+    backingThickness: number,
+    mainThickness: number,
+    renderOrder: number
+  ): Group {
+    const group = new Group();
+    const backingMaterial = new MeshBasicMaterial({
+      color: mixColorNumber(color, 0x001426, 0.5),
+      transparent: true,
+      opacity: 0.94,
+      depthTest: true,
+      depthWrite: false
+    });
+    const mainMaterial = new MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 1,
+      depthTest: true,
+      depthWrite: false
+    });
+    this.addCubeWireframeBeams(group, backingMaterial, CELL_SIZE * 0.99, backingThickness, renderOrder);
+    this.addCubeWireframeBeams(group, mainMaterial, CELL_SIZE * 1.01, mainThickness, renderOrder + 1);
+
+    return group;
+  }
+
+  private addCubeWireframeBeams(
+    group: Group,
+    material: MeshBasicMaterial,
+    size: number,
+    thickness: number,
+    renderOrder: number
+  ): void {
+    const half = size / 2;
+    const addBeam = (
+      width: number,
+      height: number,
+      depth: number,
+      x: number,
+      y: number,
+      z: number
+    ) => {
+      const mesh = new Mesh(CUBE_WIREFRAME_BEAM_GEOMETRY, material);
+      mesh.position.set(x, y, z);
+      mesh.scale.set(width, height, depth);
+      mesh.renderOrder = renderOrder;
+      mesh.userData.preserveGeometry = true;
+      group.add(mesh);
+    };
+
+    [-half, half].forEach((y) => {
+      [-half, half].forEach((z) => addBeam(size, thickness, thickness, 0, y, z));
+    });
+    [-half, half].forEach((x) => {
+      [-half, half].forEach((z) => addBeam(thickness, size, thickness, x, 0, z));
+    });
+    [-half, half].forEach((x) => {
+      [-half, half].forEach((y) => addBeam(thickness, thickness, size, x, y, 0));
+    });
+  }
+
+  private createSettledBlockAssetCore(
+    key: Extract<CubeWorldAssetKey, 'settledIceBlock'>
+  ): Group | null {
+    const core = this.createCubeWorldAssetInstance(key, { preserveResources: true });
+    if (!core) {
+      return null;
+    }
+
+    core.scale.setScalar(CELL_SIZE * 0.42);
+    core.traverse((child) => {
+      if (!(child instanceof Mesh)) {
+        return;
+      }
+      child.renderOrder = 18;
     });
     return core;
   }
@@ -1288,7 +1449,7 @@ export class Renderer {
     const lineMaterial = new MeshBasicMaterial({
       color: mixColorNumber(color, 0xffffff, 0.28),
       transparent: true,
-      opacity: 0.42,
+      opacity: 0.72,
       depthTest: true,
       depthWrite: false,
       side: DoubleSide
@@ -1296,7 +1457,7 @@ export class Renderer {
     const glowMaterial = new MeshBasicMaterial({
       color: mixColorNumber(color, 0x7fdcff, 0.22),
       transparent: true,
-      opacity: 0.08,
+      opacity: 0.16,
       depthTest: true,
       depthWrite: false,
       side: DoubleSide
@@ -1393,152 +1554,6 @@ export class Renderer {
     return group;
   }
 
-  private createDepthSeparators(width: number, height: number, depth: number): Group {
-    const group = new Group();
-    if (depth <= 1) {
-      return group;
-    }
-
-    for (let z = 1; z < depth; z += 1) {
-      group.add(this.createDepthSeparatorPlane(width, height, z));
-    }
-
-    return group;
-  }
-
-  private createDepthSeparatorPlane(width: number, height: number, z: number): Group {
-    const group = new Group();
-    const zPosition = z * CELL_SIZE;
-
-    const panel = new Mesh(
-      new PlaneGeometry(width * CELL_SIZE, height * CELL_SIZE),
-      new MeshBasicMaterial({
-        color: 0x1f9fd0,
-        transparent: true,
-        opacity: 0.018,
-        depthTest: true,
-        depthWrite: false,
-        side: DoubleSide
-      })
-    );
-    panel.position.set((width * CELL_SIZE) / 2, (height * CELL_SIZE) / 2, zPosition);
-    panel.renderOrder = 26;
-    group.add(panel);
-
-    const grid = this.createFaceGrid('xy', width, height, z, 0x76f7ff);
-    grid.traverse((child) => {
-      if (child instanceof LineSegments) {
-        const material = child.material as LineBasicMaterial;
-        material.opacity = 0.26;
-        material.color.setHex(0x55d7ff);
-        material.depthTest = true;
-        child.renderOrder = 27;
-      }
-      if (child instanceof Points) {
-        const material = child.material as PointsMaterial;
-        material.opacity = 0.42;
-        material.color.setHex(0x72e7ff);
-        material.depthTest = true;
-        child.renderOrder = 28;
-      }
-    });
-    group.add(grid);
-
-    const baseStrip = new Mesh(
-      new PlaneGeometry(width * CELL_SIZE, CELL_SIZE * 0.08),
-      new MeshBasicMaterial({
-        color: 0x45d8ff,
-        transparent: true,
-        opacity: 0.18,
-        depthTest: true,
-        depthWrite: false,
-        side: DoubleSide
-      })
-    );
-    baseStrip.rotation.x = -Math.PI / 2;
-    baseStrip.position.set((width * CELL_SIZE) / 2, CELL_SIZE * 0.035, zPosition);
-    baseStrip.renderOrder = 29;
-    group.add(baseStrip);
-
-    const centerFlash = new Mesh(
-      new PlaneGeometry(width * CELL_SIZE, CELL_SIZE * 0.34),
-      new MeshBasicMaterial({
-        color: 0x1caed8,
-        transparent: true,
-        opacity: 0.055,
-        depthTest: true,
-        depthWrite: false,
-        side: DoubleSide
-      })
-    );
-    centerFlash.position.set((width * CELL_SIZE) / 2, (height * CELL_SIZE) * 0.5, zPosition);
-    centerFlash.renderOrder = 25;
-    group.add(centerFlash);
-
-    return group;
-  }
-
-  private createGridNumberLabels(width: number, height: number): Group {
-    const group = new Group();
-    const frontOffset = -0.18 * CELL_SIZE;
-    const leftLabelX = (width - 0.2) * CELL_SIZE;
-    const bottomLabelY = -0.42 * CELL_SIZE;
-
-    for (let y = 1; y <= height; y += 1) {
-      const label = this.createGridNumberSprite(String(y));
-      label.position.set(leftLabelX, (y - 0.5) * CELL_SIZE, frontOffset);
-      group.add(label);
-    }
-
-    for (let x = 1; x <= width; x += 1) {
-      const label = this.createGridNumberSprite(String(x));
-      label.position.set((width - x + 0.5) * CELL_SIZE, bottomLabelY, frontOffset);
-      group.add(label);
-    }
-
-    return group;
-  }
-
-  private createGridNumberSprite(text: string): Sprite {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 96;
-    const context = canvas.getContext('2d');
-    if (!context) {
-      return new Sprite();
-    }
-
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.font = '800 48px "Bahnschrift", "Segoe UI", sans-serif';
-    context.lineJoin = 'round';
-    context.shadowColor = 'rgba(72, 218, 255, 0.9)';
-    context.shadowBlur = 18;
-    context.strokeStyle = 'rgba(18, 123, 212, 0.72)';
-    context.lineWidth = 6;
-    context.strokeText(text, canvas.width / 2, canvas.height / 2 + 1);
-    context.fillStyle = 'rgba(244, 253, 255, 0.98)';
-    context.fillText(text, canvas.width / 2, canvas.height / 2 + 1);
-
-    const texture = new CanvasTexture(canvas);
-    texture.colorSpace = SRGBColorSpace;
-    texture.minFilter = LinearFilter;
-    texture.magFilter = LinearFilter;
-
-    const material = new SpriteMaterial({
-      map: texture,
-      transparent: true,
-      opacity: 0.98,
-      depthTest: false,
-      depthWrite: false
-    });
-    const sprite = new Sprite(material);
-    sprite.scale.set(text.length > 1 ? 0.9 : 0.66, 0.58, 1);
-    sprite.renderOrder = 30;
-    return sprite;
-  }
-
   private createFieldFrameGlow(width: number, height: number, depth: number): Group {
     const group = new Group();
     const boundsGeometry = new BoxGeometry(width * CELL_SIZE, height * CELL_SIZE, depth * CELL_SIZE);
@@ -1585,48 +1600,6 @@ export class Renderer {
     return group;
   }
 
-  private createLayerScanBand(width: number, depth: number, layer: number): Group {
-    const group = new Group();
-    const y = layer * CELL_SIZE;
-    const points = [
-      new Vector3(0, y, 0),
-      new Vector3(width * CELL_SIZE, y, 0),
-      new Vector3(width * CELL_SIZE, y, 0),
-      new Vector3(width * CELL_SIZE, y, depth * CELL_SIZE),
-      new Vector3(width * CELL_SIZE, y, depth * CELL_SIZE),
-      new Vector3(0, y, depth * CELL_SIZE),
-      new Vector3(0, y, depth * CELL_SIZE),
-      new Vector3(0, y, 0)
-    ];
-
-    group.add(
-      new LineSegments(
-        new BufferGeometry().setFromPoints(points),
-        new LineBasicMaterial({
-          color: 0x56f6ff,
-          transparent: true,
-          opacity: 0.55,
-          depthWrite: false
-        })
-      )
-    );
-
-    const scanPlane = new Mesh(
-      new PlaneGeometry(width * CELL_SIZE, depth * CELL_SIZE),
-      new MeshBasicMaterial({
-        color: 0x4ef4ff,
-        transparent: true,
-        opacity: 0.08,
-        depthWrite: false
-      })
-    );
-    scanPlane.rotation.x = -Math.PI / 2;
-    scanPlane.position.set((width * CELL_SIZE) / 2, y, (depth * CELL_SIZE) / 2);
-    group.add(scanPlane);
-
-    return group;
-  }
-
   private getPlanePoint(plane: 'xy' | 'yz' | 'xz', a: number, b: number, offset: number): Vector3 {
     if (plane === 'xy') {
       return new Vector3(a * CELL_SIZE, b * CELL_SIZE, offset * CELL_SIZE);
@@ -1635,35 +1608,6 @@ export class Renderer {
       return new Vector3(offset * CELL_SIZE, b * CELL_SIZE, a * CELL_SIZE);
     }
     return new Vector3(a * CELL_SIZE, offset * CELL_SIZE, b * CELL_SIZE);
-  }
-
-  private createCornerGlow(width: number, height: number, depth: number): Group {
-    const group = new Group();
-    const corners = [
-      [0, 0, 0],
-      [width, 0, 0],
-      [0, 0, depth],
-      [width, 0, depth],
-      [0, height, 0],
-      [width, height, 0],
-      [0, height, depth],
-      [width, height, depth]
-    ] as const;
-
-    corners.forEach(([x, y, z]) => {
-      const orb = new Mesh(
-        new SphereGeometry(0.14, 10, 10),
-        new MeshBasicMaterial({
-          color: 0xe7fbff,
-          transparent: true,
-          opacity: 0.9
-        })
-      );
-      orb.position.set(x * CELL_SIZE, y * CELL_SIZE, z * CELL_SIZE);
-      group.add(orb);
-    });
-
-    return group;
   }
 
   private attachCameraControls(): void {
@@ -1789,6 +1733,7 @@ export class Renderer {
 
   private configureInitialCameraOrbit(camera: PerspectiveCamera): void {
     const { width, height, depth } = this.gameState.getDimensions();
+    const origin = this.getFieldOrigin();
     const halfWidth = (width * CELL_SIZE) / 2;
     const halfHeight = ((height + 0.6) * CELL_SIZE) / 2;
     const halfDepth = (depth * CELL_SIZE) / 2;
@@ -1798,6 +1743,11 @@ export class Renderer {
     const fitWidthDistance = halfWidth / Math.tan(halfHorizontalFov);
     const entranceFitDistance = Math.max(fitHeightDistance, fitWidthDistance);
 
+    this.cameraOrbit.target.set(
+      origin.x + (width * CELL_SIZE) / 2,
+      height * CELL_SIZE * CAMERA_SETTINGS.targetHeightFactor,
+      origin.z + (depth * CELL_SIZE) / 2
+    );
     this.cameraOrbit.radius =
       halfDepth + entranceFitDistance * CAMERA_SETTINGS.initialRadiusMultiplier;
   }
@@ -1903,71 +1853,61 @@ export class Renderer {
     this.assetsReady = false;
   }
 
-  private renderPreview(container: Element | null, type: number | null): void {
-    if (!(container instanceof HTMLElement)) {
-      return;
+  private syncSetupControls(root: ParentNode): void {
+    const setup = this.gameState.getSetup();
+    this.setInputValue(root, 'width', setup.dimensions.width);
+    this.setInputValue(root, 'height', setup.dimensions.height);
+    this.setInputValue(root, 'depth', setup.dimensions.depth);
+    this.setInputValue(root, 'startLevel', setup.startLevel);
+
+    root.querySelectorAll<HTMLButtonElement>('[data-block-set]').forEach((button) => {
+      const isActive = button.dataset.blockSet === setup.blockSet;
+      button.classList.toggle('is-active', isActive);
+      button.setAttribute('aria-pressed', String(isActive));
+    });
+  }
+
+  private collectSetupValues(root: ParentNode): GameStateOptions {
+    const setup = this.gameState.getSetup();
+    const activeBlockSet = root.querySelector<HTMLButtonElement>('[data-block-set].is-active')
+      ?.dataset.blockSet;
+    const blockSet = isBlockSet(activeBlockSet) ? activeBlockSet : setup.blockSet;
+
+    return {
+      dimensions: {
+        width: this.readSetupNumber(root, 'width', setup.dimensions.width, MIN_PIT_WIDTH, MAX_PIT_WIDTH),
+        height: this.readSetupNumber(root, 'height', setup.dimensions.height, MIN_PIT_HEIGHT, MAX_PIT_HEIGHT),
+        depth: this.readSetupNumber(root, 'depth', setup.dimensions.depth, MIN_PIT_DEPTH, MAX_PIT_DEPTH)
+      },
+      blockSet,
+      startLevel: this.readSetupNumber(root, 'startLevel', setup.startLevel, 0, MAX_LEVEL - 1)
+    };
+  }
+
+  private readSetupNumber(
+    root: ParentNode,
+    field: string,
+    fallback: number,
+    min: number,
+    max: number
+  ): number {
+    const input = root.querySelector<HTMLInputElement>(`[data-setup-field="${field}"]`);
+    const rawValue = input?.value.trim();
+    if (!rawValue) {
+      return fallback;
     }
-
-    if (type === null) {
-      container.innerHTML = '';
-      return;
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) {
+      return fallback;
     }
+    return Math.min(Math.max(Math.trunc(value), min), max);
+  }
 
-    const definition = getPolyCubeDefinition(type);
-    const blockSize = 28;
-    const gap = 4;
-    const step = blockSize + gap;
-    const depthOffsetX = 12;
-    const depthOffsetY = -10;
-    const minCellX = Math.min(...definition.cells.map((cell) => cell.x));
-    const minCellZ = Math.min(...definition.cells.map((cell) => cell.z));
-    const maxCellY = Math.max(...definition.cells.map((cell) => cell.y));
-    const cubes = definition.cells
-      .map((cell) => ({
-        x: (cell.x - minCellX) * step + (cell.z - minCellZ) * depthOffsetX,
-        y: (maxCellY - cell.y) * step + (cell.z - minCellZ) * depthOffsetY,
-        z: cell.z
-      }))
-      .sort((a, b) => b.z - a.z || a.y - b.y || a.x - b.x);
-
-    const minPreviewX = Math.min(...cubes.map((cube) => cube.x));
-    const minPreviewY = Math.min(...cubes.map((cube) => cube.y));
-    const maxPreviewX = Math.max(...cubes.map((cube) => cube.x + blockSize));
-    const maxPreviewY = Math.max(...cubes.map((cube) => cube.y + blockSize));
-    const padding = 20;
-    const viewBox = [
-      minPreviewX - padding,
-      minPreviewY - padding,
-      maxPreviewX - minPreviewX + padding * 2,
-      maxPreviewY - minPreviewY + padding * 2
-    ].join(' ');
-    const baseColor = definition.color;
-    const strokeColor = mixColor(baseColor, 0xffffff, 0.28);
-    const innerStrokeColor = mixColor(baseColor, 0x00192d, 0.18);
-    const glowColor = `#${baseColor.toString(16).padStart(6, '0')}`;
-
-    container.innerHTML = `
-      <svg
-        class="piece-preview-svg"
-        viewBox="${viewBox}"
-        preserveAspectRatio="xMidYMid meet"
-        style="--piece-color:${glowColor};"
-        aria-hidden="true"
-        focusable="false"
-      >
-        ${cubes
-          .map(({ x, y }) =>
-            renderPreviewCube(
-              x,
-              y,
-              blockSize,
-              strokeColor,
-              innerStrokeColor
-            )
-          )
-          .join('')}
-      </svg>
-    `;
+  private setInputValue(root: ParentNode, field: string, value: number): void {
+    const input = root.querySelector<HTMLInputElement>(`[data-setup-field="${field}"]`);
+    if (input) {
+      input.value = String(value);
+    }
   }
 
   private setText(root: ParentNode, selector: string, text: string): void {
@@ -2003,6 +1943,11 @@ export class Renderer {
     return new Intl.NumberFormat('en-US').format(value);
   }
 
+  private formatPitSize(): string {
+    const { width, height, depth } = this.gameState.getDimensions();
+    return `${width}x${height}x${depth}`;
+  }
+
   private formatElapsed(elapsedMs: number): string {
     const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
     const hours = Math.floor(totalSeconds / 3600)
@@ -2020,6 +1965,10 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+function isBlockSet(value: string | undefined): value is BlockSet {
+  return value !== undefined && (BLOCK_SETS as readonly string[]).includes(value);
+}
+
 function deterministicNoise(index: number, salt: number): number {
   const value = Math.sin(index * 12.9898 + salt * 78.233) * 43758.5453;
   return value - Math.floor(value);
@@ -2027,32 +1976,6 @@ function deterministicNoise(index: number, salt: number): number {
 
 function renderMeterSegments(count: number): string {
   return Array.from({ length: count }, () => '<span></span>').join('');
-}
-
-function renderPreviewCube(
-  x: number,
-  y: number,
-  size: number,
-  strokeColor: string,
-  innerStrokeColor: string
-): string {
-  return `
-    <g class="preview-cube">
-      <rect x="${x}" y="${y}" width="${size}" height="${size}" rx="4" fill="none" stroke="${strokeColor}" />
-      <rect x="${x + 6}" y="${y + 6}" width="${size - 12}" height="${size - 12}" rx="2" fill="none" stroke="${innerStrokeColor}" class="preview-cube-inner" />
-      <path d="M${x + 5} ${y + 5} H${x + size - 7}" class="preview-cube-highlight" stroke="${strokeColor}" />
-      <path d="M${x + size - 5} ${y + 6} V${y + size - 7}" class="preview-cube-shade" stroke="${innerStrokeColor}" />
-    </g>
-  `;
-}
-
-function mixColor(color: number, target: number, amount: number): string {
-  const sourceRgb = numberToRgb(color);
-  const targetRgb = numberToRgb(target);
-  const mixed = sourceRgb.map((value, index) =>
-    Math.round(value + (targetRgb[index] - value) * amount)
-  );
-  return `rgb(${mixed[0]}, ${mixed[1]}, ${mixed[2]})`;
 }
 
 function mixColorNumber(color: number, target: number, amount: number): number {
