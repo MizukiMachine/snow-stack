@@ -89,12 +89,38 @@ describe('GameEngine BlockOut controls', () => {
     expect(state.getSettledBlocks()).toHaveLength(1);
   });
 
-  it.each(['KeyP', 'Escape'])('syncs paused HUD state when %s toggles pause', (code) => {
+  it('syncs paused HUD state when KeyP toggles pause', () => {
     const { renderer } = startEngineWithPiece(0);
 
-    pressKey(code);
+    pressKey('KeyP');
 
     expect(lastHudCall(renderer)[7]).toBe(true);
+  });
+
+  it('ends the current run when Escape is pressed', () => {
+    const { state, renderer } = startEngineWithPiece(0);
+
+    pressKey('Escape');
+
+    expect(state.isGameOver()).toBe(true);
+    expect(state.getActivePolyCube()).toBeNull();
+    expect(lastHudCall(renderer)[1]).toBe('game-over');
+    expect(lastHudCall(renderer)[7]).toBe(false);
+  });
+
+  it('does not count paused time when Escape ends the current run', () => {
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValue(1_000);
+    const { renderer } = startEngineWithPiece(0);
+
+    nowSpy.mockReturnValue(2_000);
+    pressKey('KeyP');
+
+    nowSpy.mockReturnValue(7_000);
+    pressKey('Escape');
+
+    expect(lastHudCall(renderer)[6]).toBe(1_000);
+    expect(lastHudCall(renderer)[7]).toBe(false);
   });
 
   it('restarts with KeyR and resets BlockOut score state', () => {

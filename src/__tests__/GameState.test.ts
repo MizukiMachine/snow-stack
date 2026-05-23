@@ -11,6 +11,24 @@ describe('GameState BlockOut rules', () => {
     expect(state.getDropIntervalMs()).toBe(5510);
   });
 
+  it('clamps setup options to BlockOut limits', () => {
+    const state = new GameState({
+      dimensions: { width: 2, height: 9, depth: 99 },
+      startLevel: 10
+    });
+
+    expect(state.getDimensions()).toEqual({ width: 3, height: 7, depth: 18 });
+    expect(state.getLevel()).toBe(9);
+  });
+
+  it('deals each eligible polycube once before refilling the random bag', () => {
+    const state = new GameState();
+
+    expect([...state.getUpcomingQueue(8)].sort((a, b) => a - b)).toEqual([
+      0, 1, 2, 5, 6, 7, 8, 9
+    ]);
+  });
+
   it('spawns polycubes at the front of the pit and prevents out-of-bounds movement', () => {
     const state = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
     state.spawnPolyCube(2);
@@ -43,19 +61,51 @@ describe('GameState BlockOut rules', () => {
     expect(state.getScore()).toBeGreaterThan(1);
   });
 
+  it('uses the BlockOut depth cursor before moving multi-depth polycubes', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
+    state.spawnPolyCube(21);
+    const startBlocks = state.getActivePolyCube()?.blocks ?? [];
+
+    expect(state.stepActivePolyCube()).toBe('waiting');
+    expect(state.getActivePolyCube()?.blocks).toEqual(startBlocks);
+
+    expect(state.stepActivePolyCube()).toBe('moved');
+    expect(state.getActivePolyCube()?.blocks).toEqual(translateBlocks(startBlocks, { x: 0, y: 0, z: 1 }));
+  });
+
+  it('keeps hard-drop score independent from invisible rotation correction', () => {
+    const baseline = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
+    baseline.spawnPolyCube(0);
+    baseline.hardDropActivePolyCube();
+    baseline.lockActivePolyCube();
+
+    const rotated = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
+    rotated.spawnPolyCube(0);
+    rotated.rotateActivePolyCube('x', 1);
+    rotated.hardDropActivePolyCube();
+    rotated.lockActivePolyCube();
+
+    expect(rotated.getScore()).toBe(baseline.getScore());
+  });
+
   it('clears full Z planes and compacts shallower planes deeper into the pit', () => {
-    const state = new GameState({ dimensions: { width: 2, height: 2, depth: 3 } });
+    const state = new GameState({ dimensions: { width: 3, height: 3, depth: 6 } });
     seedCells(state, [
-      { x: 0, y: 0, z: 2 },
-      { x: 1, y: 0, z: 2 },
-      { x: 0, y: 1, z: 2 },
-      { x: 1, y: 1, z: 2 },
-      { x: 0, y: 0, z: 1 }
+      { x: 0, y: 0, z: 5 },
+      { x: 1, y: 0, z: 5 },
+      { x: 2, y: 0, z: 5 },
+      { x: 0, y: 1, z: 5 },
+      { x: 1, y: 1, z: 5 },
+      { x: 2, y: 1, z: 5 },
+      { x: 0, y: 2, z: 5 },
+      { x: 1, y: 2, z: 5 },
+      { x: 2, y: 2, z: 5 },
+      { x: 0, y: 0, z: 4 }
     ]);
 
     expect(state.clearCompletedPlanes()).toBe(1);
     expect(state.getClearedPlaneCount()).toBe(1);
-    expect(coordinates(state.getSettledBlocks())).toEqual([{ x: 0, y: 0, z: 2 }]);
+    expect(coordinates(state.getSettledBlocks())).toEqual([{ x: 0, y: 0, z: 5 }]);
     expect(state.getCell({ x: 0, y: 0, z: 0 })).toBe('empty');
   });
 
@@ -81,4 +131,15 @@ function coordinates(blocks: ReturnType<GameState['getSettledBlocks']>) {
   return blocks
     .map((block) => block.coordinate)
     .sort((a, b) => a.z - b.z || a.y - b.y || a.x - b.x);
+}
+
+function translateBlocks(
+  blocks: NonNullable<ReturnType<GameState['getActivePolyCube']>>['blocks'],
+  delta: { x: number; y: number; z: number }
+) {
+  return blocks.map((block) => ({
+    x: block.x + delta.x,
+    y: block.y + delta.y,
+    z: block.z + delta.z
+  }));
 }

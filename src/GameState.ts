@@ -12,6 +12,12 @@ import {
   LINE_LEVEL_FACTOR,
   LINE_NUMBER_FACTOR,
   MAX_LEVEL,
+  MAX_PIT_DEPTH,
+  MAX_PIT_HEIGHT,
+  MAX_PIT_WIDTH,
+  MIN_PIT_DEPTH,
+  MIN_PIT_HEIGHT,
+  MIN_PIT_WIDTH,
   P_LEVEL_FACTOR,
   type BlockSet,
   type PolyCubeDefinition
@@ -20,6 +26,7 @@ import {
 export type CellState = 'empty' | number;
 export type GamePhase = 'running' | 'game-over';
 export type RotationDirection = 1 | -1;
+export type ActivePolyCubeStepResult = 'moved' | 'waiting' | 'blocked' | 'none';
 
 export interface GameStateOptions {
   readonly dimensions?: FieldDimensions;
@@ -73,9 +80,9 @@ export class GameState {
     const options = isFieldDimensions(optionsOrDimensions)
       ? { dimensions: optionsOrDimensions }
       : optionsOrDimensions;
-    this.dimensions = options.dimensions ?? FIELD_DIMENSIONS;
+    this.dimensions = normalizeDimensions(options.dimensions ?? FIELD_DIMENSIONS);
     this.blockSet = options.blockSet ?? DEFAULT_BLOCK_SET;
-    this.startLevel = clampInteger(options.startLevel ?? DEFAULT_START_LEVEL, 0, MAX_LEVEL);
+    this.startLevel = clampInteger(options.startLevel ?? DEFAULT_START_LEVEL, 0, MAX_START_LEVEL);
     this.level = this.startLevel;
     this.grid = this.createEmptyGrid();
   }
@@ -128,6 +135,11 @@ export class GameState {
 
   public isGameOver(): boolean {
     return this.phase === 'game-over';
+  }
+
+  public endGame(): void {
+    this.activePolyCube = null;
+    this.phase = 'game-over';
   }
 
   public getClearedPlaneCount(): number {
@@ -261,23 +273,53 @@ export class GameState {
     return false;
   }
 
+  public stepActivePolyCube(): ActivePolyCubeStepResult {
+    if (!this.activePolyCube) {
+      return 'none';
+    }
+
+    const active = {
+      ...this.activePolyCube,
+      fallCursor: this.activePolyCube.fallCursor + 1,
+      dropScorePosition: Math.max(0, this.activePolyCube.dropScorePosition - 1)
+    };
+    this.activePolyCube = active;
+
+    if (!this.isBelowFallCursor(active)) {
+      return 'waiting';
+    }
+
+    const candidatePosition = addCoordinates(active.position, DEPTH_DROP_VECTOR);
+    if (!this.canOccupy(candidatePosition, active.cells)) {
+      return 'blocked';
+    }
+
+    this.activePolyCube = {
+      ...active,
+      position: candidatePosition
+    };
+    return 'moved';
+  }
+
   public hardDropActivePolyCube(): number {
     if (!this.activePolyCube) {
       return 0;
     }
 
-    const dropScorePosition = Math.max(0, this.dimensions.depth - 1 - this.activePolyCube.position.z);
+    let active = this.activePolyCube;
     let moved = 0;
-    while (this.moveActivePolyCube(DEPTH_DROP_VECTOR)) {
+    while (this.canOccupy(addCoordinates(active.position, DEPTH_DROP_VECTOR), active.cells)) {
+      active = {
+        ...active,
+        position: addCoordinates(active.position, DEPTH_DROP_VECTOR)
+      };
       moved += 1;
     }
-    if (moved > 0 || dropScorePosition > 0) {
-      this.activePolyCube = {
-        ...this.activePolyCube,
-        wasDropped: true,
-        dropScorePosition
-      };
-    }
+    this.activePolyCube = {
+      ...active,
+      wasDropped: true,
+      fallCursor: this.getBottomDepth(active)
+    };
     return moved;
   }
 
@@ -298,7 +340,8 @@ export class GameState {
       position,
       cells: definition.cells.map((cell) => ({ ...cell })),
       wasDropped: false,
-      dropScorePosition: 0
+      dropScorePosition: this.dimensions.depth - 1,
+      fallCursor: 0
     };
 
     if (!this.canOccupy(instance.position, instance.cells)) {
@@ -364,21 +407,29 @@ export class GameState {
   private dequeueNextDefinition(): PolyCubeDefinition {
     this.refillQueue(1);
     const nextId = this.queue.shift();
-    return getPolyCubeDefinition(nextId ?? this.getRandomEligibleDefinition().id);
+    if (nextId === undefined) {
+      throw new Error('No BlockOut polycube is available in the spawn queue.');
+    }
+    return getPolyCubeDefinition(nextId);
   }
 
   private refillQueue(minLength: number): void {
     while (this.queue.length < minLength) {
-      this.queue.push(this.getRandomEligibleDefinition().id);
+      this.queue.push(...this.createShuffledBag());
     }
   }
 
-  private getRandomEligibleDefinition(): PolyCubeDefinition {
+  private createShuffledBag(): number[] {
     const eligible = getEligiblePolyCubes(this.dimensions, this.blockSet);
     if (eligible.length === 0) {
       throw new Error('No BlockOut polycubes fit the current pit setup.');
     }
-    return eligible[Math.floor(Math.random() * eligible.length)];
+    const bag = eligible.map((definition) => definition.id);
+    for (let i = bag.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
+    }
+    return bag;
   }
 
   private createEmptyGrid(): CellState[][][] {
@@ -474,6 +525,14 @@ export class GameState {
     }
   }
 
+  private isBelowFallCursor(active: ActivePolyCube): boolean {
+    return this.getAbsoluteBlocks(active).every((block) => block.z < active.fallCursor);
+  }
+
+  private getBottomDepth(active: ActivePolyCube): number {
+    return Math.max(...this.getAbsoluteBlocks(active).map((block) => block.z));
+  }
+
   private getOutOfBoundsCorrection(
     position: FieldCoordinate,
     cells: readonly FieldCoordinate[]
@@ -502,11 +561,13 @@ interface ActivePolyCube {
   cells: FieldCoordinate[];
   readonly wasDropped: boolean;
   readonly dropScorePosition: number;
+  readonly fallCursor: number;
 }
 
 const DEPTH_DROP_VECTOR: FieldCoordinate = { x: 0, y: 0, z: 1 };
 const TIME_BASE_MS = 5510;
 const TIME_LEVEL_FACTOR = 0.64;
+const MAX_START_LEVEL = MAX_LEVEL - 1;
 
 function rotateCellAroundBlockOutCenter(
   cell: FieldCoordinate,
@@ -567,6 +628,14 @@ function isZeroCoordinate({ x, y, z }: FieldCoordinate): boolean {
 
 function clampInteger(value: number, min: number, max: number): number {
   return Math.min(Math.max(Math.trunc(value), min), max);
+}
+
+function normalizeDimensions(dimensions: FieldDimensions): FieldDimensions {
+  return {
+    width: clampInteger(dimensions.width, MIN_PIT_WIDTH, MAX_PIT_WIDTH),
+    height: clampInteger(dimensions.height, MIN_PIT_HEIGHT, MAX_PIT_HEIGHT),
+    depth: clampInteger(dimensions.depth, MIN_PIT_DEPTH, MAX_PIT_DEPTH)
+  };
 }
 
 function isFieldDimensions(value: GameStateOptions | FieldDimensions): value is FieldDimensions {

@@ -16,6 +16,7 @@ export class GameEngine {
   private startedAt = 0;
   private pausedAt = 0;
   private pausedDuration = 0;
+  private endedAt = 0;
   private lastHudElapsedSecond = -1;
   private paused = false;
   private settingsOpen = false;
@@ -39,6 +40,7 @@ export class GameEngine {
     this.startedAt = performance.now();
     this.pausedDuration = 0;
     this.pausedAt = 0;
+    this.endedAt = 0;
     this.paused = false;
     this.renderer.initialize(container);
     this.syncScene();
@@ -113,7 +115,13 @@ export class GameEngine {
       return;
     }
 
-    if (event.code === 'KeyP' || event.code === 'Escape') {
+    if (event.code === 'Escape') {
+      event.preventDefault();
+      this.endGame();
+      return;
+    }
+
+    if (event.code === 'KeyP') {
       event.preventDefault();
       this.togglePause();
       return;
@@ -131,8 +139,7 @@ export class GameEngine {
       event.preventDefault();
       this.state.hardDropActivePolyCube();
       if (this.state.getActivePolyCube()) {
-        this.state.lockActivePolyCube();
-        this.state.spawnPolyCube();
+        this.lockActiveAndSpawnNext();
       }
       this.lastDropAt = performance.now();
       this.syncScene();
@@ -167,9 +174,9 @@ export class GameEngine {
     }
 
     let settledBlocksChanged = false;
-    if (!this.state.moveActivePolyCube(DROP_OFFSET) && this.state.getActivePolyCube()) {
-      this.state.lockActivePolyCube();
-      this.state.spawnPolyCube();
+    const stepResult = this.state.stepActivePolyCube();
+    if (stepResult === 'blocked' && this.state.getActivePolyCube()) {
+      this.lockActiveAndSpawnNext();
       settledBlocksChanged = true;
     }
 
@@ -183,6 +190,7 @@ export class GameEngine {
     this.startedAt = performance.now();
     this.pausedDuration = 0;
     this.pausedAt = 0;
+    this.endedAt = 0;
     this.lastHudElapsedSecond = -1;
     this.paused = false;
     this.settingsOpen = false;
@@ -214,6 +222,10 @@ export class GameEngine {
   }
 
   private syncElapsedHud(): void {
+    if (this.state.isGameOver()) {
+      return;
+    }
+
     const elapsedMs = this.getElapsedMs();
     const elapsedSecond = Math.floor(elapsedMs / 1000);
     if (elapsedSecond === this.lastHudElapsedSecond) {
@@ -246,6 +258,37 @@ export class GameEngine {
     this.syncScene({ settledBlocks: false });
   }
 
+  private endGame(): void {
+    if (this.state.isGameOver()) {
+      return;
+    }
+
+    const now = performance.now();
+    if (this.paused) {
+      this.pausedDuration += now - this.pausedAt;
+      this.pausedAt = 0;
+    }
+
+    this.state.endGame();
+    this.markGameEnded(now);
+    this.paused = false;
+    this.syncScene();
+  }
+
+  private lockActiveAndSpawnNext(): void {
+    this.state.lockActivePolyCube();
+    this.state.spawnPolyCube();
+    if (this.state.isGameOver()) {
+      this.markGameEnded();
+    }
+  }
+
+  private markGameEnded(timestamp = performance.now()): void {
+    if (this.endedAt === 0) {
+      this.endedAt = timestamp;
+    }
+  }
+
   private moveActivePolyCube(move: FieldCoordinate): boolean {
     if (this.state.moveActivePolyCube(move)) {
       return true;
@@ -266,7 +309,7 @@ export class GameEngine {
       return 0;
     }
 
-    const now = this.paused ? this.pausedAt : performance.now();
+    const now = this.endedAt !== 0 ? this.endedAt : this.paused ? this.pausedAt : performance.now();
     return now - this.startedAt - this.pausedDuration;
   }
 }
@@ -306,8 +349,6 @@ const MOVEMENT_OFFSETS: Record<string, FieldCoordinate> = {
   Digit1: { x: 1, y: -1, z: 0 },
   Digit3: { x: -1, y: -1, z: 0 }
 };
-
-const DROP_OFFSET: FieldCoordinate = { x: 0, y: 0, z: 1 };
 
 const ONE_SHOT_CODES = new Set(['Space', 'KeyP', 'Escape', 'KeyR']);
 

@@ -13,6 +13,7 @@ Three.js と TypeScript で作る BlockOut II 風の 3D ポリキューブパズ
 - 固定済みブロックとの衝突判定
 - `x/y` 平面が全面埋まったときの `Z` プレーン消去
 - BlockOut II 由来のスコア / レベル / 落下速度計算
+- BlockOut II 由来のバッグ式ピース生成
 - `Space` によるハードドロップ
 
 ## セットアップ
@@ -31,7 +32,8 @@ npm run dev
 - `W` / `S`: Y 軸回転
 - `E` / `D`: Z 軸回転
 - `Space`: ハードドロップ
-- `P` / `Escape`: ポーズ
+- `P`: ポーズ
+- `Escape`: 現在のランを終了
 - `R`: リスタート
 
 `Space` / `P` / `Escape` / `R` はキーを押しっぱなしにしても連続入力しないようにしています。
@@ -41,4 +43,5 @@ npm run dev
 - 消去判定は `Z` プレーン単位です。
 - 回転時は BlockOut II の回転中心に近い補正を行います。
 - スコアとレベルは `/home/mizuki2/dev/BlockOut` の係数を移植しています。
+- ピット寸法は BlockOut II と同じ `width/height: 3-7`, `depth: 6-18` にクランプします。
 - 効果音は未実装です。
