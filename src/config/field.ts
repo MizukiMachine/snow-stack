@@ -10,7 +10,7 @@ import type {
 export const FIELD_DIMENSIONS = Object.freeze({
   width: 5,
   height: 5,
-  depth: 10,
+  depth: 12,
 });
 
 /**

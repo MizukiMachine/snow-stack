@@ -42,6 +42,7 @@ import {
   MIN_PIT_HEIGHT,
   MIN_PIT_WIDTH,
   getBlockSetLabel,
+  getPolyCubeDefinition,
   type BlockSet
 } from './constants/blockout';
 import { CELL_SIZE } from './constants/field';
@@ -122,7 +123,6 @@ const CAMERA_SETTINGS = {
   initialPhi: Math.PI / 2,
   minPhi: 0.34,
   maxPhi: Math.PI / 2,
-  rotateSpeedX: 0.0022,
   rotateSpeedY: 0.002,
   zoomSpeed: 0.01,
   minRadius: 8,
@@ -447,6 +447,7 @@ export class Renderer {
     );
     this.setText(root, '[data-role="status-label"]', this.getStatusLabel());
     this.setText(root, '[data-role="block-set"]', this.gameState.getBlockSetLabel());
+    this.syncQueue(root);
     this.syncHudTimer(root);
     this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? 'RESUME' : 'PAUSE');
     this.setText(root, '[data-role="pit-size"]', this.formatPitSize());
@@ -466,8 +467,12 @@ export class Renderer {
     this.setText(
       root,
       '[data-role="footer-tip"]',
-      this.hudState.phase === 'game-over'
+      this.hudState.settingsOpen
+        ? 'Setup is open. The run is held until you apply or close it.'
+        : this.hudState.phase === 'game-over'
         ? 'Rotate the view and start a fresh run.'
+        : this.hudState.isPaused
+        ? 'Run paused. Resume when you are ready.'
         : 'Fill complete depth planes across the pit to clear them.'
     );
 
@@ -478,6 +483,12 @@ export class Renderer {
       this.setText(overlay, '[data-role="overlay-level"]', String(this.hudState.level));
       this.setText(overlay, '[data-role="overlay-lines"]', String(this.hudState.clearedLayerCount));
       this.setText(overlay, '[data-role="overlay-time"]', this.formatElapsed(this.hudState.elapsedMs));
+    }
+
+    const pauseOverlay = root.querySelector<HTMLElement>('[data-role="pause-overlay"]');
+    if (pauseOverlay) {
+      pauseOverlay.hidden =
+        !this.hudState.isPaused || this.hudState.phase === 'game-over' || this.hudState.settingsOpen;
     }
 
     const settings = root.querySelector<HTMLElement>('[data-role="settings-panel"]');
@@ -528,12 +539,16 @@ export class Renderer {
             <div class="metric-inline"><strong class="metric-value" data-role="lines">000</strong><div class="meter meter-bars" data-role="layers-meter">${renderMeterSegments(8)}</div></div>
           </section>
           <section class="panel metric-card">
+            <div class="panel-heading">${icon('snowflake')}<span>NEXT</span></div>
+            <div class="queue-list" data-role="queue-list"><span>--</span><span>--</span><span>--</span></div>
+          </section>
+          <section class="panel metric-card">
             <div class="panel-heading">${icon('snowflake')}<span>BLOCK SET</span></div>
             <strong class="metric-value metric-value-small" data-role="block-set">FLAT</strong>
           </section>
           <section class="panel metric-card">
             <div class="panel-heading">${icon('snowflake')}<span>PIT</span></div>
-            <strong class="metric-value metric-value-small" data-role="pit-size">5x5x10</strong>
+            <strong class="metric-value metric-value-small" data-role="pit-size">5x5x12</strong>
           </section>
         </div>
         <div class="command-stack">
@@ -550,7 +565,7 @@ export class Renderer {
               <div class="control-row"><span class="keys"><b class="wide-key">Esc</b></span><span>End Run</span></div>
               <div class="control-row"><span class="keys"><b>R</b></span><span>Restart</span></div>
               <div class="control-separator"></div>
-              <div class="control-row"><span class="keys"><b class="wide-key key-icon">${icon('mouse')}Mouse</b></span><span>Rotate View</span></div>
+              <div class="control-row"><span class="keys"><b class="wide-key key-icon">${icon('mouse')}Mouse</b></span><span>Tilt View</span></div>
               <div class="control-row"><span class="keys"><b class="wide-key">Wheel</b></span><span>Zoom</span></div>
             </div>
           </section>
@@ -615,6 +630,15 @@ export class Renderer {
           <button class="overlay-button overlay-button-primary" data-action="settings" type="button">${icon('home')}<span>MENU</span></button>
         </div>
         <p class="overlay-footnote">You can always rotate the view and look for a path.</p>
+      </section>
+      <section class="pause-card" data-role="pause-overlay" hidden>
+        <div class="overlay-alert">${icon('pause')}</div>
+        <h2>PAUSED</h2>
+        <p>The current run is held.</p>
+        <div class="overlay-actions">
+          <button class="overlay-button overlay-button-primary" data-action="pause" type="button">${icon('pause')}<span>RESUME</span></button>
+          <button class="overlay-button" data-action="settings" type="button">${icon('settings')}<span>SETUP</span></button>
+        </div>
       </section>
     `;
 
@@ -1513,7 +1537,6 @@ export class Renderer {
         return;
       }
 
-      const deltaX = event.clientX - this.cameraOrbit.lastX;
       const deltaY = event.clientY - this.cameraOrbit.lastY;
       const dragX = event.clientX - this.cameraOrbit.startX;
       const dragY = event.clientY - this.cameraOrbit.startY;
@@ -1529,9 +1552,7 @@ export class Renderer {
           Math.abs(dragX) >= Math.abs(dragY) ? 'horizontal' : 'vertical';
       }
 
-      if (this.cameraOrbit.dragAxis === 'horizontal') {
-        this.cameraOrbit.theta += deltaX * CAMERA_SETTINGS.rotateSpeedX;
-      } else if (this.cameraOrbit.dragAxis === 'vertical') {
+      if (this.cameraOrbit.dragAxis === 'vertical') {
         this.cameraOrbit.phi = clamp(
           this.cameraOrbit.phi - deltaY * CAMERA_SETTINGS.rotateSpeedY,
           CAMERA_SETTINGS.minPhi,
@@ -1803,6 +1824,18 @@ export class Renderer {
     });
   }
 
+  private syncQueue(root: ParentNode): void {
+    const queue = root.querySelector<HTMLElement>('[data-role="queue-list"]');
+    if (!queue) {
+      return;
+    }
+    const labels = this.hudState.queue.slice(0, 3).map((id) => getPolyCubeDefinition(id).label);
+    queue.querySelectorAll<HTMLElement>('span').forEach((element, index) => {
+      element.textContent = labels[index] ?? '--';
+      element.classList.toggle('is-empty', labels[index] === undefined);
+    });
+  }
+
   private syncHudTimer(root: ParentNode): void {
     const elapsed = this.formatElapsed(this.hudState.elapsedMs);
     this.setText(root, '[data-role="timer"]', elapsed);
@@ -1812,6 +1845,9 @@ export class Renderer {
   private getStatusLabel(): string {
     if (this.hudState.phase === 'game-over') {
       return 'GAME OVER';
+    }
+    if (this.hudState.settingsOpen) {
+      return 'SETUP';
     }
     if (this.hudState.isPaused) {
       return 'PAUSED';

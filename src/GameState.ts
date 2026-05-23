@@ -409,6 +409,10 @@ export class GameState {
     }
 
     const active = this.activePolyCube;
+    if (this.canOccupy(addCoordinates(active.position, DEPTH_DROP_VECTOR), active.cells)) {
+      return 0;
+    }
+
     this.getAbsoluteBlocks(active).forEach((block) => {
       this.grid[block.z][block.y][block.x] = active.id;
     });
@@ -621,8 +625,7 @@ interface ActivePolyCube {
 
 const DEPTH_DROP_VECTOR: FieldCoordinate = { x: 0, y: 0, z: 1 };
 const BLOCKOUT_TIME_BASE_MS = 5510;
-const DROP_SPEED_MULTIPLIER = 3;
-const TIME_BASE_MS = Math.round(BLOCKOUT_TIME_BASE_MS / DROP_SPEED_MULTIPLIER);
+const TIME_BASE_MS = BLOCKOUT_TIME_BASE_MS;
 const TIME_LEVEL_FACTOR = 0.64;
 const MAX_START_LEVEL = MAX_LEVEL - 1;
 

@@ -134,6 +134,7 @@ button {
 .right-rail,
 .status-bar,
 .overlay-card,
+.pause-card,
 .settings-panel {
   position: absolute;
 }
@@ -143,6 +144,7 @@ button {
 .panel,
 .status-bar,
 .overlay-card,
+.pause-card,
 .settings-panel,
 .status-button {
   background:
@@ -163,6 +165,7 @@ button {
 .status-bar::after,
 .settings-panel::after,
 .overlay-card::after,
+.pause-card::after,
 .status-button::after {
   content: "";
   position: absolute;
@@ -317,7 +320,7 @@ button {
 }
 
 .metric-card {
-  min-height: 126px;
+  min-height: 104px;
 }
 
 .metric-value {
@@ -333,6 +336,29 @@ button {
 .metric-value-small {
   font-size: 28px;
   letter-spacing: 0;
+}
+
+.queue-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.queue-list span {
+  min-width: 0;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  color: #0b3d9a;
+  border: 1px solid rgba(65, 139, 203, 0.5);
+  background: rgba(255, 255, 255, 0.36);
+  font-size: 18px;
+  font-weight: 900;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.62);
+}
+
+.queue-list .is-empty {
+  color: rgba(11, 61, 154, 0.44);
 }
 
 .metric-inline {
@@ -704,7 +730,8 @@ button {
   height: 22px;
 }
 
-.overlay-card {
+.overlay-card,
+.pause-card {
   top: 17%;
   left: 43%;
   transform: translateX(-50%);
@@ -719,6 +746,15 @@ button {
   border-color: rgba(255, 108, 129, 0.48);
 }
 
+.pause-card {
+  top: 24%;
+  width: min(410px, calc(100vw - 60px));
+  background:
+    linear-gradient(180deg, rgba(246, 253, 255, 0.82), rgba(224, 242, 255, 0.64)),
+    linear-gradient(120deg, rgba(83, 176, 241, 0.22), transparent 38%);
+  border-color: rgba(96, 171, 228, 0.58);
+}
+
 .overlay-alert {
   display: grid;
   place-items: center;
@@ -730,7 +766,8 @@ button {
   height: 54px;
 }
 
-.overlay-card h2 {
+.overlay-card h2,
+.pause-card h2 {
   margin: 12px 0 8px;
   color: #d82d49;
   font-size: clamp(38px, 4.4vw, 54px);
@@ -739,7 +776,12 @@ button {
   text-shadow: 0 0 12px rgba(255, 255, 255, 0.92);
 }
 
+.pause-card h2 {
+  color: #0b67bc;
+}
+
 .overlay-card > p,
+.pause-card > p,
 .overlay-footnote {
   margin: 0;
   color: #082a78;
@@ -838,7 +880,7 @@ button {
   }
 
   .metric-card {
-    min-height: 104px;
+    min-height: 82px;
   }
 
   .metric-value {
@@ -902,7 +944,12 @@ button {
   }
 
   .metric-card {
-    min-height: 82px;
+    min-height: 68px;
+  }
+
+  .queue-list span {
+    height: 30px;
+    font-size: 14px;
   }
 
   .panel-heading,
@@ -1036,7 +1083,8 @@ button {
     width: min(300px, calc(100vw - 28px));
   }
 
-  .overlay-card {
+  .overlay-card,
+  .pause-card {
     left: 50%;
     top: 220px;
     transform: translateX(-50%);

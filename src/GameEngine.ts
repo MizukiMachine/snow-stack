@@ -21,6 +21,10 @@ export class GameEngine {
   private container: HTMLElement | null = null;
   private paused = false;
   private settingsOpen = false;
+  private settingsOpenedAt = 0;
+  private settingsDuration = 0;
+  private pendingLockAt = 0;
+  private repeatActionAllowedAt = 0;
 
   constructor(state: GameState = new GameState(), renderer?: Renderer) {
     this.state = state;
@@ -45,6 +49,11 @@ export class GameEngine {
     this.pausedAt = 0;
     this.endedAt = 0;
     this.paused = false;
+    this.settingsOpen = false;
+    this.settingsOpenedAt = 0;
+    this.settingsDuration = 0;
+    this.pendingLockAt = 0;
+    this.repeatActionAllowedAt = 0;
     this.renderer.initialize(container);
     this.syncScene();
     this.attachInputHandlers();
@@ -108,8 +117,26 @@ export class GameEngine {
   }
 
   private handleKeyDown(event: KeyboardEvent): void {
+    if (isInteractiveInputTarget(event.target)) {
+      if (event.code === 'Escape' && this.settingsOpen) {
+        event.preventDefault();
+        this.toggleSettings();
+      }
+      return;
+    }
+
     if (event.repeat && ONE_SHOT_CODES.has(event.code)) {
       event.preventDefault();
+      return;
+    }
+
+    if (event.code === 'Escape' && this.settingsOpen) {
+      event.preventDefault();
+      this.toggleSettings();
+      return;
+    }
+
+    if (this.settingsOpen) {
       return;
     }
 
@@ -139,11 +166,22 @@ export class GameEngine {
       return;
     }
 
+    if (this.pendingLockAt !== 0) {
+      return;
+    }
+
+    if (event.repeat && isRepeatableGameplayCode(event.code)) {
+      event.preventDefault();
+      if (performance.now() < this.repeatActionAllowedAt) {
+        return;
+      }
+    }
+
     if (event.code === 'Space') {
       event.preventDefault();
       this.state.hardDropActivePolyCube();
       if (this.state.getActivePolyCube()) {
-        this.lockActiveAndSpawnNext();
+        this.scheduleActiveLock(HARD_DROP_LOCK_DELAY_MS);
       }
       this.lastDropAt = performance.now();
       this.syncScene();
@@ -154,6 +192,7 @@ export class GameEngine {
     if (move) {
       event.preventDefault();
       if (this.moveActivePolyCube(move)) {
+        this.markRepeatActionCooldown();
         this.syncScene({ settledBlocks: false });
       }
       return;
@@ -163,29 +202,39 @@ export class GameEngine {
     if (rotation) {
       event.preventDefault();
       if (this.state.rotateActivePolyCube(rotation.axis, rotation.direction)) {
+        this.markRepeatActionCooldown();
         this.syncScene({ settledBlocks: false });
       }
     }
   }
 
   private advanceGame(timestamp: number): void {
+    if (this.paused || this.settingsOpen || this.state.isGameOver()) {
+      return;
+    }
+
+    if (this.pendingLockAt !== 0) {
+      if (timestamp >= this.pendingLockAt) {
+        this.lockActiveAndSpawnNext();
+        this.lastDropAt = timestamp;
+        this.syncScene({ settledBlocks: true });
+      }
+      return;
+    }
+
     if (
-      this.paused ||
-      this.state.isGameOver() ||
       timestamp - this.lastDropAt < this.state.getDropIntervalMs()
     ) {
       return;
     }
 
-    let settledBlocksChanged = false;
     const stepResult = this.state.stepActivePolyCube();
     if (stepResult === 'blocked' && this.state.getActivePolyCube()) {
-      this.lockActiveAndSpawnNext();
-      settledBlocksChanged = true;
+      this.scheduleActiveLock(NATURAL_LOCK_DELAY_MS, timestamp);
     }
 
     this.lastDropAt = timestamp;
-    this.syncScene({ settledBlocks: settledBlocksChanged });
+    this.syncScene({ settledBlocks: false });
   }
 
   private restart(): void {
@@ -201,6 +250,10 @@ export class GameEngine {
     this.state.ensureActivePolyCube();
     this.resetRunClock();
     this.settingsOpen = false;
+    this.settingsOpenedAt = 0;
+    this.settingsDuration = 0;
+    this.pendingLockAt = 0;
+    this.repeatActionAllowedAt = 0;
     this.lastDropAt = performance.now();
 
     if (this.container) {
@@ -218,6 +271,11 @@ export class GameEngine {
     this.endedAt = 0;
     this.lastHudElapsedSecond = -1;
     this.paused = false;
+    this.settingsOpen = false;
+    this.settingsOpenedAt = 0;
+    this.settingsDuration = 0;
+    this.pendingLockAt = 0;
+    this.repeatActionAllowedAt = 0;
     this.lastDropAt = performance.now();
   }
 
@@ -230,7 +288,7 @@ export class GameEngine {
     }
     this.renderer.updateActivePolyCube(this.state.getActivePolyCube());
     this.renderer.updateHud(
-      [],
+      this.state.getUpcomingQueue(3),
       this.state.getPhase(),
       this.state.getClearedLayerCount(),
       this.state.getScore(),
@@ -260,7 +318,7 @@ export class GameEngine {
   }
 
   private togglePause(): void {
-    if (this.state.isGameOver()) {
+    if (this.state.isGameOver() || this.settingsOpen) {
       return;
     }
 
@@ -277,7 +335,22 @@ export class GameEngine {
   }
 
   private toggleSettings(): void {
-    this.settingsOpen = !this.settingsOpen;
+    const now = performance.now();
+    if (this.settingsOpen) {
+      this.settingsOpen = false;
+      if (!this.paused && this.settingsOpenedAt !== 0) {
+        const openDuration = now - this.settingsOpenedAt;
+        this.settingsDuration += openDuration;
+        if (this.pendingLockAt !== 0) {
+          this.pendingLockAt += openDuration;
+        }
+      }
+      this.settingsOpenedAt = 0;
+      this.lastDropAt = now;
+    } else {
+      this.settingsOpen = true;
+      this.settingsOpenedAt = now;
+    }
     this.syncScene({ settledBlocks: false });
   }
 
@@ -295,15 +368,32 @@ export class GameEngine {
     this.state.endGame();
     this.markGameEnded(now);
     this.paused = false;
+    this.settingsOpen = false;
+    this.settingsOpenedAt = 0;
+    this.pendingLockAt = 0;
+    this.repeatActionAllowedAt = 0;
     this.syncScene();
   }
 
   private lockActiveAndSpawnNext(): void {
+    this.pendingLockAt = 0;
+    this.repeatActionAllowedAt = 0;
     this.state.lockActivePolyCube();
+    if (this.state.getActivePolyCube()) {
+      return;
+    }
     this.state.spawnPolyCube();
     if (this.state.isGameOver()) {
       this.markGameEnded();
     }
+  }
+
+  private scheduleActiveLock(delayMs: number, timestamp = performance.now()): void {
+    this.pendingLockAt = timestamp + delayMs;
+  }
+
+  private markRepeatActionCooldown(timestamp = performance.now()): void {
+    this.repeatActionAllowedAt = timestamp + INPUT_REPEAT_INTERVAL_MS;
   }
 
   private markGameEnded(timestamp = performance.now()): void {
@@ -333,7 +423,11 @@ export class GameEngine {
     }
 
     const now = this.endedAt !== 0 ? this.endedAt : this.paused ? this.pausedAt : performance.now();
-    return now - this.startedAt - this.pausedDuration;
+    const activeSettingsDuration =
+      this.settingsOpen && !this.paused && this.settingsOpenedAt !== 0
+        ? now - this.settingsOpenedAt
+        : 0;
+    return now - this.startedAt - this.pausedDuration - this.settingsDuration - activeSettingsDuration;
   }
 }
 
@@ -374,6 +468,9 @@ const MOVEMENT_OFFSETS: Record<string, FieldCoordinate> = {
 };
 
 const ONE_SHOT_CODES = new Set(['Space', 'KeyP', 'Escape', 'KeyR']);
+const HARD_DROP_LOCK_DELAY_MS = 160;
+const NATURAL_LOCK_DELAY_MS = 50;
+const INPUT_REPEAT_INTERVAL_MS = 80;
 
 const ROTATION_COMMANDS: Record<string, RotationCommand> = {
   KeyQ: { axis: 'x', direction: -1 },
@@ -386,4 +483,15 @@ const ROTATION_COMMANDS: Record<string, RotationCommand> = {
 
 function getRotationCommand(event: KeyboardEvent): RotationCommand | null {
   return ROTATION_COMMANDS[event.code] ?? null;
+}
+
+function isRepeatableGameplayCode(code: string): boolean {
+  return code in MOVEMENT_OFFSETS || code in ROTATION_COMMANDS;
+}
+
+function isInteractiveInputTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  return Boolean(target.closest('input, textarea, select, button, [contenteditable="true"]'));
 }
