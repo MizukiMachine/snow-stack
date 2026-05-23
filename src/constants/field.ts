@@ -21,7 +21,7 @@ export const CELL_SIZE = 1;
 export const FIELD_DIMENSIONS: FieldDimensions = Object.freeze({
   width: 5,
   height: 5,
-  depth: 12
+  depth: 10
 });
 
 /**

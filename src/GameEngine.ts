@@ -1,6 +1,6 @@
 import type { FieldCoordinate } from './constants/field';
 import type { Axis } from './types/coordinates';
-import type { RotationDirection } from './GameState';
+import type { GameStateOptions, RotationDirection } from './GameState';
 import { GameState } from './GameState';
 import { Renderer } from './Renderer';
 
@@ -18,6 +18,7 @@ export class GameEngine {
   private pausedDuration = 0;
   private endedAt = 0;
   private lastHudElapsedSecond = -1;
+  private container: HTMLElement | null = null;
   private paused = false;
   private settingsOpen = false;
 
@@ -28,7 +29,8 @@ export class GameEngine {
       new Renderer(this.state, {
         onRestart: () => this.restart(),
         onTogglePause: () => this.togglePause(),
-        onToggleSettings: () => this.toggleSettings()
+        onToggleSettings: () => this.toggleSettings(),
+        onApplySetup: (setup) => this.applySetup(setup)
       });
   }
 
@@ -36,6 +38,7 @@ export class GameEngine {
    * 指定したコンテナに Three.js のキャンバスを初期化し、レンダリングループを開始する。
    */
   public start(container: HTMLElement): void {
+    this.container = container;
     this.state.ensureActivePolyCube();
     this.startedAt = performance.now();
     this.pausedDuration = 0;
@@ -59,6 +62,7 @@ export class GameEngine {
 
     this.detachInputHandlers();
     this.renderer.dispose();
+    this.container = null;
   }
 
   /**
@@ -187,15 +191,34 @@ export class GameEngine {
   private restart(): void {
     this.state.reset();
     this.state.ensureActivePolyCube();
+    this.resetRunClock();
+    this.settingsOpen = false;
+    this.syncScene();
+  }
+
+  private applySetup(setup: GameStateOptions): void {
+    this.state.configure(setup);
+    this.state.ensureActivePolyCube();
+    this.resetRunClock();
+    this.settingsOpen = false;
+    this.lastDropAt = performance.now();
+
+    if (this.container) {
+      this.renderer.dispose();
+      this.renderer.initialize(this.container);
+    }
+
+    this.syncScene();
+  }
+
+  private resetRunClock(): void {
     this.startedAt = performance.now();
     this.pausedDuration = 0;
     this.pausedAt = 0;
     this.endedAt = 0;
     this.lastHudElapsedSecond = -1;
     this.paused = false;
-    this.settingsOpen = false;
     this.lastDropAt = performance.now();
-    this.syncScene();
   }
 
   private syncScene(options: SyncSceneOptions = {}): void {
@@ -207,7 +230,7 @@ export class GameEngine {
     }
     this.renderer.updateActivePolyCube(this.state.getActivePolyCube());
     this.renderer.updateHud(
-      this.state.getUpcomingQueue(),
+      [],
       this.state.getPhase(),
       this.state.getClearedLayerCount(),
       this.state.getScore(),

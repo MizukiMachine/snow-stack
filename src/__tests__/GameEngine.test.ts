@@ -75,7 +75,7 @@ describe('GameEngine BlockOut controls', () => {
     pressKey('Space');
 
     expect(state.getSettledBlocks()).toHaveLength(1);
-    expect(state.getSettledBlocks()[0].coordinate.z).toBe(11);
+    expect(state.getSettledBlocks()[0].coordinate.z).toBe(9);
     expect(state.getActivePolyCube()).not.toBeNull();
     expect(state.getScore()).toBeGreaterThan(1);
   });

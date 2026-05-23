@@ -5,7 +5,7 @@ describe('GameState BlockOut rules', () => {
   it('uses BlockOut default pit dimensions, block set, level, and speed', () => {
     const state = new GameState();
 
-    expect(state.getDimensions()).toEqual({ width: 5, height: 5, depth: 12 });
+    expect(state.getDimensions()).toEqual({ width: 5, height: 5, depth: 10 });
     expect(state.getBlockSet()).toBe('flat');
     expect(state.getLevel()).toBe(0);
     expect(state.getDropIntervalMs()).toBe(5510);
@@ -21,12 +21,71 @@ describe('GameState BlockOut rules', () => {
     expect(state.getLevel()).toBe(9);
   });
 
+  it('applies BlockOut setup changes and resets the current run', () => {
+    const state = new GameState({ randomSeed: 1 });
+    state.spawnPolyCube(0);
+    state.hardDropActivePolyCube();
+    state.lockActivePolyCube();
+
+    state.configure({
+      dimensions: { width: 3, height: 3, depth: 10 },
+      blockSet: 'basic',
+      startLevel: 4,
+      randomSeed: 99
+    });
+
+    expect(state.getSetup()).toEqual({
+      dimensions: { width: 3, height: 3, depth: 10 },
+      blockSet: 'basic',
+      startLevel: 4,
+      randomSeed: 99
+    });
+    expect(state.getLevel()).toBe(4);
+    expect(state.getScore()).toBe(0);
+    expect(state.getSettledBlocks()).toHaveLength(0);
+    expect(state.getActivePolyCube()).toBeNull();
+    expect([...state.getUpcomingQueue(7)].sort((a, b) => a - b)).toEqual([
+      5, 7, 8, 9, 32, 33, 34
+    ]);
+  });
+
+  it('preserves the configured seed when setup changes do not specify a new seed', () => {
+    const state = new GameState({ randomSeed: 12345 });
+    const originalSeed = state.getSetup().randomSeed;
+
+    state.configure({ startLevel: 3 });
+
+    expect(state.getSetup().randomSeed).toBe(originalSeed);
+    expect(state.getLevel()).toBe(3);
+    const queue = state.getUpcomingQueue(8);
+    state.reset();
+    expect(state.getUpcomingQueue(8)).toEqual(queue);
+  });
+
   it('deals each eligible polycube once before refilling the random bag', () => {
     const state = new GameState();
 
     expect([...state.getUpcomingQueue(8)].sort((a, b) => a - b)).toEqual([
       0, 1, 2, 5, 6, 7, 8, 9
     ]);
+  });
+
+  it('uses a deterministic seeded LCG for shuffled bags', () => {
+    const first = new GameState({ randomSeed: 12345 });
+    const second = new GameState({ randomSeed: 12345 });
+    const firstQueue = first.getUpcomingQueue(16);
+    const secondQueue = second.getUpcomingQueue(16);
+
+    expect(firstQueue).toEqual(secondQueue);
+    expect([...firstQueue.slice(0, 8)].sort((a, b) => a - b)).toEqual([
+      0, 1, 2, 5, 6, 7, 8, 9
+    ]);
+    expect([...firstQueue.slice(8, 16)].sort((a, b) => a - b)).toEqual([
+      0, 1, 2, 5, 6, 7, 8, 9
+    ]);
+
+    first.reset();
+    expect(first.getUpcomingQueue(16)).toEqual(firstQueue);
   });
 
   it('spawns polycubes at the front of the pit and prevents out-of-bounds movement', () => {

@@ -32,6 +32,14 @@ export interface GameStateOptions {
   readonly dimensions?: FieldDimensions;
   readonly blockSet?: BlockSet;
   readonly startLevel?: number;
+  readonly randomSeed?: number;
+}
+
+export interface GameSetup {
+  readonly dimensions: FieldDimensions;
+  readonly blockSet: BlockSet;
+  readonly startLevel: number;
+  readonly randomSeed: number;
 }
 
 export interface ActivePolyCubeSnapshot {
@@ -59,9 +67,12 @@ export interface ScoreStatistics {
  * z as depth; pieces fall toward increasing z and full x/y planes are removed.
  */
 export class GameState {
-  private readonly dimensions: FieldDimensions;
-  private readonly blockSet: BlockSet;
-  private readonly startLevel: number;
+  private dimensions: FieldDimensions;
+  private blockSet: BlockSet;
+  private startLevel: number;
+  private randomSeed: number;
+  private fixedRandomSeed: boolean;
+  private rngState: number;
   private grid: CellState[][][];
   private activePolyCube: ActivePolyCube | null = null;
   private queue: number[] = [];
@@ -80,23 +91,53 @@ export class GameState {
     const options = isFieldDimensions(optionsOrDimensions)
       ? { dimensions: optionsOrDimensions }
       : optionsOrDimensions;
-    this.dimensions = normalizeDimensions(options.dimensions ?? FIELD_DIMENSIONS);
-    this.blockSet = options.blockSet ?? DEFAULT_BLOCK_SET;
-    this.startLevel = clampInteger(options.startLevel ?? DEFAULT_START_LEVEL, 0, MAX_START_LEVEL);
+    const setup = normalizeSetup(options);
+    this.dimensions = setup.dimensions;
+    this.blockSet = setup.blockSet;
+    this.startLevel = setup.startLevel;
+    this.randomSeed = setup.randomSeed;
+    this.fixedRandomSeed = options.randomSeed !== undefined;
+    this.rngState = this.randomSeed;
     this.level = this.startLevel;
     this.grid = this.createEmptyGrid();
   }
 
   public getDimensions(): FieldDimensions {
-    return this.dimensions;
+    return { ...this.dimensions };
   }
 
   public getBlockSet(): BlockSet {
     return this.blockSet;
   }
 
+  public getSetup(): GameSetup {
+    return {
+      dimensions: this.getDimensions(),
+      blockSet: this.blockSet,
+      startLevel: this.startLevel,
+      randomSeed: this.randomSeed
+    };
+  }
+
   public getBlockSetLabel(): string {
     return getBlockSetLabel(this.blockSet);
+  }
+
+  public configure(options: GameStateOptions): void {
+    const setup = normalizeSetup({
+      dimensions: options.dimensions ?? this.dimensions,
+      blockSet: options.blockSet ?? this.blockSet,
+      startLevel: options.startLevel ?? this.startLevel,
+      randomSeed: options.randomSeed ?? this.randomSeed
+    });
+    this.dimensions = setup.dimensions;
+    this.blockSet = setup.blockSet;
+    this.startLevel = setup.startLevel;
+    this.randomSeed = setup.randomSeed;
+    this.fixedRandomSeed =
+      options.randomSeed !== undefined ? true : this.fixedRandomSeed;
+    this.rngState = this.randomSeed;
+    this.resetRuntimeState();
   }
 
   public getCell(coordinate: FieldCoordinate): CellState | undefined {
@@ -117,6 +158,14 @@ export class GameState {
   }
 
   public reset(): void {
+    if (!this.fixedRandomSeed) {
+      this.randomSeed = createRandomSeed();
+    }
+    this.rngState = this.randomSeed;
+    this.resetRuntimeState();
+  }
+
+  private resetRuntimeState(): void {
     this.grid = this.createEmptyGrid();
     this.activePolyCube = null;
     this.queue = [];
@@ -426,10 +475,15 @@ export class GameState {
     }
     const bag = eligible.map((definition) => definition.id);
     for (let i = bag.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(this.nextRandom() * (i + 1));
       [bag[i], bag[j]] = [bag[j], bag[i]];
     }
     return bag;
+  }
+
+  private nextRandom(): number {
+    this.rngState = (Math.imul(1664525, this.rngState) + 1013904223) >>> 0;
+    return this.rngState / 0x100000000;
   }
 
   private createEmptyGrid(): CellState[][][] {
@@ -636,6 +690,30 @@ function normalizeDimensions(dimensions: FieldDimensions): FieldDimensions {
     height: clampInteger(dimensions.height, MIN_PIT_HEIGHT, MAX_PIT_HEIGHT),
     depth: clampInteger(dimensions.depth, MIN_PIT_DEPTH, MAX_PIT_DEPTH)
   };
+}
+
+function normalizeSetup(options: GameStateOptions): GameSetup {
+  return {
+    dimensions: normalizeDimensions(options.dimensions ?? FIELD_DIMENSIONS),
+    blockSet: options.blockSet ?? DEFAULT_BLOCK_SET,
+    startLevel: clampInteger(options.startLevel ?? DEFAULT_START_LEVEL, 0, MAX_START_LEVEL),
+    randomSeed: normalizeSeed(options.randomSeed ?? createRandomSeed())
+  };
+}
+
+function normalizeSeed(seed: number): number {
+  return Math.max(1, Math.trunc(seed) >>> 0);
+}
+
+function createRandomSeed(): number {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi?.getRandomValues) {
+    const values = new Uint32Array(1);
+    cryptoApi.getRandomValues(values);
+    return normalizeSeed(values[0]);
+  }
+
+  return normalizeSeed(Date.now());
 }
 
 function isFieldDimensions(value: GameStateOptions | FieldDimensions): value is FieldDimensions {
