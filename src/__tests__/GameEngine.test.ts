@@ -51,6 +51,26 @@ describe('GameEngine BlockOut controls', () => {
     expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 1, z: 0 }]);
   });
 
+  it('throttles held movement keys without slowing deliberate key presses', () => {
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValue(1_000);
+    const { state } = startEngineWithPiece(0);
+
+    pressKey('ArrowRight');
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 0, z: 0 }]);
+
+    nowSpy.mockReturnValue(1_020);
+    pressKey('ArrowRight', { repeat: true });
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 0, z: 0 }]);
+
+    nowSpy.mockReturnValue(1_080);
+    pressKey('ArrowRight', { repeat: true });
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 2, y: 0, z: 0 }]);
+
+    pressKey('ArrowUp');
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 2, y: 1, z: 0 }]);
+  });
+
   it.each([
     ['KeyQ', 'x', -1],
     ['KeyA', 'x', 1],
@@ -69,23 +89,36 @@ describe('GameEngine BlockOut controls', () => {
     expect(rotateSpy).toHaveBeenCalledWith(axis, direction);
   });
 
-  it('hard drops with Space, locks the current polycube, and spawns the next one', () => {
-    const { state } = startEngineWithPiece(0);
+  it('hard drops with Space, waits briefly, locks the current polycube, and spawns the next one', () => {
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValue(1_000);
+    const { engine, state } = startEngineWithPiece(0);
 
     pressKey('Space');
 
+    expect(state.getSettledBlocks()).toHaveLength(0);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 11 }]);
+
+    advanceGame(engine, 1_159);
+    expect(state.getSettledBlocks()).toHaveLength(0);
+
+    advanceGame(engine, 1_160);
     expect(state.getSettledBlocks()).toHaveLength(1);
-    expect(state.getSettledBlocks()[0].coordinate.z).toBe(9);
+    expect(state.getSettledBlocks()[0].coordinate.z).toBe(11);
     expect(state.getActivePolyCube()).not.toBeNull();
     expect(state.getScore()).toBeGreaterThan(1);
   });
 
   it('ignores repeated Space keydown events after a hard drop', () => {
-    const { state } = startEngineWithPiece(0);
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValue(1_000);
+    const { engine, state } = startEngineWithPiece(0);
 
     pressKey('Space');
     pressKey('Space', { repeat: true });
 
+    expect(state.getSettledBlocks()).toHaveLength(0);
+    advanceGame(engine, 1_160);
     expect(state.getSettledBlocks()).toHaveLength(1);
   });
 
@@ -132,6 +165,41 @@ describe('GameEngine BlockOut controls', () => {
     expect(state.getScore()).toBe(0);
     expect(state.getSettledBlocks()).toHaveLength(0);
     expect(state.getActivePolyCube()).not.toBeNull();
+  });
+
+  it('holds the run and ignores gameplay keys while settings are open', () => {
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValue(1_000);
+    const { engine, state, renderer } = startEngineWithPiece(0);
+    const blocksBeforeSettings = state.getActivePolyCube()?.blocks;
+
+    toggleSettings(engine);
+    pressKey('ArrowRight');
+    pressKey('Space');
+    advanceGame(engine, 1_000 + state.getDropIntervalMs() + 1);
+
+    expect(state.getActivePolyCube()?.blocks).toEqual(blocksBeforeSettings);
+    expect(state.getSettledBlocks()).toHaveLength(0);
+    expect(lastHudCall(renderer)[8]).toBe(true);
+
+    nowSpy.mockReturnValue(3_500);
+    toggleSettings(engine);
+    expect(lastHudCall(renderer)[6]).toBe(0);
+    expect(lastHudCall(renderer)[8]).toBe(false);
+  });
+
+  it('ignores game shortcuts from focused form controls', () => {
+    const { state } = startEngineWithPiece(0);
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    const blocksBeforeInput = state.getActivePolyCube()?.blocks;
+
+    pressKeyOn(input, 'ArrowRight');
+    pressKeyOn(input, 'Space');
+
+    expect(state.getActivePolyCube()?.blocks).toEqual(blocksBeforeInput);
+    expect(state.getSettledBlocks()).toHaveLength(0);
   });
 
   it('disposes the renderer, detaches input handlers, and ignores keys after stop', () => {
@@ -194,6 +262,25 @@ function pressKey(code: string, options: { repeat?: boolean } = {}): void {
       cancelable: true
     })
   );
+}
+
+function pressKeyOn(target: HTMLElement, code: string, options: { repeat?: boolean } = {}): void {
+  target.dispatchEvent(
+    new KeyboardEvent('keydown', {
+      code,
+      repeat: options.repeat ?? false,
+      bubbles: true,
+      cancelable: true
+    })
+  );
+}
+
+function advanceGame(engine: GameEngine, timestamp: number): void {
+  (engine as unknown as { advanceGame: (timestamp: number) => void }).advanceGame(timestamp);
+}
+
+function toggleSettings(engine: GameEngine): void {
+  (engine as unknown as { toggleSettings: () => void }).toggleSettings();
 }
 
 function lastHudCall(renderer: RendererMock): unknown[] {

@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { GameState } from '../GameState';
+import { POLYCUBE_DEFINITIONS } from '../constants/blockout';
 
 describe('GameState BlockOut rules', () => {
   it('uses BlockOut default pit dimensions, block set, level, and speed', () => {
     const state = new GameState();
 
-    expect(state.getDimensions()).toEqual({ width: 5, height: 5, depth: 10 });
+    expect(state.getDimensions()).toEqual({ width: 5, height: 5, depth: 12 });
     expect(state.getBlockSet()).toBe('flat');
     expect(state.getLevel()).toBe(0);
-    expect(state.getDropIntervalMs()).toBe(1837);
+    expect(state.getDropIntervalMs()).toBe(5510);
   });
 
   it('clamps setup options to BlockOut limits', () => {
@@ -120,6 +121,30 @@ describe('GameState BlockOut rules', () => {
     expect(state.getScore()).toBeGreaterThan(1);
   });
 
+  it('prevents direct locking while the active polycube can still fall', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
+    state.spawnPolyCube(0);
+
+    expect(state.lockActivePolyCube()).toBe(0);
+    expect(state.getSettledBlocks()).toHaveLength(0);
+    expect(state.getActivePolyCube()).toEqual({
+      id: 0,
+      label: 'P00',
+      color: expect.any(Number),
+      blocks: [{ x: 4, y: 0, z: 0 }]
+    });
+  });
+
+  it('matches the BlockOut score table for a top-dropped single cube in Flat Fun', () => {
+    const state = new GameState();
+    state.spawnPolyCube(0);
+
+    state.hardDropActivePolyCube();
+    state.lockActivePolyCube();
+
+    expect(state.getScore()).toBe(9);
+  });
+
   it('uses the BlockOut depth cursor before moving multi-depth polycubes', () => {
     const state = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
     state.spawnPolyCube(21);
@@ -178,6 +203,28 @@ describe('GameState BlockOut rules', () => {
     expect(state.getPhase()).toBe('game-over');
     expect(state.isGameOver()).toBe(true);
   });
+
+  it('rotates every BlockOut polycube back to its original cells after four turns per axis', () => {
+    for (const definition of POLYCUBE_DEFINITIONS) {
+      for (const axis of ['x', 'y', 'z'] as const) {
+        const state = new GameState({
+          dimensions: { width: 7, height: 7, depth: 18 },
+          blockSet: 'extended'
+        });
+        state.spawnPolyCube(definition.id);
+        const spawnX = 7 - definition.width;
+        const centeredX = Math.floor((7 - definition.width) / 2);
+        expect(state.moveActivePolyCube({ x: centeredX - spawnX, y: 2, z: 4 })).toBe(true);
+        const original = sortedBlocks(state.getActivePolyCube()?.blocks ?? []);
+
+        for (let i = 0; i < 4; i += 1) {
+          expect(state.rotateActivePolyCube(axis, 1)).toBe(true);
+        }
+
+        expect(sortedBlocks(state.getActivePolyCube()?.blocks ?? [])).toEqual(original);
+      }
+    }
+  });
 });
 
 function seedCells(state: GameState, cells: { x: number; y: number; z: number }[]): void {
@@ -201,4 +248,8 @@ function translateBlocks(
     y: block.y + delta.y,
     z: block.z + delta.z
   }));
+}
+
+function sortedBlocks(blocks: NonNullable<ReturnType<GameState['getActivePolyCube']>>['blocks']) {
+  return [...blocks].sort((a, b) => a.z - b.z || a.y - b.y || a.x - b.x);
 }
