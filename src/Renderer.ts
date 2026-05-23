@@ -1,5 +1,4 @@
 import {
-  AdditiveBlending,
   AmbientLight,
   BufferGeometry,
   BoxGeometry,
@@ -14,7 +13,6 @@ import {
   LineSegments,
   Mesh,
   MeshBasicMaterial,
-  MeshStandardMaterial,
   PerspectiveCamera,
   PlaneGeometry,
   Points,
@@ -274,29 +272,8 @@ export class Renderer {
       group.add(mesh);
     });
 
-    const glow = new Group();
-    glow.position.copy(group.position);
-    polyCube.blocks.forEach((block) => {
-      const orb = new Mesh(
-        new SphereGeometry(0.42, 16, 16),
-        new MeshBasicMaterial({
-          color: polyCube.color,
-          transparent: true,
-          opacity: 0.22
-        })
-      );
-      orb.position.set(
-        (block.x + 0.5) * CELL_SIZE,
-        (block.y + 0.5) * CELL_SIZE,
-        (block.z + 0.5) * CELL_SIZE
-      );
-      glow.add(orb);
-    });
-
     this.activePolyCubeGroup = group;
-    this.glowGroup = glow;
     this.scene.add(group);
-    this.scene.add(glow);
   }
 
   public updateSettledBlocks(blocks: readonly SettledBlockSnapshot[]): void {
@@ -377,7 +354,6 @@ export class Renderer {
       String(this.hudState.clearedLayerCount).padStart(3, '0')
     );
     this.setText(root, '[data-role="status-label"]', this.getStatusLabel());
-    this.setText(root, '[data-role="speed"]', `${(1000 / this.hudState.dropIntervalMs).toFixed(2)}x`);
     this.setText(root, '[data-role="block-set"]', this.gameState.getBlockSetLabel());
     this.syncHudTimer(root);
     this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? 'RESUME' : 'PAUSE');
@@ -448,7 +424,7 @@ export class Renderer {
             <div class="metric-inline"><strong class="metric-value" data-role="level">01</strong><div class="meter meter-dots" data-role="level-meter">${renderMeterSegments(7)}</div></div>
           </section>
           <section class="panel metric-card">
-            <div class="panel-heading">${icon('snowflake')}<span>LAYERS</span></div>
+            <div class="panel-heading">${icon('snowflake')}<span>PLANES</span></div>
             <div class="metric-inline"><strong class="metric-value" data-role="lines">000</strong><div class="meter meter-bars" data-role="layers-meter">${renderMeterSegments(8)}</div></div>
           </section>
           <section class="panel preview-panel">
@@ -470,7 +446,8 @@ export class Renderer {
               <div class="control-row"><span class="keys"><b>W</b><b>S</b></span><span>Rotate Y Axis</span></div>
               <div class="control-row"><span class="keys"><b>E</b><b>D</b></span><span>Rotate Z Axis</span></div>
               <div class="control-row"><span class="keys"><b class="wide-key">Space</b></span><span>Hard Drop</span></div>
-              <div class="control-row"><span class="keys"><b class="wide-key">P / Esc</b></span><span>Pause</span></div>
+              <div class="control-row"><span class="keys"><b>P</b></span><span>Pause</span></div>
+              <div class="control-row"><span class="keys"><b class="wide-key">Esc</b></span><span>End Run</span></div>
               <div class="control-row"><span class="keys"><b>R</b></span><span>Restart</span></div>
               <div class="control-separator"></div>
               <div class="control-row"><span class="keys"><b class="wide-key key-icon">${icon('mouse')}Mouse</b></span><span>Rotate View</span></div>
@@ -501,6 +478,7 @@ export class Renderer {
           <p>Wheel to zoom the camera.</p>
           <p>Q/W/E and A/S/D rotate around the three axes.</p>
           <p>Space drops the current polycube into the pit.</p>
+          <p>Esc ends the current run.</p>
           <p>Press <strong>R</strong> at any time to restart.</p>
         </div>
       </section>
@@ -552,24 +530,23 @@ export class Renderer {
     group.position.set(origin.x, origin.y, origin.z);
 
     const { width, height, depth } = this.gameState.getDimensions();
-    const panelMaterial = new MeshStandardMaterial({
-      color: 0xe8fbff,
+    const panelMaterial = new MeshBasicMaterial({
+      map: this.createSnowWallTexture(),
+      color: 0xd9f2fb,
       transparent: true,
-      opacity: 0.22,
-      roughness: 0.14,
-      metalness: 0.42,
-      depthWrite: false
+      opacity: 0.52,
+      depthWrite: false,
+      side: DoubleSide
     });
 
     const floor = new Mesh(
       new PlaneGeometry(width * CELL_SIZE, depth * CELL_SIZE),
-      new MeshStandardMaterial({
-        color: 0xf2fdff,
-        roughness: 0.18,
-        metalness: 0.48,
+      new MeshBasicMaterial({
+        color: 0x123d66,
         transparent: true,
-        opacity: 0.34,
-        depthWrite: false
+        opacity: 0.26,
+        depthWrite: false,
+        side: DoubleSide
       })
     );
     floor.rotation.x = -Math.PI / 2;
@@ -601,7 +578,7 @@ export class Renderer {
     );
     const bounds = new LineSegments(
       new EdgesGeometry(boundsGeometry),
-      new LineBasicMaterial({ color: 0xf7feff, transparent: true, opacity: 0.98 })
+      new LineBasicMaterial({ color: 0x67d7ff, transparent: true, opacity: 0.68 })
     );
 
     group.add(floor, leftWall, rightWall, backWall, bounds);
@@ -612,26 +589,83 @@ export class Renderer {
     group.add(this.createFaceGrid('yz', depth, height, width, 0x4ca6ff));
     group.add(this.createFaceGrid('xz', width, depth, 0, 0x2a7cff));
     group.add(this.createFaceGrid('xz', width, depth, height, 0x62c4ff));
-    group.add(this.createDepthSeparators(width, height, depth));
-    group.add(this.createGridNumberLabels(width, height));
-    group.add(this.createLayerScanBand(width, depth, Math.max(1, Math.round(height * 0.4))));
-    group.add(this.createCornerGlow(width, height, depth));
     return group;
+  }
+
+  private createSnowWallTexture(): CanvasTexture {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      return new CanvasTexture(canvas);
+    }
+
+    const gradient = context.createLinearGradient(0, 0, size, size);
+    gradient.addColorStop(0, '#f3fbff');
+    gradient.addColorStop(0.48, '#bdd6df');
+    gradient.addColorStop(1, '#eef8fb');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, size, size);
+
+    context.globalAlpha = 0.34;
+    for (let y = -size; y < size * 2; y += 24) {
+      context.beginPath();
+      context.moveTo(-16, y);
+      context.lineTo(size + 16, y + size * 0.32);
+      context.strokeStyle = '#ffffff';
+      context.lineWidth = 7;
+      context.stroke();
+    }
+
+    context.globalAlpha = 0.22;
+    for (let i = 0; i < 180; i += 1) {
+      const x = deterministicNoise(i, 1) * size;
+      const y = deterministicNoise(i, 2) * size;
+      const radius = 0.5 + deterministicNoise(i, 3) * 1.4;
+      context.beginPath();
+      context.arc(x, y, radius, 0, Math.PI * 2);
+      context.fillStyle = deterministicNoise(i, 4) > 0.35 ? '#ffffff' : '#7fa8b5';
+      context.fill();
+    }
+
+    context.globalAlpha = 0.18;
+    context.strokeStyle = '#5f8795';
+    context.lineWidth = 1;
+    for (let x = 0; x <= size; x += 64) {
+      context.beginPath();
+      context.moveTo(x, 0);
+      context.lineTo(x + 18, size);
+      context.stroke();
+    }
+    for (let y = 0; y <= size; y += 64) {
+      context.beginPath();
+      context.moveTo(0, y);
+      context.lineTo(size, y + 12);
+      context.stroke();
+    }
+
+    const texture = new CanvasTexture(canvas);
+    texture.colorSpace = SRGBColorSpace;
+    texture.minFilter = LinearFilter;
+    texture.magFilter = LinearFilter;
+    return texture;
   }
 
   private createLighting(): Group {
     const group = new Group();
-    group.add(new AmbientLight(0xe6f6ff, 1.08));
+    group.add(new AmbientLight(0xbadfff, 0.72));
 
-    const key = new DirectionalLight(0xc9f4ff, 1.85);
+    const key = new DirectionalLight(0xb6edff, 1.1);
     key.position.set(14, 22, 10);
     group.add(key);
 
-    const rim = new DirectionalLight(0x6dbdff, 1.1);
+    const rim = new DirectionalLight(0x4eaaff, 0.62);
     rim.position.set(-12, 16, -8);
     group.add(rim);
 
-    const warm = new DirectionalLight(0xffd184, 0.44);
+    const warm = new DirectionalLight(0xffd184, 0.22);
     warm.position.set(4, 8, 14);
     group.add(warm);
 
@@ -677,81 +711,84 @@ export class Renderer {
   private createBlockMesh(color: number, isActive: boolean, depthLayer = 0): Group {
     const cube = new Group();
     const isBehindSeparator = depthLayer > 0;
-    const blockColor = isBehindSeparator ? mixColorNumber(color, 0xb8f6ff, 0.06) : color;
-    const highlightColor = mixColorNumber(blockColor, 0xffffff, isActive ? 0.16 : 0.1);
-    const seamColor = mixColorNumber(blockColor, 0x001a36, isActive ? 0.46 : 0.54);
+    const blockColor = isBehindSeparator ? mixColorNumber(color, 0x7fdcff, 0.08) : color;
 
-    const glowShell = new Mesh(
-      new BoxGeometry(CELL_SIZE * 0.98, CELL_SIZE * 0.98, CELL_SIZE * 0.98),
-      new MeshBasicMaterial({
-        color: blockColor,
+    if (!isActive) {
+      const solid = new Mesh(
+        new BoxGeometry(CELL_SIZE * 0.9, CELL_SIZE * 0.9, CELL_SIZE * 0.9),
+        new MeshBasicMaterial({
+          color: blockColor
+        })
+      );
+      solid.renderOrder = 20;
+      cube.add(solid);
+
+      const darkEdges = new LineSegments(
+        new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.94, CELL_SIZE * 0.94, CELL_SIZE * 0.94)),
+        new LineBasicMaterial({
+          color: mixColorNumber(blockColor, 0x000000, 0.76),
+          transparent: true,
+          opacity: 0.92,
+          depthWrite: false
+        })
+      );
+      darkEdges.renderOrder = 35;
+      cube.add(darkEdges);
+
+      const highlightEdges = new LineSegments(
+        new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.82, CELL_SIZE * 0.82, CELL_SIZE * 0.82)),
+        new LineBasicMaterial({
+          color: mixColorNumber(blockColor, 0xffffff, 0.3),
+          transparent: true,
+          opacity: 0.28,
+          depthWrite: false
+        })
+      );
+      highlightEdges.renderOrder = 34;
+      cube.add(highlightEdges);
+      return cube;
+    }
+
+    const mainLineColor = mixColorNumber(blockColor, 0xffffff, 0.35);
+
+    const outerEdges = new LineSegments(
+      new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.94, CELL_SIZE * 0.94, CELL_SIZE * 0.94)),
+      new LineBasicMaterial({
+        color: mainLineColor,
         transparent: true,
-        opacity: isActive ? 0.12 : 0.07,
-        depthWrite: false,
-        blending: AdditiveBlending
-      })
-    );
-    cube.add(glowShell);
-
-    const solid = new Mesh(
-      new BoxGeometry(CELL_SIZE * 0.9, CELL_SIZE * 0.9, CELL_SIZE * 0.9),
-      new MeshStandardMaterial({
-        color: blockColor,
-        emissive: blockColor,
-        emissiveIntensity: isActive ? 0.48 : 0.26,
-        metalness: 0.16,
-        roughness: 0.36
-      })
-    );
-    cube.add(solid);
-
-    const inner = new Mesh(
-      new BoxGeometry(CELL_SIZE * 0.66, CELL_SIZE * 0.66, CELL_SIZE * 0.66),
-      new MeshBasicMaterial({
-        color: highlightColor,
-        transparent: true,
-        opacity: isActive ? 0.18 : 0.11,
+        opacity: 0.98,
         depthWrite: false
       })
     );
-    cube.add(inner);
+    outerEdges.renderOrder = 42;
+    cube.add(outerEdges);
 
     if (isBehindSeparator) {
-      const depthGlaze = new Mesh(
-        new BoxGeometry(CELL_SIZE * 0.96, CELL_SIZE * 0.96, CELL_SIZE * 0.96),
-        new MeshBasicMaterial({
-          color: 0xbffaff,
+      const depthEdges = new LineSegments(
+        new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.98, CELL_SIZE * 0.98, CELL_SIZE * 0.98)),
+        new LineBasicMaterial({
+          color: mixColorNumber(blockColor, 0xbffaff, 0.26),
           transparent: true,
-          opacity: isActive ? 0.055 : 0.035,
-          depthWrite: false,
-          blending: AdditiveBlending
+          opacity: 0.26,
+          depthWrite: false
         })
       );
-      depthGlaze.renderOrder = 18;
-      cube.add(depthGlaze);
+      depthEdges.renderOrder = 40;
+      cube.add(depthEdges);
     }
 
-    const contactMarker = this.createSeparatorContactMarker(depthLayer);
+    const contactMarker = this.createSeparatorContactMarker(depthLayer, blockColor);
     if (contactMarker) {
       cube.add(contactMarker);
     }
 
-    cube.add(
-      new LineSegments(
-        new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.96, CELL_SIZE * 0.96, CELL_SIZE * 0.96)),
-        new LineBasicMaterial({
-          color: seamColor,
-          transparent: true,
-          opacity: isActive ? 0.9 : 0.72,
-          depthWrite: false
-        })
-      )
-    );
-
     return cube;
   }
 
-  private createSeparatorContactMarker(depthLayer: number): Group | null {
+  private createSeparatorContactMarker(
+    depthLayer: number,
+    color: number
+  ): Group | null {
     const { depth } = this.gameState.getDimensions();
     if (depth <= 1) {
       return null;
@@ -769,29 +806,29 @@ export class Renderer {
     }
 
     const group = new Group();
-    faceOffsets.forEach((faceZ) => group.add(this.createSeparatorContactFrame(faceZ)));
+    faceOffsets.forEach((faceZ) => {
+      group.add(this.createSeparatorContactFrame(faceZ, color));
+    });
     return group;
   }
 
-  private createSeparatorContactFrame(faceZ: number): Group {
+  private createSeparatorContactFrame(faceZ: number, color: number): Group {
     const group = new Group();
     const lineMaterial = new MeshBasicMaterial({
-      color: 0xf7ffff,
+      color: mixColorNumber(color, 0xffffff, 0.28),
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.42,
       depthTest: true,
       depthWrite: false,
-      side: DoubleSide,
-      blending: AdditiveBlending
+      side: DoubleSide
     });
     const glowMaterial = new MeshBasicMaterial({
-      color: 0x8df9ff,
+      color: mixColorNumber(color, 0x7fdcff, 0.22),
       transparent: true,
-      opacity: 0.1,
+      opacity: 0.08,
       depthTest: true,
       depthWrite: false,
-      side: DoubleSide,
-      blending: AdditiveBlending
+      side: DoubleSide
     });
 
     const coreLength = CELL_SIZE * 0.86;
@@ -853,7 +890,7 @@ export class Renderer {
           color,
           size: 0.07,
           transparent: true,
-          opacity: 0.86,
+          opacity: 0.28,
           depthWrite: false
         })
       )
@@ -862,7 +899,7 @@ export class Renderer {
     const lineMaterial = new LineBasicMaterial({
       color,
       transparent: true,
-      opacity: 0.42,
+      opacity: 0.24,
       depthWrite: false
     });
 
@@ -905,13 +942,12 @@ export class Renderer {
     const panel = new Mesh(
       new PlaneGeometry(width * CELL_SIZE, height * CELL_SIZE),
       new MeshBasicMaterial({
-        color: 0xe8fdff,
+        color: 0x1f9fd0,
         transparent: true,
-        opacity: 0.075,
+        opacity: 0.018,
         depthTest: true,
         depthWrite: false,
-        side: DoubleSide,
-        blending: AdditiveBlending
+        side: DoubleSide
       })
     );
     panel.position.set((width * CELL_SIZE) / 2, (height * CELL_SIZE) / 2, zPosition);
@@ -922,15 +958,15 @@ export class Renderer {
     grid.traverse((child) => {
       if (child instanceof LineSegments) {
         const material = child.material as LineBasicMaterial;
-        material.opacity = 0.74;
-        material.color.setHex(0xc9fbff);
+        material.opacity = 0.26;
+        material.color.setHex(0x55d7ff);
         material.depthTest = true;
         child.renderOrder = 27;
       }
       if (child instanceof Points) {
         const material = child.material as PointsMaterial;
-        material.opacity = 0.94;
-        material.color.setHex(0xf5feff);
+        material.opacity = 0.42;
+        material.color.setHex(0x72e7ff);
         material.depthTest = true;
         child.renderOrder = 28;
       }
@@ -940,13 +976,12 @@ export class Renderer {
     const baseStrip = new Mesh(
       new PlaneGeometry(width * CELL_SIZE, CELL_SIZE * 0.08),
       new MeshBasicMaterial({
-        color: 0xf6ffff,
+        color: 0x45d8ff,
         transparent: true,
-        opacity: 0.62,
+        opacity: 0.18,
         depthTest: true,
         depthWrite: false,
-        side: DoubleSide,
-        blending: AdditiveBlending
+        side: DoubleSide
       })
     );
     baseStrip.rotation.x = -Math.PI / 2;
@@ -957,13 +992,12 @@ export class Renderer {
     const centerFlash = new Mesh(
       new PlaneGeometry(width * CELL_SIZE, CELL_SIZE * 0.34),
       new MeshBasicMaterial({
-        color: 0x8cfaff,
+        color: 0x1caed8,
         transparent: true,
-        opacity: 0.13,
+        opacity: 0.055,
         depthTest: true,
         depthWrite: false,
-        side: DoubleSide,
-        blending: AdditiveBlending
+        side: DoubleSide
       })
     );
     centerFlash.position.set((width * CELL_SIZE) / 2, (height * CELL_SIZE) * 0.5, zPosition);
@@ -1047,9 +1081,9 @@ export class Renderer {
       new LineSegments(
         new EdgesGeometry(boundsGeometry),
         new LineBasicMaterial({
-          color: 0x70f4ff,
+          color: 0x42d8ff,
           transparent: true,
-          opacity: 0.82,
+          opacity: 0.58,
           depthWrite: false
         })
       )
@@ -1071,7 +1105,7 @@ export class Renderer {
         new LineBasicMaterial({
           color: 0x28e8ff,
           transparent: true,
-          opacity: 1,
+          opacity: 0.76,
           depthWrite: false
         })
       )
@@ -1100,7 +1134,7 @@ export class Renderer {
         new LineBasicMaterial({
           color: 0x56f6ff,
           transparent: true,
-          opacity: 0.98,
+          opacity: 0.55,
           depthWrite: false
         })
       )
@@ -1394,32 +1428,36 @@ export class Renderer {
     }
 
     const definition = getPolyCubeDefinition(type);
-    const blockSize = 34;
+    const blockSize = 28;
     const gap = 4;
     const step = blockSize + gap;
+    const depthOffsetX = 12;
+    const depthOffsetY = -10;
     const minCellX = Math.min(...definition.cells.map((cell) => cell.x));
-    const maxCellX = Math.max(...definition.cells.map((cell) => cell.x));
-    const minCellY = Math.min(...definition.cells.map((cell) => cell.y));
+    const minCellZ = Math.min(...definition.cells.map((cell) => cell.z));
     const maxCellY = Math.max(...definition.cells.map((cell) => cell.y));
     const cubes = definition.cells
       .map((cell) => ({
-        x: (cell.x - minCellX) * step,
-        y: (maxCellY - cell.y) * step
+        x: (cell.x - minCellX) * step + (cell.z - minCellZ) * depthOffsetX,
+        y: (maxCellY - cell.y) * step + (cell.z - minCellZ) * depthOffsetY,
+        z: cell.z
       }))
-      .sort((a, b) => a.y - b.y || a.x - b.x);
+      .sort((a, b) => b.z - a.z || a.y - b.y || a.x - b.x);
 
-    const previewWidth = (maxCellX - minCellX + 1) * step - gap;
-    const previewHeight = (maxCellY - minCellY + 1) * step - gap;
+    const minPreviewX = Math.min(...cubes.map((cube) => cube.x));
+    const minPreviewY = Math.min(...cubes.map((cube) => cube.y));
+    const maxPreviewX = Math.max(...cubes.map((cube) => cube.x + blockSize));
+    const maxPreviewY = Math.max(...cubes.map((cube) => cube.y + blockSize));
     const padding = 20;
     const viewBox = [
-      -padding,
-      -padding,
-      previewWidth + padding * 2,
-      previewHeight + padding * 2
+      minPreviewX - padding,
+      minPreviewY - padding,
+      maxPreviewX - minPreviewX + padding * 2,
+      maxPreviewY - minPreviewY + padding * 2
     ].join(' ');
     const baseColor = definition.color;
-    const frontColor = mixColor(baseColor, 0xffffff, 0.08);
-    const strokeColor = mixColor(baseColor, 0xffffff, 0.62);
+    const strokeColor = mixColor(baseColor, 0xffffff, 0.28);
+    const innerStrokeColor = mixColor(baseColor, 0x00192d, 0.18);
     const glowColor = `#${baseColor.toString(16).padStart(6, '0')}`;
 
     container.innerHTML = `
@@ -1437,8 +1475,8 @@ export class Renderer {
               x,
               y,
               blockSize,
-              frontColor,
-              strokeColor
+              strokeColor,
+              innerStrokeColor
             )
           )
           .join('')}
@@ -1496,6 +1534,11 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+function deterministicNoise(index: number, salt: number): number {
+  const value = Math.sin(index * 12.9898 + salt * 78.233) * 43758.5453;
+  return value - Math.floor(value);
+}
+
 function renderMeterSegments(count: number): string {
   return Array.from({ length: count }, () => '<span></span>').join('');
 }
@@ -1504,14 +1547,15 @@ function renderPreviewCube(
   x: number,
   y: number,
   size: number,
-  frontColor: string,
-  strokeColor: string
+  strokeColor: string,
+  innerStrokeColor: string
 ): string {
   return `
     <g class="preview-cube">
-      <rect x="${x}" y="${y}" width="${size}" height="${size}" rx="5" fill="${frontColor}" stroke="${strokeColor}" />
-      <path d="M${x + 6} ${y + 6} H${x + size - 8}" class="preview-cube-highlight" />
-      <path d="M${x + size - 6} ${y + 7} V${y + size - 8}" class="preview-cube-shade" />
+      <rect x="${x}" y="${y}" width="${size}" height="${size}" rx="4" fill="none" stroke="${strokeColor}" />
+      <rect x="${x + 6}" y="${y + 6}" width="${size - 12}" height="${size - 12}" rx="2" fill="none" stroke="${innerStrokeColor}" class="preview-cube-inner" />
+      <path d="M${x + 5} ${y + 5} H${x + size - 7}" class="preview-cube-highlight" stroke="${strokeColor}" />
+      <path d="M${x + size - 5} ${y + 6} V${y + size - 7}" class="preview-cube-shade" stroke="${innerStrokeColor}" />
     </g>
   `;
 }
