@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Group, Scene } from 'three';
+import { Group, Mesh, MeshBasicMaterial, Scene } from 'three';
 import { Renderer } from '../Renderer';
 import { GameState, type SettledBlockSnapshot } from '../GameState';
 import { getBlockOutLayerColor } from '../constants/blockout';
@@ -16,6 +16,23 @@ type RendererAccess = {
 };
 
 describe('Renderer BlockOut layer coloring', () => {
+  it('renders the active falling block with a white wireframe and black backing edge', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 12 } });
+    const renderer = new Renderer(state);
+
+    const block = (renderer as unknown as RendererAccess).createBlockMesh(0xff0000, true, 0);
+    const meshColors: number[] = [];
+    block.traverse((child) => {
+      if (!(child instanceof Mesh) || !(child.material instanceof MeshBasicMaterial)) {
+        return;
+      }
+      meshColors.push(child.material.color.getHex());
+    });
+
+    expect(meshColors).toContain(0xffffff);
+    expect(meshColors).toContain(0x000000);
+  });
+
   it('renders settled blocks with depth-layer wire colors instead of piece colors', () => {
     const state = new GameState({ dimensions: { width: 5, height: 5, depth: 12 } });
     const renderer = new Renderer(state);

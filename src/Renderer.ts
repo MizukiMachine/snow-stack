@@ -141,8 +141,8 @@ const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, CubeWorldAssetDefinition> = O
   wallIce: {
     path: `${CUBE_WORLD_ASSET_ROOT}/Pixel%20Blocks/glTF/Ice.gltf`,
     tint: 0xc3f3ff,
-    opacity: 0.82,
-    depthWrite: false
+    opacity: 1,
+    depthWrite: true
   },
   blockCore: {
     path: `${CUBE_WORLD_ASSET_ROOT}/Blocks/glTF/Block_Blank.gltf`,
@@ -681,17 +681,15 @@ export class Renderer {
     const sideWallMaterial = new MeshBasicMaterial({
       map: this.createSnowWallTexture(),
       color: 0xaac7d7,
-      transparent: true,
-      opacity: 0.28,
-      depthWrite: false,
+      transparent: false,
+      depthWrite: true,
       side: DoubleSide
     });
     const depthLandingMaterial = new MeshBasicMaterial({
       map: this.createSnowWallTexture(),
       color: 0x8fb9d2,
-      transparent: true,
-      opacity: 0.36,
-      depthWrite: false,
+      transparent: false,
+      depthWrite: true,
       side: DoubleSide
     });
 
@@ -1103,7 +1101,7 @@ export class Renderer {
     const cube = new Group();
     const isBehindSeparator = depthLayer > 0;
     const surfaceColor = isBehindSeparator ? mixColorNumber(color, 0x7fdcff, 0.08) : color;
-    const wireColor = color;
+    const wireColor = isActive ? 0xffffff : color;
     const assetCore = settledAssetKey
       ? this.createSettledBlockAssetCore(settledAssetKey)
       : this.createBlockAssetCore(surfaceColor, isActive);
@@ -1169,9 +1167,29 @@ export class Renderer {
       return cube;
     }
 
-    cube.add(this.createThickCubeWireframe(wireColor, CELL_SIZE * 0.058, CELL_SIZE * 0.033, 43));
+    cube.add(
+      this.createThickCubeWireframe(
+        wireColor,
+        CELL_SIZE * 0.066,
+        CELL_SIZE * 0.033,
+        43,
+        0x000000
+      )
+    );
 
     const mainLineColor = wireColor;
+
+    const shadowEdges = new LineSegments(
+      new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.98, CELL_SIZE * 0.98, CELL_SIZE * 0.98)),
+      new LineBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.96,
+        depthWrite: false
+      })
+    );
+    shadowEdges.renderOrder = 41;
+    cube.add(shadowEdges);
 
     const outerEdges = new LineSegments(
       new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.94, CELL_SIZE * 0.94, CELL_SIZE * 0.94)),
@@ -1186,10 +1204,22 @@ export class Renderer {
     cube.add(outerEdges);
 
     if (isBehindSeparator) {
+      const depthShadowEdges = new LineSegments(
+        new EdgesGeometry(new BoxGeometry(CELL_SIZE * 1.02, CELL_SIZE * 1.02, CELL_SIZE * 1.02)),
+        new LineBasicMaterial({
+          color: 0x000000,
+          transparent: true,
+          opacity: 0.86,
+          depthWrite: false
+        })
+      );
+      depthShadowEdges.renderOrder = 39;
+      cube.add(depthShadowEdges);
+
       const depthEdges = new LineSegments(
         new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.98, CELL_SIZE * 0.98, CELL_SIZE * 0.98)),
         new LineBasicMaterial({
-          color: mixColorNumber(wireColor, 0xffffff, 0.18),
+          color: wireColor,
           transparent: true,
           opacity: 0.82,
           depthWrite: false
@@ -1236,11 +1266,12 @@ export class Renderer {
     color: number,
     backingThickness: number,
     mainThickness: number,
-    renderOrder: number
+    renderOrder: number,
+    backingColor?: number
   ): Group {
     const group = new Group();
     const backingMaterial = new MeshBasicMaterial({
-      color: mixColorNumber(color, 0x001426, 0.5),
+      color: backingColor ?? mixColorNumber(color, 0x001426, 0.5),
       transparent: true,
       opacity: 0.94,
       depthTest: true,
