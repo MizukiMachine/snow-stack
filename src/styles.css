@@ -131,6 +131,7 @@ button {
 
 .brand-panel,
 .tip-card,
+.layer-guide-card,
 .right-rail,
 .status-bar,
 .overlay-card,
@@ -291,6 +292,67 @@ button {
 .tip-dots .is-active {
   background: #159de8;
   box-shadow: 0 0 9px rgba(21, 157, 232, 0.6);
+}
+
+.layer-guide-card {
+  top: 226px;
+  left: 40px;
+  width: 190px;
+  min-height: 0;
+  padding: 18px 18px 16px;
+  color: #082a78;
+  filter: drop-shadow(0 0 18px rgba(47, 178, 255, 0.2));
+}
+
+.layer-guide-card .card-title {
+  margin-bottom: 12px;
+}
+
+.ui-layer[data-depth-layers="0"] .layer-guide-card {
+  display: none;
+}
+
+.layer-guide-stack {
+  --layer-count: 12;
+  --layer-stack-height: 308px;
+  display: grid;
+  grid-template-rows: repeat(var(--layer-count), 22px);
+  gap: 4px;
+  height: min(var(--layer-stack-height), clamp(168px, calc(100vh - 348px), 360px));
+  max-height: clamp(168px, calc(100vh - 348px), 360px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.layer-guide-row {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  grid-row: var(--layer-row);
+  align-items: center;
+  gap: 8px;
+}
+
+.layer-guide-index {
+  color: #0b3d9a;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  text-align: right;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.layer-guide-swatch {
+  position: relative;
+  height: 16px;
+  border: 2px solid var(--layer-color);
+  border-radius: 2px;
+  background:
+    linear-gradient(90deg, var(--layer-soft), rgba(255, 255, 255, 0.22)),
+    rgba(255, 255, 255, 0.22);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5),
+    0 0 7px var(--layer-soft);
 }
 
 .right-rail {
@@ -849,6 +911,11 @@ button {
     font-size: 13px;
   }
 
+  .layer-guide-card {
+    left: 34px;
+    width: 176px;
+  }
+
   .right-rail {
     width: 438px;
     grid-template-columns: 186px minmax(210px, 1fr);
@@ -899,6 +966,15 @@ button {
   .tip-card {
     top: 184px;
     min-height: 168px;
+  }
+
+  .layer-guide-card {
+    top: 184px;
+  }
+
+  .layer-guide-stack {
+    height: min(var(--layer-stack-height), clamp(150px, calc(100vh - 292px), 306px));
+    max-height: clamp(150px, calc(100vh - 292px), 306px);
   }
 
   .tip-card p {
@@ -978,7 +1054,12 @@ button {
   .app-viewport,
   .game-shell {
     height: auto;
-    min-height: 2140px;
+    min-height: 2400px;
+  }
+
+  .ui-layer {
+    --mobile-depth-guide-top: 650px;
+    --mobile-depth-guide-reserved-height: clamp(274px, 32vw, 332px);
   }
 
   .scene-canvas {
@@ -1000,8 +1081,32 @@ button {
     display: none;
   }
 
+  .layer-guide-card {
+    top: var(--mobile-depth-guide-top);
+    left: 14px;
+    right: 14px;
+    width: auto;
+    padding: 16px;
+  }
+
+  .layer-guide-stack {
+    height: min(var(--layer-stack-height), 260px);
+  }
+
+  .layer-guide-row {
+    min-height: 0;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .ui-layer[data-depth-layers="0"] .right-rail {
+    top: var(--mobile-depth-guide-top);
+  }
+
   .right-rail {
-    top: 650px;
+    top: calc(
+      var(--mobile-depth-guide-top) + var(--mobile-depth-guide-reserved-height) + 28px
+    );
     left: 14px;
     right: 14px;
     bottom: auto;
@@ -1066,7 +1171,12 @@ button {
 @media (max-width: 520px) {
   .app-viewport,
   .game-shell {
-    min-height: 2220px;
+    min-height: 2560px;
+  }
+
+  .ui-layer {
+    --mobile-depth-guide-top: 570px;
+    --mobile-depth-guide-reserved-height: 332px;
   }
 
   .brand-panel {
@@ -1090,8 +1200,12 @@ button {
     height: 404px;
   }
 
-  .right-rail {
-    top: 570px;
+  .layer-guide-card {
+    top: var(--mobile-depth-guide-top);
+  }
+
+  .ui-layer[data-depth-layers="0"] .right-rail {
+    top: var(--mobile-depth-guide-top);
   }
 
   .telemetry-stack {

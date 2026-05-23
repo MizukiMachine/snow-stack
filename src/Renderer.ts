@@ -42,6 +42,7 @@ import {
   MIN_PIT_HEIGHT,
   MIN_PIT_WIDTH,
   getBlockSetLabel,
+  getBlockOutLayerColor,
   getPolyCubeDefinition,
   type BlockSet
 } from './constants/blockout';
@@ -189,6 +190,7 @@ export class Renderer {
   private readonly cameraOrbit: CameraOrbitState;
   private readonly hudState: HudState;
   private lastSettingsOpen = false;
+  private depthLayerGuideSignature = '';
 
   constructor(gameState: GameState, callbacks: RendererCallbacks = {}) {
     this.gameState = gameState;
@@ -232,6 +234,7 @@ export class Renderer {
   public initialize(container: HTMLElement): void {
     this.disposed = false;
     this.assetLoadGeneration += 1;
+    this.depthLayerGuideSignature = '';
     this.container = container;
     container.innerHTML = '';
     container.classList.add('game-shell');
@@ -332,6 +335,7 @@ export class Renderer {
     this.settledBlocksGroup = null;
     this.glowGroup = null;
     this.lastSettingsOpen = false;
+    this.depthLayerGuideSignature = '';
   }
 
   public updateActivePolyCube(polyCube: ActivePolyCubeSnapshot | null): void {
@@ -375,9 +379,10 @@ export class Renderer {
     const origin = this.getFieldOrigin();
     group.position.set(origin.x, origin.y, origin.z);
 
+    const { depth } = this.gameState.getDimensions();
     blocks.forEach((block) => {
       const mesh = this.createBlockMesh(
-        block.color,
+        getBlockOutLayerColor(depth, block.coordinate.z),
         false,
         block.coordinate.z,
         'settledIceBlock'
@@ -448,6 +453,7 @@ export class Renderer {
     );
     this.setText(root, '[data-role="status-label"]', this.getStatusLabel());
     this.setText(root, '[data-role="block-set"]', this.gameState.getBlockSetLabel());
+    this.syncDepthLayerGuide(root);
     this.syncQueue(root);
     this.syncHudTimer(root);
     this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? 'RESUME' : 'PAUSE');
@@ -518,12 +524,9 @@ export class Renderer {
           <div class="brand-subtitle">3D POLYCUBE PUZZLE</div>
         </div>
       </div>
-      <section class="info-card tip-card">
-        <div class="card-title">${icon('snowflake')}<span>TIP</span></div>
-        <div>
-          <p>This is 3D. Move, rotate, and think in every direction.</p>
-          <div class="tip-dots" aria-hidden="true"><span class="is-active"></span><span></span><span></span><span></span></div>
-        </div>
+      <section class="info-card layer-guide-card" aria-label="Depth layer colors">
+        <div class="card-title">${icon('layers')}<span>DEPTH</span></div>
+        <div class="layer-guide-stack" data-role="layer-guide-list"></div>
       </section>
       <aside class="right-rail">
         <div class="telemetry-stack">
@@ -1812,6 +1815,47 @@ export class Renderer {
     });
   }
 
+  private syncDepthLayerGuide(root: ParentNode): void {
+    const guide = root.querySelector<HTMLElement>('[data-role="layer-guide-list"]');
+    if (!guide) {
+      return;
+    }
+
+    const { depth } = this.gameState.getDimensions();
+    const occupiedLayers = new Set(
+      this.gameState.getSettledBlocks().map((block) => block.coordinate.z)
+    );
+    const occupiedLayerIndexes = Array.from(occupiedLayers).sort((a, b) => a - b);
+    if (root instanceof HTMLElement) {
+      root.dataset.depthLayers = String(occupiedLayerIndexes.length);
+    }
+    const occupiedSignature = occupiedLayerIndexes.join(',');
+    const signature = `${depth}:${occupiedSignature}`;
+    if (signature === this.depthLayerGuideSignature) {
+      return;
+    }
+
+    this.depthLayerGuideSignature = signature;
+    guide.style.setProperty('--layer-count', String(depth));
+    guide.style.setProperty('--layer-stack-height', `${depth * 26 - 4}px`);
+    guide.innerHTML = occupiedLayerIndexes.map((z) =>
+      this.renderDepthLayerGuideRow(depth, z)
+    ).join('');
+  }
+
+  private renderDepthLayerGuideRow(depth: number, z: number): string {
+    const color = getBlockOutLayerColor(depth, z);
+    const label = String(depth - z).padStart(2, '0');
+    return [
+      '<div class="layer-guide-row"',
+      ` style="--layer-row: ${z + 1}; --layer-color: ${formatHexColor(color)}; --layer-soft: ${formatRgbaColor(color, 0.28)}"`,
+      ` title="Z${String(z).padStart(2, '0')}">`,
+      `<span class="layer-guide-index">${label}</span>`,
+      '<span class="layer-guide-swatch" aria-hidden="true"></span>',
+      '</div>'
+    ].join('');
+  }
+
   private syncQueue(root: ParentNode): void {
     const queue = root.querySelector<HTMLElement>('[data-role="queue-list"]');
     if (!queue) {
@@ -1911,6 +1955,15 @@ function mixColorNumber(color: number, target: number, amount: number): number {
 
 function numberToRgb(color: number): [number, number, number] {
   return [(color >> 16) & 255, (color >> 8) & 255, color & 255];
+}
+
+function formatHexColor(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`;
+}
+
+function formatRgbaColor(color: number, alpha: number): string {
+  const [r, g, b] = numberToRgb(color);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function renderHudIcon(name: HudIconName): string {

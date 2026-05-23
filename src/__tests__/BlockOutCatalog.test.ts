@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BLOCKOUT_LAYER_COLORS,
   getEligiblePolyCubes,
+  getBlockOutLayerColor,
   getPolyCubeDefinition,
   POLYCUBE_DEFINITIONS
 } from '../constants/blockout';
@@ -82,6 +84,18 @@ describe('BlockOut polycube catalog', () => {
     expect(ids).not.toContain(3);
     expect(ids).not.toContain(4);
     expect(ids).toContain(40);
+  });
+
+  it('maps depth layers to the BlockOut II repeating pit colors', () => {
+    const depth = 12;
+    const landingOutward = Array.from({ length: 8 }, (_, offset) =>
+      getBlockOutLayerColor(depth, depth - 1 - offset)
+    );
+
+    expect(landingOutward).toEqual([
+      ...BLOCKOUT_LAYER_COLORS,
+      BLOCKOUT_LAYER_COLORS[0]
+    ]);
   });
 });
 

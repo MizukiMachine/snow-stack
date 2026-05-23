@@ -61,6 +61,26 @@ export const LINE_BASE: Record<BlockSet, number> = Object.freeze({
   extended: 2886.25
 });
 
+export const BLOCKOUT_LAYER_COLORS: readonly number[] = Object.freeze([
+  0x0000ff,
+  0x00ff00,
+  0x00e6e6,
+  0xff0000,
+  0xff1acc,
+  0xe69900,
+  0xd9d9d9
+]);
+
+export function getBlockOutLayerColor(depth: number, z: number): number {
+  const normalizedDepth = Math.max(1, Math.trunc(depth));
+  const normalizedZ = Math.min(Math.max(0, Math.trunc(z)), normalizedDepth - 1);
+  const paletteIndex = positiveModulo(
+    normalizedDepth - normalizedZ - 1,
+    BLOCKOUT_LAYER_COLORS.length
+  );
+  return BLOCKOUT_LAYER_COLORS[paletteIndex];
+}
+
 const POLYCUBE_COLORS = Object.freeze([
   0xb91c1c, 0x047857, 0x7e22ce, 0xbe185d, 0x0e7490, 0xa16207,
   0x4f46e5, 0x15803d, 0xc2410c, 0x86198f, 0x0f766e, 0x9f1239
@@ -174,4 +194,8 @@ export function getEligiblePolyCubes(
 
 export function getBlockSetLabel(blockSet: BlockSet): string {
   return BLOCK_SET_LABELS[blockSet];
+}
+
+function positiveModulo(value: number, divisor: number): number {
+  return ((value % divisor) + divisor) % divisor;
 }
