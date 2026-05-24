@@ -22,6 +22,7 @@ type RendererAccess = {
   syncQueue: (root: ParentNode) => void;
   syncHeldPiece: (root: ParentNode) => void;
   syncMission: (root: ParentNode) => void;
+  createHudElement: () => HTMLDivElement;
   renderPolyCubePreview: (id: number, variant: 'queue' | 'hold') => string;
 };
 
@@ -212,7 +213,30 @@ describe('Renderer BlockOut layer coloring', () => {
 
     expect(root.querySelector<HTMLElement>('[data-role="mission-pill"]')?.hidden).toBe(false);
     expect(root.querySelector<HTMLElement>('[data-role="mission-label"]')?.textContent).toBe('PLANE SPRINT');
-    expect(root.querySelector<HTMLElement>('[data-role="mission-progress"] span')?.textContent).toBe('0/5');
+    expect(root.querySelector<HTMLElement>('[data-role="mission-progress"] span')?.textContent).toBe('0/5 PLANES');
+  });
+
+  it('keeps double-cut unavailable while the flat block set is selected', () => {
+    const state = new GameState();
+    const renderer = new Renderer(state);
+    const hud = (renderer as unknown as RendererAccess).createHudElement();
+    const doubleCut = hud.querySelector<HTMLButtonElement>('[data-mission-mode="double-cut"]');
+    const basic = hud.querySelector<HTMLButtonElement>('[data-block-set="basic"]');
+    const flat = hud.querySelector<HTMLButtonElement>('[data-block-set="flat"]');
+    const endless = hud.querySelector<HTMLButtonElement>('[data-mission-mode="endless"]');
+
+    expect(doubleCut?.disabled).toBe(true);
+
+    basic?.click();
+    expect(doubleCut?.disabled).toBe(false);
+
+    doubleCut?.click();
+    expect(doubleCut?.classList.contains('is-active')).toBe(true);
+
+    flat?.click();
+    expect(doubleCut?.disabled).toBe(true);
+    expect(doubleCut?.classList.contains('is-active')).toBe(false);
+    expect(endless?.classList.contains('is-active')).toBe(true);
   });
 
   it('builds polycube preview markup with one cell per cube', () => {
