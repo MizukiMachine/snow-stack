@@ -278,10 +278,111 @@ describe('GameState BlockOut rules', () => {
     expect(state.clearCompletedPlanes()).toBe(1);
     expect(state.getMissionSnapshot()).toMatchObject({
       mode: 'plane-sprint',
-      targetPlanes: 5,
-      clearedPlanes: 1,
-      remainingPlanes: 4,
+      label: 'PLANE SPRINT',
+      targetValue: 5,
+      progressValue: 1,
+      remainingValue: 4,
+      active: true,
       complete: false
+    });
+  });
+
+  it('tracks redesigned mission progress for clean pit and double-cut goals', () => {
+    const cleanPit = new GameState({
+      dimensions: { width: 3, height: 3, depth: 6 },
+      missionMode: 'clean-pit'
+    });
+    seedCells(cleanPit, [
+      { x: 0, y: 0, z: 5 },
+      { x: 1, y: 0, z: 5 },
+      { x: 0, y: 1, z: 5 },
+      { x: 1, y: 1, z: 5 },
+      { x: 2, y: 1, z: 5 },
+      { x: 0, y: 2, z: 5 },
+      { x: 1, y: 2, z: 5 },
+      { x: 2, y: 2, z: 5 }
+    ]);
+    cleanPit.spawnPolyCube(0);
+    cleanPit.hardDropActivePolyCube();
+    cleanPit.lockActivePolyCube();
+
+    expect(cleanPit.getMissionSnapshot()).toMatchObject({
+      mode: 'clean-pit',
+      progressValue: 1,
+      targetValue: 1,
+      complete: true
+    });
+
+    const doubleCut = new GameState({
+      dimensions: { width: 3, height: 3, depth: 6 },
+      missionMode: 'double-cut'
+    });
+    seedPlane(doubleCut, 5);
+    seedPlane(doubleCut, 4);
+
+    expect(doubleCut.clearCompletedPlanes()).toBe(2);
+    expect(doubleCut.getMissionSnapshot()).toMatchObject({
+      mode: 'double-cut',
+      progressValue: 1,
+      targetValue: 1,
+      complete: true
+    });
+  });
+
+  it('keeps double-cut on a block set that can actually clear multiple planes', () => {
+    const state = new GameState({ missionMode: 'double-cut' });
+
+    expect(state.getSetup()).toMatchObject({
+      blockSet: 'basic',
+      missionMode: 'double-cut'
+    });
+
+    state.configure({ blockSet: 'flat' });
+
+    expect(state.getSetup()).toMatchObject({
+      blockSet: 'basic',
+      missionMode: 'double-cut'
+    });
+  });
+
+  it('tracks score-rush and cube-trial progress from actual run counters', () => {
+    const scoreRush = new GameState({
+      dimensions: { width: 3, height: 3, depth: 6 },
+      blockSet: 'extended',
+      startLevel: 9,
+      missionMode: 'score-rush'
+    });
+    seedPlane(scoreRush, 5, { x: 2, y: 0 });
+    scoreRush.spawnPolyCube(0);
+    scoreRush.hardDropActivePolyCube();
+    scoreRush.lockActivePolyCube();
+
+    expect(scoreRush.getMissionSnapshot()).toMatchObject({
+      mode: 'score-rush',
+      progressValue: 2_000,
+      targetValue: 2_000,
+      complete: true
+    });
+
+    const cubeTrial = new GameState({
+      dimensions: { width: 7, height: 7, depth: 18 },
+      blockSet: 'extended',
+      missionMode: 'cube-trial'
+    });
+    for (const x of [0, 1]) {
+      for (let i = 0; i < 12; i += 1) {
+        cubeTrial.spawnPolyCube(4);
+        expect(cubeTrial.moveActivePolyCube({ x: x - 6, y: 0, z: 0 })).toBe(true);
+        cubeTrial.hardDropActivePolyCube();
+        expect(cubeTrial.lockActivePolyCube()).toBe(0);
+      }
+    }
+
+    expect(cubeTrial.getMissionSnapshot()).toMatchObject({
+      mode: 'cube-trial',
+      progressValue: 120,
+      targetValue: 120,
+      complete: true
     });
   });
 
@@ -323,6 +424,18 @@ function seedCells(state: GameState, cells: { x: number; y: number; z: number }[
   cells.forEach((cell) => {
     expect(state.setCell(cell, 0)).toBe(true);
   });
+}
+
+function seedPlane(state: GameState, z: number, except?: { x: number; y: number }): void {
+  const { width, height } = state.getDimensions();
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (except && x === except.x && y === except.y) {
+        continue;
+      }
+      expect(state.setCell({ x, y, z }, 0)).toBe(true);
+    }
+  }
 }
 
 function coordinates(blocks: ReturnType<GameState['getSettledBlocks']>) {

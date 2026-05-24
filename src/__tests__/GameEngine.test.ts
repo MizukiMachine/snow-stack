@@ -107,10 +107,15 @@ describe('GameEngine BlockOut controls', () => {
     vi.spyOn(state, 'getMissionSnapshot').mockReturnValue({
       mode: 'plane-sprint',
       label: 'PLANE SPRINT',
-      targetPlanes: 5,
-      clearedPlanes: 5,
-      remainingPlanes: 0,
-      complete: true
+      shortLabel: '5 PLANES',
+      progressLabel: 'PLANES',
+      targetValue: 5,
+      progressValue: 5,
+      remainingValue: 0,
+      active: true,
+      complete: true,
+      hint: '0 planes left in the sprint.',
+      completionMessage: 'Plane sprint complete.'
     });
     const { engine, renderer } = startEngine(state);
 
@@ -143,6 +148,63 @@ describe('GameEngine BlockOut controls', () => {
     expect(state.getMissionSnapshot().complete).toBe(true);
     expect(state.isGameOver()).toBe(true);
     expect(state.getActivePolyCube()).toBeNull();
+    expect(lastHudCall(renderer)[1]).toBe('game-over');
+  });
+
+  it('ends a score-rush run after the score target is actually reached', () => {
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValue(1_000);
+    const state = new GameState({
+      dimensions: { width: 3, height: 3, depth: 6 },
+      blockSet: 'extended',
+      startLevel: 9,
+      missionMode: 'score-rush'
+    });
+    seedPlane(state, 5, { x: 2, y: 0 });
+    state.spawnPolyCube(0);
+    const { engine, renderer } = startEngine(state);
+
+    pressKey('Space');
+    advanceGame(engine, 1_210);
+
+    expect(state.getMissionSnapshot()).toMatchObject({
+      mode: 'score-rush',
+      complete: true
+    });
+    expect(state.isGameOver()).toBe(true);
+    expect(lastHudCall(renderer)[1]).toBe('game-over');
+  });
+
+  it('ends a cube-trial run when the cube placement target is reached', () => {
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValue(1_000);
+    const state = new GameState({
+      dimensions: { width: 7, height: 7, depth: 18 },
+      blockSet: 'extended',
+      missionMode: 'cube-trial'
+    });
+    for (const x of [0, 1]) {
+      for (let i = 0; i < 12; i += 1) {
+        state.spawnPolyCube(4);
+        expect(state.moveActivePolyCube({ x: x - 6, y: 0, z: 0 })).toBe(true);
+        state.hardDropActivePolyCube();
+        if (x === 1 && i === 11) {
+          break;
+        }
+        expect(state.lockActivePolyCube()).toBe(0);
+      }
+    }
+    expect(state.getMissionSnapshot().progressValue).toBe(115);
+    const { engine, renderer } = startEngine(state);
+
+    pressKey('Space');
+    advanceGame(engine, 1_210);
+
+    expect(state.getMissionSnapshot()).toMatchObject({
+      mode: 'cube-trial',
+      complete: true
+    });
+    expect(state.isGameOver()).toBe(true);
     expect(lastHudCall(renderer)[1]).toBe('game-over');
   });
 

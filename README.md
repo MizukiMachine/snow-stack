@@ -19,7 +19,7 @@ Three.js と TypeScript で作る BlockOut II 風の 3D ポリキューブパズ
 - `C` / `H` によるホールド
 - `Shift` / `5` によるソフトドロップ
 - NEXT / HOLD のポリキューブプレビュー
-- `ENDLESS` / `SPRINT` ミッション設定
+- `ENDLESS` / `PLANE SPRINT` / `SCORE RUSH` / `CLEAN PIT` / `DOUBLE CUT` / `CUBE TRIAL` ミッション設定
 
 ## セットアップ
 

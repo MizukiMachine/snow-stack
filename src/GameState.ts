@@ -27,7 +27,13 @@ export type CellState = 'empty' | number;
 export type GamePhase = 'running' | 'game-over';
 export type RotationDirection = 1 | -1;
 export type ActivePolyCubeStepResult = 'moved' | 'waiting' | 'blocked' | 'none';
-export type MissionMode = 'endless' | 'plane-sprint';
+export type MissionMode =
+  | 'endless'
+  | 'plane-sprint'
+  | 'score-rush'
+  | 'clean-pit'
+  | 'double-cut'
+  | 'cube-trial';
 
 export interface GameStateOptions {
   readonly dimensions?: FieldDimensions;
@@ -73,10 +79,131 @@ export interface ScoreStatistics {
 export interface MissionSnapshot {
   readonly mode: MissionMode;
   readonly label: string;
-  readonly targetPlanes: number;
-  readonly clearedPlanes: number;
-  readonly remainingPlanes: number;
+  readonly shortLabel: string;
+  readonly progressLabel: string;
+  readonly targetValue: number;
+  readonly progressValue: number;
+  readonly remainingValue: number;
+  readonly active: boolean;
   readonly complete: boolean;
+  readonly hint: string;
+  readonly completionMessage: string;
+}
+
+type MissionProgressContext = {
+  readonly clearedPlanes: number;
+  readonly score: number;
+  readonly placedCubes: number;
+  readonly emptyPitCount: number;
+  readonly multiPlaneClearCount: number;
+};
+
+type MissionDefinition = {
+  readonly label: string;
+  readonly shortLabel: string;
+  readonly progressLabel: string;
+  readonly targetValue: number;
+  readonly active: boolean;
+  readonly getProgress: (context: MissionProgressContext) => number;
+  readonly getHint: (remainingValue: number) => string;
+  readonly completionMessage: string;
+};
+
+const PLANE_SPRINT_TARGET_PLANES = 5;
+const SCORE_RUSH_TARGET_SCORE = 2_000;
+const CLEAN_PIT_TARGET_COUNT = 1;
+const DOUBLE_CUT_TARGET_COUNT = 1;
+const CUBE_TRIAL_TARGET_CUBES = 120;
+export const DEFAULT_MISSION_MODE: MissionMode = 'endless';
+export const MISSION_MODES: readonly MissionMode[] = Object.freeze([
+  'endless',
+  'plane-sprint',
+  'score-rush',
+  'clean-pit',
+  'double-cut',
+  'cube-trial'
+]);
+
+const MISSION_DEFINITIONS: Readonly<Record<MissionMode, MissionDefinition>> = Object.freeze({
+  endless: {
+    label: 'ENDLESS',
+    shortLabel: 'ENDLESS',
+    progressLabel: 'PLANES',
+    targetValue: 0,
+    active: false,
+    getProgress: (context) => context.clearedPlanes,
+    getHint: () => 'Fill complete depth planes across the pit to clear them.',
+    completionMessage: 'Keep building for a higher score.'
+  },
+  'plane-sprint': {
+    label: 'PLANE SPRINT',
+    shortLabel: '5 PLANES',
+    progressLabel: 'PLANES',
+    targetValue: PLANE_SPRINT_TARGET_PLANES,
+    active: true,
+    getProgress: (context) => context.clearedPlanes,
+    getHint: (remainingValue) =>
+      remainingValue === 1
+        ? '1 plane left in the sprint.'
+        : `${remainingValue} planes left in the sprint.`,
+    completionMessage: 'Plane sprint complete.'
+  },
+  'score-rush': {
+    label: 'SCORE RUSH',
+    shortLabel: '2K SCORE',
+    progressLabel: 'SCORE',
+    targetValue: SCORE_RUSH_TARGET_SCORE,
+    active: true,
+    getProgress: (context) => context.score,
+    getHint: (remainingValue) =>
+      `${formatMissionValue(remainingValue)} score left to reach the rush target.`,
+    completionMessage: 'Score rush target reached.'
+  },
+  'clean-pit': {
+    label: 'CLEAN PIT',
+    shortLabel: 'CLEAN PIT',
+    progressLabel: 'CLEARS',
+    targetValue: CLEAN_PIT_TARGET_COUNT,
+    active: true,
+    getProgress: (context) => context.emptyPitCount,
+    getHint: () => 'Empty the entire pit once by clearing every settled block.',
+    completionMessage: 'The pit is clean.'
+  },
+  'double-cut': {
+    label: 'DOUBLE CUT',
+    shortLabel: 'DOUBLE CUT',
+    progressLabel: 'CUTS',
+    targetValue: DOUBLE_CUT_TARGET_COUNT,
+    active: true,
+    getProgress: (context) => context.multiPlaneClearCount,
+    getHint: () => 'Clear 2 or more planes with a single lock.',
+    completionMessage: 'Double cut achieved.'
+  },
+  'cube-trial': {
+    label: 'CUBE TRIAL',
+    shortLabel: '120 CUBES',
+    progressLabel: 'CUBES',
+    targetValue: CUBE_TRIAL_TARGET_CUBES,
+    active: true,
+    getProgress: (context) => context.placedCubes,
+    getHint: (remainingValue) => `${formatMissionValue(remainingValue)} placed cubes left in the trial.`,
+    completionMessage: 'Cube trial complete.'
+  }
+});
+
+export function getMissionModeLabel(mode: MissionMode): string {
+  return MISSION_DEFINITIONS[mode].label;
+}
+
+export function getMissionModeOptionLabel(mode: MissionMode): string {
+  return MISSION_DEFINITIONS[mode].shortLabel;
+}
+
+export function isMissionModeCompatibleWithBlockSet(
+  mode: MissionMode,
+  blockSet: BlockSet
+): boolean {
+  return mode !== 'double-cut' || blockSet !== 'flat';
 }
 
 /**
@@ -308,26 +435,29 @@ export class GameState {
   }
 
   public getMissionSnapshot(): MissionSnapshot {
-    if (this.missionMode === 'plane-sprint') {
-      const targetPlanes = PLANE_SPRINT_TARGET_PLANES;
-      const clearedPlanes = Math.min(this.clearedPlaneCount, targetPlanes);
-      return {
-        mode: this.missionMode,
-        label: 'PLANE SPRINT',
-        targetPlanes,
-        clearedPlanes,
-        remainingPlanes: Math.max(0, targetPlanes - clearedPlanes),
-        complete: clearedPlanes >= targetPlanes
-      };
-    }
-
+    const definition = MISSION_DEFINITIONS[this.missionMode];
+    const rawProgress = Math.max(0, definition.getProgress(this.getMissionProgressContext()));
+    const progressValue =
+      definition.targetValue === 0
+        ? rawProgress
+        : Math.min(rawProgress, definition.targetValue);
+    const remainingValue = Math.max(0, definition.targetValue - progressValue);
+    const complete =
+      definition.active &&
+      definition.targetValue > 0 &&
+      progressValue >= definition.targetValue;
     return {
       mode: this.missionMode,
-      label: 'ENDLESS',
-      targetPlanes: 0,
-      clearedPlanes: this.clearedPlaneCount,
-      remainingPlanes: 0,
-      complete: false
+      label: definition.label,
+      shortLabel: definition.shortLabel,
+      progressLabel: definition.progressLabel,
+      targetValue: definition.targetValue,
+      progressValue,
+      remainingValue,
+      active: definition.active,
+      complete,
+      hint: definition.getHint(remainingValue),
+      completionMessage: definition.completionMessage
     };
   }
 
@@ -756,6 +886,19 @@ export class GameState {
       { x: 0, y: 0, z: 0 }
     );
   }
+
+  private getMissionProgressContext(): MissionProgressContext {
+    const multiPlaneClearCount = this.clearedPlanesByCount
+      .slice(2)
+      .reduce((sum, count) => sum + count, 0);
+    return {
+      clearedPlanes: this.clearedPlaneCount,
+      score: this.score,
+      placedCubes: this.placedCubeCount,
+      emptyPitCount: this.emptyPitCount,
+      multiPlaneClearCount
+    };
+  }
 }
 
 interface ActivePolyCube {
@@ -775,8 +918,6 @@ const BLOCKOUT_TIME_BASE_MS = 5510;
 const TIME_BASE_MS = BLOCKOUT_TIME_BASE_MS;
 const TIME_LEVEL_FACTOR = 0.64;
 const MAX_START_LEVEL = MAX_LEVEL - 1;
-const DEFAULT_MISSION_MODE: MissionMode = 'endless';
-const PLANE_SPRINT_TARGET_PLANES = 5;
 
 function rotateCellAroundBlockOutCenter(
   cell: FieldCoordinate,
@@ -839,6 +980,10 @@ function clampInteger(value: number, min: number, max: number): number {
   return Math.min(Math.max(Math.trunc(value), min), max);
 }
 
+function formatMissionValue(value: number): string {
+  return Math.trunc(value).toLocaleString('en-US');
+}
+
 function normalizeDimensions(dimensions: FieldDimensions): FieldDimensions {
   return {
     width: clampInteger(dimensions.width, MIN_PIT_WIDTH, MAX_PIT_WIDTH),
@@ -848,17 +993,25 @@ function normalizeDimensions(dimensions: FieldDimensions): FieldDimensions {
 }
 
 function normalizeSetup(options: GameStateOptions): GameSetup {
+  const missionMode = normalizeMissionMode(options.missionMode);
+  const blockSet = normalizeMissionBlockSet(options.blockSet ?? DEFAULT_BLOCK_SET, missionMode);
   return {
     dimensions: normalizeDimensions(options.dimensions ?? FIELD_DIMENSIONS),
-    blockSet: options.blockSet ?? DEFAULT_BLOCK_SET,
+    blockSet,
     startLevel: clampInteger(options.startLevel ?? DEFAULT_START_LEVEL, 0, MAX_START_LEVEL),
     randomSeed: normalizeSeed(options.randomSeed ?? createRandomSeed()),
-    missionMode: normalizeMissionMode(options.missionMode)
+    missionMode
   };
 }
 
 function normalizeMissionMode(mode: MissionMode | undefined): MissionMode {
-  return mode ?? DEFAULT_MISSION_MODE;
+  return mode && (MISSION_MODES as readonly string[]).includes(mode)
+    ? mode
+    : DEFAULT_MISSION_MODE;
+}
+
+function normalizeMissionBlockSet(blockSet: BlockSet, missionMode: MissionMode): BlockSet {
+  return isMissionModeCompatibleWithBlockSet(missionMode, blockSet) ? blockSet : 'basic';
 }
 
 function normalizeSeed(seed: number): number {

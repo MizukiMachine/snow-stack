@@ -27,13 +27,18 @@ import {
 } from 'three';
 import type { Material, Texture } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import type {
-  ActivePolyCubeSnapshot,
-  FootprintCellSnapshot,
-  GameStateOptions,
-  GamePhase,
-  MissionMode,
-  SettledBlockSnapshot
+import {
+  DEFAULT_MISSION_MODE,
+  GameState,
+  MISSION_MODES,
+  getMissionModeOptionLabel,
+  isMissionModeCompatibleWithBlockSet,
+  type ActivePolyCubeSnapshot,
+  type FootprintCellSnapshot,
+  type GamePhase,
+  type GameStateOptions,
+  type MissionMode,
+  type SettledBlockSnapshot
 } from './GameState';
 import {
   BLOCK_SETS,
@@ -51,7 +56,6 @@ import {
 } from './constants/blockout';
 import { CELL_SIZE } from './constants/field';
 import { KEY_ASSIGNMENT_ROWS, type KeyAssignmentRow } from './config/controls';
-import { GameState } from './GameState';
 
 type RendererCallbacks = {
   onRestart?: () => void;
@@ -121,12 +125,6 @@ type AssetPlacement = {
   readonly rotationY?: number;
   readonly rotationZ?: number;
 };
-
-const MISSION_MODES: readonly MissionMode[] = Object.freeze(['endless', 'plane-sprint']);
-const MISSION_MODE_LABELS: Record<MissionMode, string> = Object.freeze({
-  endless: 'ENDLESS',
-  'plane-sprint': 'SPRINT'
-});
 
 const CAMERA_SETTINGS = {
   targetHeightFactor: 0.5,
@@ -518,7 +516,7 @@ export class Renderer {
     const mission = this.gameState.getMissionSnapshot();
     root.dataset.phase = this.hudState.phase;
     root.dataset.paused = String(this.hudState.isPaused);
-    root.dataset.missionActive = String(mission.mode !== 'endless');
+    root.dataset.missionActive = String(mission.active);
     root.dataset.missionComplete = String(mission.complete);
     this.setText(root, '[data-role="score"]', this.formatNumber(this.hudState.score));
     this.setText(root, '[data-role="level"]', String(this.hudState.level).padStart(2, '0'));
@@ -560,8 +558,8 @@ export class Renderer {
         ? 'Rotate the view and start a fresh run.'
         : this.hudState.isPaused
         ? 'Run paused. Resume when you are ready.'
-        : mission.mode === 'plane-sprint'
-        ? `${mission.remainingPlanes} planes left in the sprint.`
+        : mission.active
+        ? mission.hint
         : 'Fill complete depth planes across the pit to clear them.'
     );
 
@@ -580,7 +578,7 @@ export class Renderer {
       this.setText(
         overlay,
         '[data-role="overlay-message"]',
-        missionComplete ? 'Plane sprint complete.' : 'The pit has reached the top.'
+        missionComplete ? mission.completionMessage : 'The pit has reached the top.'
       );
       this.setText(
         overlay,
@@ -622,7 +620,7 @@ export class Renderer {
     ).join('');
     const missionButtons = MISSION_MODES.map(
       (missionMode) =>
-        `<button class="segmented-button" data-mission-mode="${missionMode}" type="button">${MISSION_MODE_LABELS[missionMode]}</button>`
+        `<button class="segmented-button" data-mission-mode="${missionMode}" type="button">${getMissionModeOptionLabel(missionMode)}</button>`
     ).join('');
     hud.className = 'ui-layer';
     hud.innerHTML = `
@@ -775,11 +773,15 @@ export class Renderer {
           item.classList.toggle('is-active', isActive);
           item.setAttribute('aria-pressed', String(isActive));
         });
+        this.syncMissionAvailability(hud);
       });
     });
 
     hud.querySelectorAll<HTMLButtonElement>('[data-mission-mode]').forEach((button) => {
       button.addEventListener('click', () => {
+        if (button.disabled) {
+          return;
+        }
         hud.querySelectorAll<HTMLButtonElement>('[data-mission-mode]').forEach((item) => {
           const isActive = item === button;
           item.classList.toggle('is-active', isActive);
@@ -2037,6 +2039,8 @@ export class Renderer {
       button.classList.toggle('is-active', isActive);
       button.setAttribute('aria-pressed', String(isActive));
     });
+
+    this.syncMissionAvailability(root);
   }
 
   private collectSetupValues(root: ParentNode): GameStateOptions {
@@ -2046,9 +2050,12 @@ export class Renderer {
     const blockSet = isBlockSet(activeBlockSet) ? activeBlockSet : setup.blockSet;
     const activeMissionMode = root.querySelector<HTMLButtonElement>('[data-mission-mode].is-active')
       ?.dataset.missionMode;
-    const missionMode = isMissionMode(activeMissionMode)
+    let missionMode = isMissionMode(activeMissionMode)
       ? activeMissionMode
       : setup.missionMode;
+    if (!isMissionModeCompatibleWithBlockSet(missionMode, blockSet)) {
+      missionMode = DEFAULT_MISSION_MODE;
+    }
 
     return {
       dimensions: {
@@ -2060,6 +2067,44 @@ export class Renderer {
       startLevel: this.readSetupNumber(root, 'startLevel', setup.startLevel, 0, MAX_LEVEL - 1),
       missionMode
     };
+  }
+
+  private syncMissionAvailability(root: ParentNode): void {
+    const setup = this.gameState.getSetup();
+    const activeBlockSet = root.querySelector<HTMLButtonElement>('[data-block-set].is-active')
+      ?.dataset.blockSet;
+    const blockSet = isBlockSet(activeBlockSet) ? activeBlockSet : setup.blockSet;
+    let shouldSelectFallbackMission = false;
+
+    root.querySelectorAll<HTMLButtonElement>('[data-mission-mode]').forEach((button) => {
+      const missionModeValue = button.dataset.missionMode;
+      const missionMode = isMissionMode(missionModeValue)
+        ? missionModeValue
+        : DEFAULT_MISSION_MODE;
+      const isCompatible = isMissionModeCompatibleWithBlockSet(missionMode, blockSet);
+      button.disabled = !isCompatible;
+      button.setAttribute('aria-disabled', String(!isCompatible));
+      if (!isCompatible && button.classList.contains('is-active')) {
+        shouldSelectFallbackMission = true;
+        button.classList.remove('is-active');
+        button.setAttribute('aria-pressed', 'false');
+      }
+    });
+
+    if (!shouldSelectFallbackMission) {
+      return;
+    }
+
+    const fallback = root.querySelector<HTMLButtonElement>(
+      `[data-mission-mode="${DEFAULT_MISSION_MODE}"]`
+    );
+    if (!fallback) {
+      return;
+    }
+    fallback.disabled = false;
+    fallback.classList.add('is-active');
+    fallback.setAttribute('aria-disabled', 'false');
+    fallback.setAttribute('aria-pressed', 'true');
   }
 
   private readSetupNumber(
@@ -2192,7 +2237,7 @@ export class Renderer {
 
     const missionPill = root.querySelector<HTMLElement>('[data-role="mission-pill"]');
     if (missionPill) {
-      missionPill.hidden = mission.mode === 'endless';
+      missionPill.hidden = !mission.active;
     }
 
     const progress = root.querySelector<HTMLElement>('[data-role="mission-progress"]');
@@ -2200,15 +2245,17 @@ export class Renderer {
       return;
     }
 
-    progress.hidden = mission.mode === 'endless';
+    progress.hidden = !mission.active;
     progress.dataset.complete = String(mission.complete);
     const percent =
-      mission.targetPlanes === 0
+      mission.targetValue === 0
         ? 0
-        : Math.min(100, Math.round((mission.clearedPlanes / mission.targetPlanes) * 100));
+        : Math.min(100, Math.round((mission.progressValue / mission.targetValue) * 100));
     progress.style.setProperty('--mission-progress', `${percent}%`);
     progress.querySelector('span')?.replaceChildren(
-      document.createTextNode(`${mission.clearedPlanes}/${mission.targetPlanes}`)
+      document.createTextNode(
+        `${this.formatNumber(mission.progressValue)}/${this.formatNumber(mission.targetValue)} ${mission.progressLabel}`
+      )
     );
   }
 
