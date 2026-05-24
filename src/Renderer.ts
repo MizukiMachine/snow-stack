@@ -126,10 +126,6 @@ const MISSION_MODE_LABELS: Record<MissionMode, string> = Object.freeze({
   endless: 'ENDLESS',
   'plane-sprint': 'SPRINT'
 });
-const PREVIEW_STAGE_LIMITS: Record<'queue' | 'hold', { width: number; height: number }> = Object.freeze({
-  queue: { width: 44, height: 42 },
-  hold: { width: 74, height: 42 }
-});
 
 const CAMERA_SETTINGS = {
   targetHeightFactor: 0.5,
@@ -654,7 +650,7 @@ export class Renderer {
           </section>
           <section class="panel metric-card queue-card">
             <div class="panel-heading">${icon('snowflake')}<span>NEXT</span></div>
-            <div class="queue-list" data-role="queue-list"><span>--</span><span>--</span><span>--</span></div>
+            <div class="queue-list" data-role="queue-list"><span>--</span></div>
           </section>
           <section class="panel metric-card hold-card">
             <div class="panel-heading">${icon('cube')}<span>HOLD</span></div>
@@ -2129,13 +2125,11 @@ export class Renderer {
     if (!queue) {
       return;
     }
-    queue.innerHTML = this.hudState.queue
-      .slice(0, 3)
-      .map((id) => this.renderPolyCubePreview(id, 'queue'))
-      .join('');
-    if (this.hudState.queue.length === 0) {
-      queue.innerHTML = '<span class="is-empty">--</span><span class="is-empty">--</span><span class="is-empty">--</span>';
-    }
+    const nextPiece = this.hudState.queue[0];
+    queue.innerHTML =
+      nextPiece === undefined
+        ? '<span class="is-empty">--</span>'
+        : this.renderPolyCubePreview(nextPiece, 'queue');
   }
 
   private syncHeldPiece(root: ParentNode): void {
@@ -2179,33 +2173,37 @@ export class Renderer {
 
   private renderPolyCubePreview(id: number, variant: 'queue' | 'hold'): string {
     const definition = getPolyCubeDefinition(id);
-    const projection = definition.cells.map((cell) => ({
-      x: cell.x,
-      y: cell.y,
-      z: cell.z,
-      sx: (cell.x - cell.z) * 10,
-      sy: (cell.x + cell.z) * 5 - cell.y * 8
+    const blockSize = 30;
+    const gap = 4;
+    const step = blockSize + gap;
+    const depthOffsetX = 12;
+    const depthOffsetY = -8;
+    const projected = definition.cells.map((cell) => ({
+      x: cell.x * step + cell.z * depthOffsetX,
+      y: (definition.height - 1 - cell.y) * step + cell.z * depthOffsetY,
+      z: cell.z
     }));
-    const minX = Math.min(...projection.map((cell) => cell.sx));
-    const minY = Math.min(...projection.map((cell) => cell.sy));
-    const maxX = Math.max(...projection.map((cell) => cell.sx));
-    const maxY = Math.max(...projection.map((cell) => cell.sy));
-    const width = Math.max(30, maxX - minX + 20);
-    const height = Math.max(28, maxY - minY + 20);
-    const limit = PREVIEW_STAGE_LIMITS[variant];
-    const scale = Math.min(1, limit.width / width, limit.height / height);
-    const cells = projection
-      .sort((a, b) => a.z - b.z || a.y - b.y || a.x - b.x)
-      .map((cell) => {
-        const left = cell.sx - minX + 5;
-        const top = cell.sy - minY + 5;
-        return `<span class="poly-preview-cell" style="left: ${left}px; top: ${top}px;"></span>`;
-      })
+    const minX = Math.min(...projected.map((cell) => cell.x));
+    const minY = Math.min(...projected.map((cell) => cell.y));
+    const maxX = Math.max(...projected.map((cell) => cell.x + blockSize));
+    const maxY = Math.max(...projected.map((cell) => cell.y + blockSize));
+    const padding = 18;
+    const viewBox = [
+      minX - padding,
+      minY - padding,
+      maxX - minX + padding * 2,
+      maxY - minY + padding * 2
+    ].join(' ');
+    const baseColor = definition.color;
+    const frontColor = formatHexColor(mixColorNumber(baseColor, 0xffffff, 0.08));
+    const strokeColor = formatHexColor(mixColorNumber(baseColor, 0xffffff, 0.62));
+    const cubes = projected
+      .sort((a, b) => b.z - a.z || a.y - b.y || a.x - b.x)
+      .map((cell) => renderPreviewCube(cell.x, cell.y, blockSize, frontColor, strokeColor))
       .join('');
     return [
-      `<div class="poly-preview poly-preview-${variant}" style="--piece-color: ${formatHexColor(definition.color)}">`,
-      `<div class="poly-preview-stage" style="width: ${width}px; height: ${height}px; --preview-scale: ${Number(scale.toFixed(3))};">${cells}</div>`,
-      `<span class="poly-preview-label">${definition.label}</span>`,
+      `<div class="poly-preview poly-preview-${variant}" style="--piece-color: ${formatHexColor(baseColor)}" role="img" aria-label="${definition.label}">`,
+      `<svg class="piece-preview-svg" viewBox="${viewBox}" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">${cubes}</svg>`,
       '</div>'
     ].join('');
   }
@@ -2291,6 +2289,22 @@ function renderKeycap(label: string): string {
 
   const classAttribute = classNames.length > 0 ? ` class="${classNames.join(' ')}"` : '';
   return `<b${classAttribute}>${label}</b>`;
+}
+
+function renderPreviewCube(
+  x: number,
+  y: number,
+  size: number,
+  frontColor: string,
+  strokeColor: string
+): string {
+  return [
+    '<g class="preview-cube">',
+    `<rect x="${x}" y="${y}" width="${size}" height="${size}" rx="5" fill="${frontColor}" stroke="${strokeColor}" />`,
+    `<path d="M${x + 6} ${y + 6} H${x + size - 8}" class="preview-cube-highlight" />`,
+    `<path d="M${x + size - 6} ${y + 7} V${y + size - 8}" class="preview-cube-shade" />`,
+    '</g>'
+  ].join('');
 }
 
 function mixColorNumber(color: number, target: number, amount: number): number {

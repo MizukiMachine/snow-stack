@@ -401,15 +401,15 @@ button {
 .hold-slot {
   display: grid;
   gap: 8px;
+  place-items: center;
 }
 
 .queue-list {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .hold-slot {
-  min-height: 56px;
-  place-items: center;
+  min-height: 72px;
 }
 
 .queue-list > span,
@@ -434,46 +434,49 @@ button {
 
 .poly-preview {
   min-width: 0;
-  height: 62px;
+  width: 100%;
+  height: 76px;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) 15px;
   place-items: center;
   color: #0b3d9a;
   border: 1px solid rgba(65, 139, 203, 0.5);
-  background: rgba(255, 255, 255, 0.34);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.34), rgba(149, 201, 237, 0.12)),
+    rgba(255, 255, 255, 0.18);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.62);
   overflow: hidden;
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px);
 }
 
-.poly-preview-stage {
-  position: relative;
-  align-self: end;
-  transform: translateY(2px) scale(var(--preview-scale, 1));
-  transform-origin: center bottom;
+.piece-preview-svg {
+  width: min(100%, 168px);
+  height: 68px;
+  display: block;
+  overflow: visible;
+  filter:
+    drop-shadow(0 0 8px color-mix(in srgb, var(--piece-color) 82%, transparent))
+    drop-shadow(0 0 15px color-mix(in srgb, var(--piece-color) 42%, transparent));
 }
 
-.poly-preview-cell {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  border: 1px solid rgba(6, 54, 122, 0.42);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.72), transparent 45%),
-    var(--piece-color);
-  box-shadow:
-    inset -3px -3px 0 rgba(3, 44, 108, 0.18),
-    0 2px 4px rgba(24, 86, 148, 0.16);
-  transform: skewY(-18deg) rotate(2deg);
+.preview-cube rect {
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
 }
 
-.poly-preview-label {
-  font-size: 11px;
-  font-weight: 900;
-  line-height: 1;
+.preview-cube-highlight {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.76);
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
 }
 
-.poly-preview-hold {
-  width: min(100%, 112px);
+.preview-cube-shade {
+  fill: none;
+  stroke: rgba(8, 44, 113, 0.28);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
 }
 
 .mission-progress {
@@ -1069,15 +1072,15 @@ button {
   }
 
   .poly-preview {
+    height: 58px;
+  }
+
+  .piece-preview-svg {
     height: 52px;
   }
 
-  .poly-preview-stage {
-    transform: translateY(4px) scale(calc(var(--preview-scale, 1) * 0.86));
-  }
-
   .hold-slot {
-    min-height: 46px;
+    min-height: 58px;
   }
 
   .controls-panel {
@@ -1203,21 +1206,15 @@ button {
   }
 
   .poly-preview {
-    height: 42px;
-    grid-template-rows: minmax(0, 1fr) 12px;
+    height: 48px;
   }
 
-  .poly-preview-cell {
-    width: 10px;
-    height: 10px;
-  }
-
-  .poly-preview-stage {
-    transform: translateY(5px) scale(calc(var(--preview-scale, 1) * 0.68));
+  .piece-preview-svg {
+    height: 44px;
   }
 
   .hold-slot {
-    min-height: 38px;
+    min-height: 48px;
   }
 
   .mission-progress {

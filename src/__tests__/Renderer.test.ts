@@ -5,6 +5,9 @@ import { GameState, type SettledBlockSnapshot } from '../GameState';
 import { getBlockOutLayerColor } from '../constants/blockout';
 
 type RendererAccess = {
+  hudState: {
+    queue: readonly number[];
+  };
   scene: Scene | null;
   createBlockMesh: (
     color: number,
@@ -13,6 +16,7 @@ type RendererAccess = {
     settledAssetKey?: 'settledIceBlock'
   ) => Group;
   syncDepthLayerGuide: (root: ParentNode) => void;
+  syncQueue: (root: ParentNode) => void;
   syncHeldPiece: (root: ParentNode) => void;
   syncMission: (root: ParentNode) => void;
   renderPolyCubePreview: (id: number, variant: 'queue' | 'hold') => string;
@@ -158,7 +162,10 @@ describe('Renderer BlockOut layer coloring', () => {
     (renderer as unknown as RendererAccess).syncHeldPiece(root);
 
     expect(root.querySelector('.poly-preview-hold')).not.toBeNull();
-    expect(root.textContent).toContain('P00');
+    expect(root.querySelector('.piece-preview-svg')).not.toBeNull();
+    expect(root.querySelectorAll('.preview-cube')).toHaveLength(1);
+    expect(root.querySelector('.poly-preview-hold')?.getAttribute('role')).toBe('img');
+    expect(root.querySelector('.poly-preview-hold')?.getAttribute('aria-label')).toBe('P00');
   });
 
   it('renders sprint mission progress in the status pill', () => {
@@ -187,18 +194,42 @@ describe('Renderer BlockOut layer coloring', () => {
     root.innerHTML = html;
 
     expect(root.querySelector('.poly-preview-queue')).not.toBeNull();
-    expect(root.querySelectorAll('.poly-preview-cell')).toHaveLength(3);
-    expect(root.textContent).toContain('P05');
+    expect(root.querySelector('.piece-preview-svg')).not.toBeNull();
+    expect(root.querySelectorAll('.preview-cube')).toHaveLength(3);
+    expect(root.querySelector('.poly-preview-queue')?.getAttribute('role')).toBe('img');
+    expect(root.querySelector('.poly-preview-queue')?.getAttribute('aria-label')).toBe('P05');
   });
 
-  it('scales tall polycube previews to stay inside compact queue slots', () => {
+  it('renders only the next queued piece in the HUD queue slot', () => {
     const state = new GameState();
     const renderer = new Renderer(state);
-    const html = (renderer as unknown as RendererAccess).renderPolyCubePreview(4, 'queue');
+    const access = renderer as unknown as RendererAccess;
+    const root = document.createElement('div');
+    root.innerHTML = '<div data-role="queue-list"><span>--</span></div>';
+
+    access.hudState.queue = [5, 0, 21];
+    access.syncQueue(root);
+
+    expect(root.querySelectorAll('.poly-preview-queue')).toHaveLength(1);
+    expect(root.querySelector('.poly-preview-queue')?.getAttribute('aria-label')).toBe('P05');
+    expect(root.querySelectorAll('.preview-cube')).toHaveLength(3);
+
+    access.hudState.queue = [];
+    access.syncQueue(root);
+
+    expect(root.querySelector('.poly-preview-queue')).toBeNull();
+    expect(root.querySelector('.is-empty')?.textContent).toBe('--');
+  });
+
+  it('builds SVG previews from current multi-depth polycube cells', () => {
+    const state = new GameState();
+    const renderer = new Renderer(state);
+    const html = (renderer as unknown as RendererAccess).renderPolyCubePreview(21, 'queue');
     const root = document.createElement('div');
     root.innerHTML = html;
 
-    const stage = root.querySelector<HTMLElement>('.poly-preview-stage');
-    expect(Number(stage?.style.getPropertyValue('--preview-scale'))).toBeLessThan(1);
+    const svg = root.querySelector<SVGElement>('.piece-preview-svg');
+    expect(root.querySelectorAll('.preview-cube')).toHaveLength(5);
+    expect(svg?.getAttribute('viewBox')?.split(' ')).toHaveLength(4);
   });
 });
