@@ -64,6 +64,10 @@ type RendererCallbacks = {
   onApplySetup?: (setup: GameStateOptions) => void;
 };
 
+type RendererDisposeOptions = {
+  readonly preserveAssets?: boolean;
+};
+
 type HudState = {
   queue: readonly number[];
   phase: GamePhase;
@@ -336,7 +340,8 @@ export class Renderer {
     this.renderer.render(this.scene, this.camera);
   }
 
-  public dispose(): void {
+  public dispose(options: RendererDisposeOptions = {}): void {
+    const shouldPreserveLoadedAssets = options.preserveAssets === true && this.assetsReady;
     this.disposed = true;
     this.assetLoadGeneration += 1;
     if (this.resizeHandler) {
@@ -349,7 +354,9 @@ export class Renderer {
       this.disposeObjectResources(this.scene);
       this.scene.clear();
     }
-    this.disposeLoadedCubeWorldAssets();
+    if (!shouldPreserveLoadedAssets) {
+      this.disposeLoadedCubeWorldAssets();
+    }
     this.renderer?.domElement.remove();
     this.renderer?.dispose();
     this.hudElement?.remove();

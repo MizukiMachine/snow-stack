@@ -302,7 +302,7 @@ export class GameEngine {
     this.lastDropAt = performance.now();
 
     if (this.container) {
-      this.renderer.dispose();
+      this.renderer.dispose({ preserveAssets: true });
       this.renderer.initialize(this.container);
     }
 

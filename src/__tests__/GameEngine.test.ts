@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GameEngine } from '../GameEngine';
-import { GameState } from '../GameState';
+import { GameState, type GameStateOptions } from '../GameState';
 import type { Renderer } from '../Renderer';
 
 type RendererMock = {
@@ -371,6 +371,16 @@ describe('GameEngine BlockOut controls', () => {
     expect(state.getActivePolyCube()?.blocks).toEqual(blocksBeforeStop);
     expect(renderer.updateActivePolyCube).not.toHaveBeenCalled();
   });
+
+  it('preserves loaded renderer assets when applying setup', () => {
+    const { engine, state, renderer } = startEngineWithPiece(0);
+
+    applySetup(engine, { missionMode: 'plane-sprint' });
+
+    expect(state.getMissionSnapshot().mode).toBe('plane-sprint');
+    expect(renderer.dispose).toHaveBeenCalledWith({ preserveAssets: true });
+    expect(renderer.initialize).toHaveBeenCalledTimes(2);
+  });
 });
 
 function startEngineWithPiece(id: number): {
@@ -438,6 +448,10 @@ function advanceGame(engine: GameEngine, timestamp: number): void {
 
 function toggleSettings(engine: GameEngine): void {
   (engine as unknown as { toggleSettings: () => void }).toggleSettings();
+}
+
+function applySetup(engine: GameEngine, setup: GameStateOptions): void {
+  (engine as unknown as { applySetup: (setup: GameStateOptions) => void }).applySetup(setup);
 }
 
 function seedPlane(

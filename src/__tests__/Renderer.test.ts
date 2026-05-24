@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CanvasTexture, Group, Mesh, MeshBasicMaterial, PlaneGeometry, Points, Scene } from 'three';
+import {
+  BoxGeometry,
+  CanvasTexture,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  PlaneGeometry,
+  Points,
+  Scene
+} from 'three';
 import { Renderer } from '../Renderer';
 import { GameState, type SettledBlockSnapshot } from '../GameState';
 import { getBlockOutLayerColor } from '../constants/blockout';
@@ -10,6 +19,8 @@ type RendererAccess = {
     queue: readonly number[];
   };
   scene: Scene | null;
+  assetsReady: boolean;
+  assetTemplates: Map<string, Group>;
   createBlockMesh: (
     color: number,
     isActive: boolean,
@@ -307,6 +318,26 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(readFirstPointCoordinate(fieldBounds, 'landing-guide-grid', 'z')).toBeLessThan(
       dimensions.depth * CELL_SIZE
     );
+  });
+
+  it('can preserve loaded Cube World templates across a setup reset', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 12 } });
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const template = new Group();
+    template.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()));
+    access.assetTemplates.set('wallIce', template);
+    access.assetsReady = true;
+
+    renderer.dispose({ preserveAssets: true });
+
+    expect(access.assetTemplates.size).toBe(1);
+    expect(access.assetsReady).toBe(true);
+
+    renderer.dispose();
+
+    expect(access.assetTemplates.size).toBe(0);
+    expect(access.assetsReady).toBe(false);
   });
 
   it('shows only depth guide rows that already contain settled blocks', () => {
