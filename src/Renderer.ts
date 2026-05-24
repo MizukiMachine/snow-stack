@@ -126,6 +126,18 @@ type AssetPlacement = {
   readonly rotationZ?: number;
 };
 
+type ReflectionPatchPlacement = {
+  readonly name: string;
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly opacity: number;
+  readonly rotationX?: number;
+  readonly rotationY?: number;
+  readonly scaleX?: number;
+  readonly scaleY?: number;
+};
+
 const CAMERA_SETTINGS = {
   targetHeightFactor: 0.5,
   initialTheta: -Math.PI / 2,
@@ -146,6 +158,8 @@ const SETTLED_BLOCK_FALLBACK_CORE_SIZE = CELL_SIZE;
 const DEFAULT_BLOCK_FALLBACK_CORE_SIZE = CELL_SIZE * 0.84;
 const PIT_WALL_BACKING_OFFSET = CELL_SIZE * 0.035;
 const PIT_WALL_GUIDE_INSET = CELL_SIZE * 0.018;
+const PIT_REFLECTION_INSET = CELL_SIZE * 0.028;
+const PIT_REFLECTION_OPACITY = 0.2;
 const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, CubeWorldAssetDefinition> = Object.freeze({
   wallIce: {
     path: `${CUBE_WORLD_ASSET_ROOT}/Pixel%20Blocks/glTF/Ice.gltf`,
@@ -166,6 +180,8 @@ const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, CubeWorldAssetDefinition> = O
   }
 });
 const CUBE_WIREFRAME_BEAM_GEOMETRY = new BoxGeometry(1, 1, 1);
+const PIT_REFLECTION_PLANE_GEOMETRY = new PlaneGeometry(CELL_SIZE * 0.96, CELL_SIZE * 0.96);
+const PIT_REFLECTION_FRAME_GEOMETRY = new EdgesGeometry(PIT_REFLECTION_PLANE_GEOMETRY);
 
 /**
  * Three.js scene rendering and DOM-based HUD for the BlockOut pit.
@@ -422,6 +438,11 @@ export class Renderer {
       );
       group.add(mesh);
     });
+
+    const reflections = this.createSettledBlockReflectionGroup(blocks);
+    if (reflections) {
+      group.add(reflections);
+    }
 
     this.settledBlocksGroup = group;
     this.scene.add(group);
@@ -1317,6 +1338,118 @@ export class Renderer {
     border.renderOrder = 9;
     group.add(border);
     return group;
+  }
+
+  private createSettledBlockReflectionGroup(
+    blocks: readonly SettledBlockSnapshot[]
+  ): Group | null {
+    if (blocks.length === 0) {
+      return null;
+    }
+
+    const { width, height, depth } = this.gameState.getDimensions();
+    const group = new Group();
+    group.name = 'settled-block-reflections';
+
+    blocks.forEach((block) => {
+      const color = getBlockOutLayerColor(depth, block.coordinate.z);
+      const centerX = (block.coordinate.x + 0.5) * CELL_SIZE;
+      const centerY = (block.coordinate.y + 0.5) * CELL_SIZE;
+      const centerZ = (block.coordinate.z + 0.5) * CELL_SIZE;
+
+      this.addPitReflectionPatch(group, color, {
+        name: 'left-wall-block-reflection',
+        x: PIT_REFLECTION_INSET,
+        y: centerY,
+        z: centerZ,
+        opacity: PIT_REFLECTION_OPACITY,
+        rotationY: Math.PI / 2
+      });
+
+      this.addPitReflectionPatch(group, color, {
+        name: 'right-wall-block-reflection',
+        x: width * CELL_SIZE - PIT_REFLECTION_INSET,
+        y: centerY,
+        z: centerZ,
+        opacity: PIT_REFLECTION_OPACITY,
+        rotationY: -Math.PI / 2
+      });
+
+      this.addPitReflectionPatch(group, color, {
+        name: 'lower-wall-block-reflection',
+        x: centerX,
+        y: PIT_REFLECTION_INSET,
+        z: centerZ,
+        opacity: PIT_REFLECTION_OPACITY,
+        rotationX: -Math.PI / 2
+      });
+
+      this.addPitReflectionPatch(group, color, {
+        name: 'upper-wall-block-reflection',
+        x: centerX,
+        y: height * CELL_SIZE - PIT_REFLECTION_INSET,
+        z: centerZ,
+        opacity: PIT_REFLECTION_OPACITY,
+        rotationX: Math.PI / 2
+      });
+
+      this.addPitReflectionPatch(group, color, {
+        name: 'landing-wall-block-reflection',
+        x: centerX,
+        y: centerY,
+        z: depth * CELL_SIZE - PIT_REFLECTION_INSET,
+        opacity: PIT_REFLECTION_OPACITY,
+        rotationY: Math.PI
+      });
+    });
+
+    return group.children.length > 0 ? group : null;
+  }
+
+  private addPitReflectionPatch(
+    group: Group,
+    color: number,
+    placement: ReflectionPatchPlacement
+  ): void {
+    const reflection = new Group();
+    reflection.name = placement.name;
+    reflection.position.set(placement.x, placement.y, placement.z);
+    reflection.rotation.set(placement.rotationX ?? 0, placement.rotationY ?? 0, 0);
+    reflection.scale.set(placement.scaleX ?? 1, placement.scaleY ?? 1, 1);
+
+    const reflectionColor = mixColorNumber(color, 0xffffff, 0.32);
+    const fill = new Mesh(
+      PIT_REFLECTION_PLANE_GEOMETRY,
+      new MeshBasicMaterial({
+        color: reflectionColor,
+        transparent: true,
+        opacity: placement.opacity,
+        depthTest: true,
+        depthWrite: false,
+        side: DoubleSide
+      })
+    );
+    fill.name = `${placement.name}-fill`;
+    fill.renderOrder = 12;
+    fill.userData.preserveGeometry = true;
+    reflection.add(fill);
+
+    const frame = new LineSegments(
+      PIT_REFLECTION_FRAME_GEOMETRY,
+      new LineBasicMaterial({
+        color: mixColorNumber(reflectionColor, 0xffffff, 0.4),
+        transparent: true,
+        opacity: clamp(placement.opacity * 2.15, 0.08, 0.54),
+        depthTest: true,
+        depthWrite: false
+      })
+    );
+    frame.name = `${placement.name}-edge`;
+    frame.renderOrder = 13;
+    frame.userData.preserveGeometry = true;
+    reflection.add(frame);
+
+    group.add(reflection);
   }
 
   private createBlockMesh(

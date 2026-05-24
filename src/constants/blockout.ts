@@ -62,13 +62,13 @@ export const LINE_BASE: Record<BlockSet, number> = Object.freeze({
 });
 
 export const BLOCKOUT_LAYER_COLORS: readonly number[] = Object.freeze([
-  0x0000ff,
-  0x00ff00,
-  0x00e6e6,
-  0xff0000,
-  0xff1acc,
-  0xe69900,
-  0xd9d9d9
+  0xff2d55,
+  0xff8a1f,
+  0xffc400,
+  0x78d12f,
+  0xb33cff,
+  0xff3fb7,
+  0x5b2a86
 ]);
 
 export function getBlockOutLayerColor(depth: number, z: number): number {

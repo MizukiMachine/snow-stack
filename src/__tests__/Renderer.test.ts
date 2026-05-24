@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CanvasTexture, Group, Mesh, MeshBasicMaterial, Points, Scene } from 'three';
+import { CanvasTexture, Group, Mesh, MeshBasicMaterial, PlaneGeometry, Points, Scene } from 'three';
 import { Renderer } from '../Renderer';
 import { GameState, type SettledBlockSnapshot } from '../GameState';
 import { getBlockOutLayerColor } from '../constants/blockout';
@@ -85,6 +85,68 @@ describe('Renderer BlockOut layer coloring', () => {
     );
     expect(createBlockMesh.mock.calls.map(([color]) => color)).not.toContain(0x123456);
     expect(createBlockMesh.mock.calls.map(([color]) => color)).not.toContain(0x654321);
+  });
+
+  it('projects settled block reflections onto the inside ice walls', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 12 } });
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const scene = new Scene();
+    access.scene = scene;
+
+    renderer.updateSettledBlocks([
+      {
+        id: 0,
+        label: 'P00',
+        color: 0x123456,
+        coordinate: { x: 0, y: 0, z: 11 }
+      }
+    ]);
+
+    const reflections = scene.getObjectByName('settled-block-reflections') as Group | undefined;
+    const leftReflection = reflections?.getObjectByName(
+      'left-wall-block-reflection'
+    ) as Group | undefined;
+    const rightReflection = reflections?.getObjectByName(
+      'right-wall-block-reflection'
+    ) as Group | undefined;
+    const lowerReflection = reflections?.getObjectByName(
+      'lower-wall-block-reflection'
+    ) as Group | undefined;
+    const landingReflection = reflections?.getObjectByName(
+      'landing-wall-block-reflection'
+    ) as Group | undefined;
+    const fill = leftReflection?.children.find((child): child is Mesh => child instanceof Mesh);
+    const farWallFill = rightReflection?.children.find((child): child is Mesh => child instanceof Mesh);
+
+    expect(reflections).toBeDefined();
+    expect(leftReflection).toBeDefined();
+    expect(rightReflection).toBeDefined();
+    expect(lowerReflection).toBeDefined();
+    expect(landingReflection).toBeDefined();
+    expect(leftReflection?.position.x).toBeGreaterThan(0);
+    expect(leftReflection?.position.x).toBeLessThan(CELL_SIZE * 0.08);
+    expect(leftReflection?.position.y).toBeCloseTo(CELL_SIZE * 0.5);
+    expect(leftReflection?.position.z).toBeCloseTo(CELL_SIZE * 11.5);
+    expect(leftReflection?.rotation.y).toBeCloseTo(Math.PI / 2);
+    expect(leftReflection?.scale.x).toBeCloseTo(1);
+    expect(leftReflection?.scale.y).toBeCloseTo(1);
+    expect(fill?.renderOrder).toBeLessThan(18);
+
+    if (!fill || !(fill.material instanceof MeshBasicMaterial)) {
+      throw new Error('Reflection fill should use MeshBasicMaterial');
+    }
+
+    const reflectionGeometry = fill.geometry as PlaneGeometry;
+    expect(reflectionGeometry.parameters.width).toBeCloseTo(CELL_SIZE * 0.96);
+    expect(reflectionGeometry.parameters.height).toBeCloseTo(CELL_SIZE * 0.96);
+    expect(fill.material.transparent).toBe(true);
+    expect(fill.material.depthWrite).toBe(false);
+    expect(fill.material.opacity).toBeCloseTo(0.2);
+    if (!(farWallFill?.material instanceof MeshBasicMaterial)) {
+      throw new Error('Far wall reflection fill should use MeshBasicMaterial');
+    }
+    expect(farWallFill.material.opacity).toBeCloseTo(fill.material.opacity);
   });
 
   it('refreshes landing ghost and footprint groups from the active projection', () => {
