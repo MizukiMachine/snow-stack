@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Group, Mesh, MeshBasicMaterial, Scene } from 'three';
+import { CanvasTexture, Group, Mesh, MeshBasicMaterial, Points, Scene } from 'three';
 import { Renderer } from '../Renderer';
 import { GameState, type SettledBlockSnapshot } from '../GameState';
 import { getBlockOutLayerColor } from '../constants/blockout';
+import { CELL_SIZE } from '../constants/field';
 
 type RendererAccess = {
   hudState: {
@@ -15,6 +16,8 @@ type RendererAccess = {
     depthLayer?: number,
     settledAssetKey?: 'settledIceBlock'
   ) => Group;
+  createFieldBounds: () => Group;
+  createSnowWallTexture: () => CanvasTexture;
   syncDepthLayerGuide: (root: ParentNode) => void;
   syncQueue: (root: ParentNode) => void;
   syncHeldPiece: (root: ParentNode) => void;
@@ -113,6 +116,32 @@ describe('Renderer BlockOut layer coloring', () => {
 
     expect(scene.getObjectByName('landing-ghost')).toBeUndefined();
     expect(scene.getObjectByName('landing-footprint')).toBeUndefined();
+  });
+
+  it('keeps wall backing and guide grids off Cube World wall asset planes', () => {
+    const dimensions = { width: 5, height: 5, depth: 12 };
+    const state = new GameState({ dimensions });
+    const renderer = new Renderer(state);
+    vi.spyOn(renderer as unknown as RendererAccess, 'createSnowWallTexture').mockReturnValue(
+      new CanvasTexture(document.createElement('canvas'))
+    );
+
+    const fieldBounds = (renderer as unknown as RendererAccess).createFieldBounds();
+    const leftWall = fieldBounds.getObjectByName('left-wall-backing') as Mesh | undefined;
+    const rightWall = fieldBounds.getObjectByName('right-wall-backing') as Mesh | undefined;
+    const depthLanding = fieldBounds.getObjectByName('depth-landing-backing') as Mesh | undefined;
+
+    expect(leftWall?.position.x).toBeLessThan(0);
+    expect(rightWall?.position.x).toBeGreaterThan(dimensions.width * CELL_SIZE);
+    expect(depthLanding?.position.z).toBeGreaterThan(dimensions.depth * CELL_SIZE);
+
+    expect(readFirstPointCoordinate(fieldBounds, 'left-wall-guide-grid', 'x')).toBeGreaterThan(0);
+    expect(readFirstPointCoordinate(fieldBounds, 'right-wall-guide-grid', 'x')).toBeLessThan(
+      dimensions.width * CELL_SIZE
+    );
+    expect(readFirstPointCoordinate(fieldBounds, 'landing-guide-grid', 'z')).toBeLessThan(
+      dimensions.depth * CELL_SIZE
+    );
   });
 
   it('shows only depth guide rows that already contain settled blocks', () => {
@@ -233,3 +262,13 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(svg?.getAttribute('viewBox')?.split(' ')).toHaveLength(4);
   });
 });
+
+function readFirstPointCoordinate(root: Group, name: string, axis: 'x' | 'z'): number {
+  const group = root.getObjectByName(name) as Group | undefined;
+  const points = group?.children.find((child): child is Points => child instanceof Points);
+  const attribute = points?.geometry.getAttribute('position');
+  if (!attribute) {
+    throw new Error(`Guide grid ${name} has no point positions`);
+  }
+  return axis === 'x' ? attribute.getX(0) : attribute.getZ(0);
+}

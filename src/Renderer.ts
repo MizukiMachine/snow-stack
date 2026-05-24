@@ -7,6 +7,7 @@ import {
   DoubleSide,
   EdgesGeometry,
   Float32BufferAttribute,
+  FrontSide,
   Group,
   LinearFilter,
   LineBasicMaterial,
@@ -145,6 +146,8 @@ const CUBE_WORLD_ASSET_ROOT = '/assets/Cube%20World%20-%20Aug%202023';
 const SETTLED_BLOCK_ASSET_SCALE = CELL_SIZE * 0.5;
 const SETTLED_BLOCK_FALLBACK_CORE_SIZE = CELL_SIZE;
 const DEFAULT_BLOCK_FALLBACK_CORE_SIZE = CELL_SIZE * 0.84;
+const PIT_WALL_BACKING_OFFSET = CELL_SIZE * 0.035;
+const PIT_WALL_GUIDE_INSET = CELL_SIZE * 0.018;
 const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, CubeWorldAssetDefinition> = Object.freeze({
   wallIce: {
     path: `${CUBE_WORLD_ASSET_ROOT}/Pixel%20Blocks/glTF/Ice.gltf`,
@@ -822,18 +825,33 @@ export class Renderer {
       new PlaneGeometry(depth * CELL_SIZE, height * CELL_SIZE),
       sideWallMaterial
     );
-    leftWall.position.set(0, (height * CELL_SIZE) / 2, (depth * CELL_SIZE) / 2);
+    leftWall.name = 'left-wall-backing';
+    leftWall.position.set(
+      -PIT_WALL_BACKING_OFFSET,
+      (height * CELL_SIZE) / 2,
+      (depth * CELL_SIZE) / 2
+    );
     leftWall.rotation.y = Math.PI / 2;
 
     const rightWall = leftWall.clone();
-    rightWall.position.set(width * CELL_SIZE, (height * CELL_SIZE) / 2, (depth * CELL_SIZE) / 2);
+    rightWall.name = 'right-wall-backing';
+    rightWall.position.set(
+      width * CELL_SIZE + PIT_WALL_BACKING_OFFSET,
+      (height * CELL_SIZE) / 2,
+      (depth * CELL_SIZE) / 2
+    );
     rightWall.rotation.y = -Math.PI / 2;
 
     const depthLanding = new Mesh(
       new PlaneGeometry(width * CELL_SIZE, height * CELL_SIZE),
       depthLandingMaterial
     );
-    depthLanding.position.set((width * CELL_SIZE) / 2, (height * CELL_SIZE) / 2, depth * CELL_SIZE);
+    depthLanding.name = 'depth-landing-backing';
+    depthLanding.position.set(
+      (width * CELL_SIZE) / 2,
+      (height * CELL_SIZE) / 2,
+      depth * CELL_SIZE + PIT_WALL_BACKING_OFFSET
+    );
     depthLanding.rotation.y = Math.PI;
 
     const boundsGeometry = new BoxGeometry(width * CELL_SIZE, height * CELL_SIZE, depth * CELL_SIZE);
@@ -849,10 +867,33 @@ export class Renderer {
 
     group.add(leftWall, rightWall, depthLanding, bounds);
     group.add(this.createFieldFrameGlow(width, height, depth));
-    group.add(this.createFaceGrid('xy', width, height, 0, 0x58c9ff));
-    group.add(this.createFaceGrid('xy', width, height, depth, 0x62c4ff));
-    group.add(this.createFaceGrid('yz', depth, height, 0, 0x4ca6ff));
-    group.add(this.createFaceGrid('yz', depth, height, width, 0x4ca6ff));
+    const entryGrid = this.createFaceGrid('xy', width, height, 0, 0x58c9ff);
+    entryGrid.name = 'entry-guide-grid';
+    const landingGrid = this.createFaceGrid(
+      'xy',
+      width,
+      height,
+      depth - PIT_WALL_GUIDE_INSET / CELL_SIZE,
+      0x62c4ff
+    );
+    landingGrid.name = 'landing-guide-grid';
+    const leftGrid = this.createFaceGrid(
+      'yz',
+      depth,
+      height,
+      PIT_WALL_GUIDE_INSET / CELL_SIZE,
+      0x4ca6ff
+    );
+    leftGrid.name = 'left-wall-guide-grid';
+    const rightGrid = this.createFaceGrid(
+      'yz',
+      depth,
+      height,
+      width - PIT_WALL_GUIDE_INSET / CELL_SIZE,
+      0x4ca6ff
+    );
+    rightGrid.name = 'right-wall-guide-grid';
+    group.add(entryGrid, landingGrid, leftGrid, rightGrid);
     if (this.assetsReady) {
       this.assetFieldLayer = this.createCubeWorldFieldLayer();
       group.add(this.assetFieldLayer);
@@ -1032,7 +1073,7 @@ export class Renderer {
       transparent: opacity < 1,
       opacity,
       depthWrite: definition.depthWrite ?? opacity >= 1,
-      side: DoubleSide
+      side: FrontSide
     });
     return material;
   }
