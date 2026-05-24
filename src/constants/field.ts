@@ -16,12 +16,12 @@ export interface FieldDimensions {
 export const CELL_SIZE = 1;
 
 /**
- * 3D テトリスフィールドの標準寸法。将来のストーリーで共有利用される。
+ * BlockOut II の標準ピット寸法。
  */
 export const FIELD_DIMENSIONS: FieldDimensions = Object.freeze({
-  width: 10,
-  height: 15,
-  depth: 2
+  width: 5,
+  height: 5,
+  depth: 12
 });
 
 /**
