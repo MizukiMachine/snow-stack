@@ -1,9 +1,11 @@
 import type { FieldCoordinate } from './constants/field';
 import type { GameStateOptions } from './GameState';
 import {
+  HOLD_CODES,
   MOVEMENT_OFFSETS,
   ONE_SHOT_CODES,
   ROTATION_COMMANDS,
+  SOFT_DROP_CODES,
   isRepeatableGameplayCode
 } from './config/controls';
 import { GameState } from './GameState';
@@ -29,6 +31,7 @@ export class GameEngine {
   private settingsOpenedAt = 0;
   private settingsDuration = 0;
   private pendingLockAt = 0;
+  private pendingLockAllowsAdjustment = false;
   private repeatActionAllowedAt = 0;
 
   constructor(state: GameState = new GameState(), renderer?: Renderer) {
@@ -58,6 +61,7 @@ export class GameEngine {
     this.settingsOpenedAt = 0;
     this.settingsDuration = 0;
     this.pendingLockAt = 0;
+    this.pendingLockAllowsAdjustment = false;
     this.repeatActionAllowedAt = 0;
     this.renderer.initialize(container);
     this.syncScene();
@@ -171,7 +175,7 @@ export class GameEngine {
       return;
     }
 
-    if (this.pendingLockAt !== 0) {
+    if (this.pendingLockAt !== 0 && !this.pendingLockAllowsAdjustment) {
       return;
     }
 
@@ -182,14 +186,47 @@ export class GameEngine {
       }
     }
 
+    if (HOLD_CODES.has(event.code)) {
+      event.preventDefault();
+      if (this.pendingLockAt === 0 && this.state.swapHeldPiece()) {
+        this.lastDropAt = performance.now();
+        this.syncScene({ settledBlocks: false });
+      }
+      return;
+    }
+
     if (event.code === 'Space') {
       event.preventDefault();
+      if (this.pendingLockAt !== 0) {
+        return;
+      }
       this.state.hardDropActivePolyCube();
       if (this.state.getActivePolyCube()) {
-        this.scheduleActiveLock(HARD_DROP_LOCK_DELAY_MS);
+        this.scheduleActiveLock(HARD_DROP_LOCK_DELAY_MS, performance.now(), false);
       }
       this.lastDropAt = performance.now();
       this.syncScene();
+      return;
+    }
+
+    if (SOFT_DROP_CODES.has(event.code)) {
+      event.preventDefault();
+      const now = performance.now();
+      const stepResult = this.state.softDropActivePolyCube();
+      if (stepResult === 'moved') {
+        this.pendingLockAt = 0;
+        this.pendingLockAllowsAdjustment = false;
+        this.markRepeatActionCooldown(now);
+        this.lastDropAt = now;
+        if (!this.state.canActivePolyCubeFall() && this.state.getActivePolyCube()) {
+          this.scheduleActiveLock(NATURAL_LOCK_DELAY_MS, now, true);
+        }
+        this.syncScene({ settledBlocks: false });
+      } else if (stepResult === 'blocked' && this.state.getActivePolyCube()) {
+        if (this.pendingLockAt === 0) {
+          this.scheduleActiveLock(NATURAL_LOCK_DELAY_MS, now, true);
+        }
+      }
       return;
     }
 
@@ -198,6 +235,7 @@ export class GameEngine {
       event.preventDefault();
       if (this.moveActivePolyCube(move)) {
         this.markRepeatActionCooldown();
+        this.refreshPendingLockAfterAdjustment();
         this.syncScene({ settledBlocks: false });
       }
       return;
@@ -208,6 +246,7 @@ export class GameEngine {
       event.preventDefault();
       if (this.state.rotateActivePolyCube(rotation.axis, rotation.direction)) {
         this.markRepeatActionCooldown();
+        this.refreshPendingLockAfterAdjustment();
         this.syncScene({ settledBlocks: false });
       }
     }
@@ -235,7 +274,7 @@ export class GameEngine {
 
     const stepResult = this.state.stepActivePolyCube();
     if (stepResult === 'blocked' && this.state.getActivePolyCube()) {
-      this.scheduleActiveLock(NATURAL_LOCK_DELAY_MS, timestamp);
+      this.scheduleActiveLock(NATURAL_LOCK_DELAY_MS, timestamp, true);
     }
 
     this.lastDropAt = timestamp;
@@ -258,6 +297,7 @@ export class GameEngine {
     this.settingsOpenedAt = 0;
     this.settingsDuration = 0;
     this.pendingLockAt = 0;
+    this.pendingLockAllowsAdjustment = false;
     this.repeatActionAllowedAt = 0;
     this.lastDropAt = performance.now();
 
@@ -280,6 +320,7 @@ export class GameEngine {
     this.settingsOpenedAt = 0;
     this.settingsDuration = 0;
     this.pendingLockAt = 0;
+    this.pendingLockAllowsAdjustment = false;
     this.repeatActionAllowedAt = 0;
     this.lastDropAt = performance.now();
   }
@@ -376,14 +417,21 @@ export class GameEngine {
     this.settingsOpen = false;
     this.settingsOpenedAt = 0;
     this.pendingLockAt = 0;
+    this.pendingLockAllowsAdjustment = false;
     this.repeatActionAllowedAt = 0;
     this.syncScene();
   }
 
   private lockActiveAndSpawnNext(): void {
     this.pendingLockAt = 0;
+    this.pendingLockAllowsAdjustment = false;
     this.repeatActionAllowedAt = 0;
     this.state.lockActivePolyCube();
+    if (this.state.getMissionSnapshot().complete) {
+      this.state.endGame();
+      this.markGameEnded();
+      return;
+    }
     if (this.state.getActivePolyCube()) {
       return;
     }
@@ -393,8 +441,13 @@ export class GameEngine {
     }
   }
 
-  private scheduleActiveLock(delayMs: number, timestamp = performance.now()): void {
+  private scheduleActiveLock(
+    delayMs: number,
+    timestamp = performance.now(),
+    allowsAdjustment = false
+  ): void {
     this.pendingLockAt = timestamp + delayMs;
+    this.pendingLockAllowsAdjustment = allowsAdjustment;
   }
 
   private markRepeatActionCooldown(timestamp = performance.now()): void {
@@ -422,6 +475,21 @@ export class GameEngine {
     return false;
   }
 
+  private refreshPendingLockAfterAdjustment(timestamp = performance.now()): void {
+    if (this.pendingLockAt === 0 || !this.pendingLockAllowsAdjustment) {
+      return;
+    }
+
+    if (this.state.canActivePolyCubeFall()) {
+      this.pendingLockAt = 0;
+      this.pendingLockAllowsAdjustment = false;
+      this.lastDropAt = timestamp;
+      return;
+    }
+
+    this.scheduleActiveLock(NATURAL_LOCK_DELAY_MS, timestamp, true);
+  }
+
   private getElapsedMs(): number {
     if (this.startedAt === 0) {
       return 0;
@@ -443,7 +511,7 @@ type SyncSceneOptions = {
 const HARD_DROP_ANIMATION_MS = 160;
 const HARD_DROP_SETTLE_MS = 50;
 const HARD_DROP_LOCK_DELAY_MS = HARD_DROP_ANIMATION_MS + HARD_DROP_SETTLE_MS;
-const NATURAL_LOCK_DELAY_MS = 50;
+const NATURAL_LOCK_DELAY_MS = 450;
 const INPUT_REPEAT_INTERVAL_MS = 80;
 
 function isInteractiveInputTarget(target: EventTarget | null): boolean {

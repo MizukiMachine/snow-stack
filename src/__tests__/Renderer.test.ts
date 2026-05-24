@@ -13,6 +13,9 @@ type RendererAccess = {
     settledAssetKey?: 'settledIceBlock'
   ) => Group;
   syncDepthLayerGuide: (root: ParentNode) => void;
+  syncHeldPiece: (root: ParentNode) => void;
+  syncMission: (root: ParentNode) => void;
+  renderPolyCubePreview: (id: number, variant: 'queue' | 'hold') => string;
 };
 
 describe('Renderer BlockOut layer coloring', () => {
@@ -76,6 +79,38 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(createBlockMesh.mock.calls.map(([color]) => color)).not.toContain(0x654321);
   });
 
+  it('refreshes landing ghost and footprint groups from the active projection', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
+    state.spawnPolyCube(5);
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const scene = new Scene();
+    access.scene = scene;
+
+    renderer.updateActivePolyCube(state.getActivePolyCube());
+
+    const ghost = scene.getObjectByName('landing-ghost') as Group | undefined;
+    const footprint = scene.getObjectByName('landing-footprint') as Group | undefined;
+    expect(ghost?.children).toHaveLength(3);
+    expect(footprint?.children).toHaveLength(3);
+    expect(ghost?.children[0].position.x).toBe(3.5);
+    expect(ghost?.children[0].position.z).toBe(5.5);
+
+    state.moveActivePolyCube({ x: -1, y: 0, z: 0 });
+    renderer.updateActivePolyCube(state.getActivePolyCube());
+
+    const updatedGhost = scene.getObjectByName('landing-ghost') as Group | undefined;
+    const updatedFootprint = scene.getObjectByName('landing-footprint') as Group | undefined;
+    expect(updatedGhost).not.toBe(ghost);
+    expect(updatedGhost?.children[0].position.x).toBe(2.5);
+    expect(updatedFootprint?.children).toHaveLength(3);
+
+    renderer.updateActivePolyCube(null);
+
+    expect(scene.getObjectByName('landing-ghost')).toBeUndefined();
+    expect(scene.getObjectByName('landing-footprint')).toBeUndefined();
+  });
+
   it('shows only depth guide rows that already contain settled blocks', () => {
     const state = new GameState({ dimensions: { width: 5, height: 5, depth: 12 } });
     state.setCell({ x: 1, y: 1, z: 11 }, 0);
@@ -93,6 +128,8 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(guide?.style.getPropertyValue('--layer-stack-height')).toBe('308px');
     expect(rows.map((row) => row.textContent)).toEqual(['03', '01']);
     expect(rows.map((row) => row.style.getPropertyValue('--layer-row'))).toEqual(['10', '12']);
+    expect(root.querySelectorAll('.layer-guide-swatch')).toHaveLength(2);
+    expect(root.querySelector('.layer-guide-mini')).toBeNull();
     expect(root.textContent).not.toContain('12');
     expect(root.textContent).not.toContain('02');
   });
@@ -108,5 +145,60 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(root.dataset.depthLayers).toBe('0');
     expect(root.querySelector<HTMLElement>('[data-role="layer-guide-list"]')?.style.getPropertyValue('--layer-count')).toBe('12');
     expect(root.querySelectorAll('.layer-guide-row')).toHaveLength(0);
+  });
+
+  it('renders a held piece preview into the HUD slot', () => {
+    const state = new GameState({ randomSeed: 1 });
+    state.spawnPolyCube(0);
+    state.swapHeldPiece();
+    const renderer = new Renderer(state);
+    const root = document.createElement('div');
+    root.innerHTML = '<div data-role="hold-piece"></div>';
+
+    (renderer as unknown as RendererAccess).syncHeldPiece(root);
+
+    expect(root.querySelector('.poly-preview-hold')).not.toBeNull();
+    expect(root.textContent).toContain('P00');
+  });
+
+  it('renders sprint mission progress in the status pill', () => {
+    const state = new GameState({ missionMode: 'plane-sprint' });
+    const renderer = new Renderer(state);
+    const root = document.createElement('div');
+    root.innerHTML = `
+      <div data-role="mission-pill" hidden>
+        <span data-role="mission-label"></span>
+        <div data-role="mission-progress"><span></span></div>
+      </div>
+    `;
+
+    (renderer as unknown as RendererAccess).syncMission(root);
+
+    expect(root.querySelector<HTMLElement>('[data-role="mission-pill"]')?.hidden).toBe(false);
+    expect(root.querySelector<HTMLElement>('[data-role="mission-label"]')?.textContent).toBe('PLANE SPRINT');
+    expect(root.querySelector<HTMLElement>('[data-role="mission-progress"] span')?.textContent).toBe('0/5');
+  });
+
+  it('builds polycube preview markup with one cell per cube', () => {
+    const state = new GameState();
+    const renderer = new Renderer(state);
+    const html = (renderer as unknown as RendererAccess).renderPolyCubePreview(5, 'queue');
+    const root = document.createElement('div');
+    root.innerHTML = html;
+
+    expect(root.querySelector('.poly-preview-queue')).not.toBeNull();
+    expect(root.querySelectorAll('.poly-preview-cell')).toHaveLength(3);
+    expect(root.textContent).toContain('P05');
+  });
+
+  it('scales tall polycube previews to stay inside compact queue slots', () => {
+    const state = new GameState();
+    const renderer = new Renderer(state);
+    const html = (renderer as unknown as RendererAccess).renderPolyCubePreview(4, 'queue');
+    const root = document.createElement('div');
+    root.innerHTML = html;
+
+    const stage = root.querySelector<HTMLElement>('.poly-preview-stage');
+    expect(Number(stage?.style.getPropertyValue('--preview-scale'))).toBeLessThan(1);
   });
 });

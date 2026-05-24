@@ -48,7 +48,22 @@ export const ROTATION_COMMANDS: Record<string, RotationCommand> = {
   KeyD: { axis: 'z', direction: 1 }
 };
 
-export const ONE_SHOT_CODES: ReadonlySet<string> = new Set(['Space', 'KeyP', 'Escape', 'KeyR']);
+export const SOFT_DROP_CODES: ReadonlySet<string> = new Set([
+  'ShiftLeft',
+  'ShiftRight',
+  'Digit5',
+  'Numpad5'
+]);
+
+export const HOLD_CODES: ReadonlySet<string> = new Set(['KeyC', 'KeyH']);
+
+export const ONE_SHOT_CODES: ReadonlySet<string> = new Set([
+  'Space',
+  'KeyP',
+  'Escape',
+  'KeyR',
+  ...HOLD_CODES
+]);
 
 export const KEY_ASSIGNMENT_ROWS: readonly KeyAssignmentRow[] = [
   { keys: ['←→↑↓', '2/4/6/8'], label: 'Move Across Pit Face' },
@@ -56,6 +71,8 @@ export const KEY_ASSIGNMENT_ROWS: readonly KeyAssignmentRow[] = [
   { keys: ['Q/A'], label: 'Rotate X Axis' },
   { keys: ['W/S'], label: 'Rotate Y Axis' },
   { keys: ['E/D'], label: 'Rotate Z Axis' },
+  { keys: ['Shift', '5'], label: 'Soft Drop' },
+  { keys: ['C/H'], label: 'Hold Piece' },
   { keys: ['Space'], label: 'Hard Drop' },
   { keys: ['P'], label: 'Pause' },
   { keys: ['Esc'], label: 'End Run / Close Setup' },
@@ -63,5 +80,5 @@ export const KEY_ASSIGNMENT_ROWS: readonly KeyAssignmentRow[] = [
 ];
 
 export function isRepeatableGameplayCode(code: string): boolean {
-  return code in MOVEMENT_OFFSETS || code in ROTATION_COMMANDS;
+  return code in MOVEMENT_OFFSETS || code in ROTATION_COMMANDS || SOFT_DROP_CODES.has(code);
 }

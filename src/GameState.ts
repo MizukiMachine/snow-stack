@@ -27,12 +27,14 @@ export type CellState = 'empty' | number;
 export type GamePhase = 'running' | 'game-over';
 export type RotationDirection = 1 | -1;
 export type ActivePolyCubeStepResult = 'moved' | 'waiting' | 'blocked' | 'none';
+export type MissionMode = 'endless' | 'plane-sprint';
 
 export interface GameStateOptions {
   readonly dimensions?: FieldDimensions;
   readonly blockSet?: BlockSet;
   readonly startLevel?: number;
   readonly randomSeed?: number;
+  readonly missionMode?: MissionMode;
 }
 
 export interface GameSetup {
@@ -40,6 +42,7 @@ export interface GameSetup {
   readonly blockSet: BlockSet;
   readonly startLevel: number;
   readonly randomSeed: number;
+  readonly missionMode: MissionMode;
 }
 
 export interface ActivePolyCubeSnapshot {
@@ -56,10 +59,24 @@ export interface SettledBlockSnapshot {
   readonly coordinate: FieldCoordinate;
 }
 
+export interface FootprintCellSnapshot {
+  readonly x: number;
+  readonly y: number;
+}
+
 export interface ScoreStatistics {
   readonly placedCubes: number;
   readonly emptyPitCount: number;
   readonly clearedPlanesByCount: readonly number[];
+}
+
+export interface MissionSnapshot {
+  readonly mode: MissionMode;
+  readonly label: string;
+  readonly targetPlanes: number;
+  readonly clearedPlanes: number;
+  readonly remainingPlanes: number;
+  readonly complete: boolean;
 }
 
 /**
@@ -73,9 +90,12 @@ export class GameState {
   private startLevel: number;
   private randomSeed: number;
   private fixedRandomSeed: boolean;
+  private missionMode: MissionMode;
   private rngState: number;
   private grid: CellState[][][];
   private activePolyCube: ActivePolyCube | null = null;
+  private heldPieceId: number | null = null;
+  private holdUsedThisTurn = false;
   private queue: number[] = [];
   private phase: GamePhase = 'running';
   private clearedPlaneCount = 0;
@@ -97,6 +117,7 @@ export class GameState {
     this.blockSet = setup.blockSet;
     this.startLevel = setup.startLevel;
     this.randomSeed = setup.randomSeed;
+    this.missionMode = setup.missionMode;
     this.fixedRandomSeed = options.randomSeed !== undefined;
     this.rngState = this.randomSeed;
     this.level = this.startLevel;
@@ -116,7 +137,8 @@ export class GameState {
       dimensions: this.getDimensions(),
       blockSet: this.blockSet,
       startLevel: this.startLevel,
-      randomSeed: this.randomSeed
+      randomSeed: this.randomSeed,
+      missionMode: this.missionMode
     };
   }
 
@@ -131,12 +153,14 @@ export class GameState {
       dimensions: options.dimensions ?? this.dimensions,
       blockSet: options.blockSet ?? this.blockSet,
       startLevel: options.startLevel ?? this.startLevel,
+      missionMode: options.missionMode ?? this.missionMode,
       randomSeed: nextSeed
     });
     this.dimensions = setup.dimensions;
     this.blockSet = setup.blockSet;
     this.startLevel = setup.startLevel;
     this.randomSeed = setup.randomSeed;
+    this.missionMode = setup.missionMode;
     this.fixedRandomSeed =
       options.randomSeed !== undefined ? true : this.fixedRandomSeed;
     this.rngState = this.randomSeed;
@@ -171,6 +195,8 @@ export class GameState {
   private resetRuntimeState(): void {
     this.grid = this.createEmptyGrid();
     this.activePolyCube = null;
+    this.heldPieceId = null;
+    this.holdUsedThisTurn = false;
     this.queue = [];
     this.phase = 'running';
     this.clearedPlaneCount = 0;
@@ -245,8 +271,64 @@ export class GameState {
     return this.queue.slice(0, length);
   }
 
-  public getHeldPiece(): null {
-    return null;
+  public getHeldPiece(): number | null {
+    return this.heldPieceId;
+  }
+
+  public getProjectedActivePolyCube(): ActivePolyCubeSnapshot | null {
+    if (!this.activePolyCube) {
+      return null;
+    }
+
+    const projected = {
+      ...this.activePolyCube,
+      position: addCoordinates(this.activePolyCube.position, {
+        x: 0,
+        y: 0,
+        z: this.getDropDistance(this.activePolyCube)
+      })
+    };
+    return this.toActiveSnapshot(projected);
+  }
+
+  public getActiveFootprintCells(): FootprintCellSnapshot[] {
+    const projected = this.getProjectedActivePolyCube();
+    if (!projected) {
+      return [];
+    }
+
+    const uniqueCells = new Map<string, FootprintCellSnapshot>();
+    projected.blocks.forEach((block) => {
+      const key = `${block.x},${block.y}`;
+      if (!uniqueCells.has(key)) {
+        uniqueCells.set(key, { x: block.x, y: block.y });
+      }
+    });
+    return Array.from(uniqueCells.values()).sort((a, b) => a.y - b.y || a.x - b.x);
+  }
+
+  public getMissionSnapshot(): MissionSnapshot {
+    if (this.missionMode === 'plane-sprint') {
+      const targetPlanes = PLANE_SPRINT_TARGET_PLANES;
+      const clearedPlanes = Math.min(this.clearedPlaneCount, targetPlanes);
+      return {
+        mode: this.missionMode,
+        label: 'PLANE SPRINT',
+        targetPlanes,
+        clearedPlanes,
+        remainingPlanes: Math.max(0, targetPlanes - clearedPlanes),
+        complete: clearedPlanes >= targetPlanes
+      };
+    }
+
+    return {
+      mode: this.missionMode,
+      label: 'ENDLESS',
+      targetPlanes: 0,
+      clearedPlanes: this.clearedPlaneCount,
+      remainingPlanes: 0,
+      complete: false
+    };
   }
 
   public getSettledBlocks(): SettledBlockSnapshot[] {
@@ -283,6 +365,58 @@ export class GameState {
       ...this.activePolyCube,
       position: candidatePosition
     };
+    return true;
+  }
+
+  public softDropActivePolyCube(): ActivePolyCubeStepResult {
+    if (!this.activePolyCube) {
+      return 'none';
+    }
+
+    if (!this.canActivePolyCubeFall()) {
+      return 'blocked';
+    }
+
+    const nextPosition = addCoordinates(this.activePolyCube.position, DEPTH_DROP_VECTOR);
+    const active = {
+      ...this.activePolyCube,
+      position: nextPosition,
+      dropScorePosition: Math.max(0, this.activePolyCube.dropScorePosition - 1)
+    };
+    this.activePolyCube = {
+      ...active,
+      fallCursor: Math.max(active.fallCursor, this.getBottomDepth(active))
+    };
+    return 'moved';
+  }
+
+  public canActivePolyCubeFall(): boolean {
+    if (!this.activePolyCube) {
+      return false;
+    }
+    return this.canOccupy(
+      addCoordinates(this.activePolyCube.position, DEPTH_DROP_VECTOR),
+      this.activePolyCube.cells
+    );
+  }
+
+  public swapHeldPiece(): boolean {
+    if (!this.activePolyCube || this.holdUsedThisTurn || this.isGameOver()) {
+      return false;
+    }
+
+    const activeId = this.activePolyCube.id;
+    const heldId = this.heldPieceId;
+    this.heldPieceId = activeId;
+    this.activePolyCube = null;
+    this.holdUsedThisTurn = true;
+
+    if (heldId === null) {
+      this.spawnPolyCube();
+      return true;
+    }
+
+    this.spawnPolyCube(heldId);
     return true;
   }
 
@@ -419,6 +553,7 @@ export class GameState {
       this.grid[block.z][block.y][block.x] = active.id;
     });
     this.activePolyCube = null;
+    this.holdUsedThisTurn = false;
 
     const clearedPlanes = this.clearCompletedPlanes();
     const pitEmpty = this.isPitEmpty();
@@ -594,6 +729,16 @@ export class GameState {
     return Math.max(...this.getAbsoluteBlocks(active).map((block) => block.z));
   }
 
+  private getDropDistance(active: ActivePolyCube): number {
+    let distance = 0;
+    let candidatePosition = active.position;
+    while (this.canOccupy(addCoordinates(candidatePosition, DEPTH_DROP_VECTOR), active.cells)) {
+      candidatePosition = addCoordinates(candidatePosition, DEPTH_DROP_VECTOR);
+      distance += 1;
+    }
+    return distance;
+  }
+
   private getOutOfBoundsCorrection(
     position: FieldCoordinate,
     cells: readonly FieldCoordinate[]
@@ -630,6 +775,8 @@ const BLOCKOUT_TIME_BASE_MS = 5510;
 const TIME_BASE_MS = BLOCKOUT_TIME_BASE_MS;
 const TIME_LEVEL_FACTOR = 0.64;
 const MAX_START_LEVEL = MAX_LEVEL - 1;
+const DEFAULT_MISSION_MODE: MissionMode = 'endless';
+const PLANE_SPRINT_TARGET_PLANES = 5;
 
 function rotateCellAroundBlockOutCenter(
   cell: FieldCoordinate,
@@ -705,8 +852,13 @@ function normalizeSetup(options: GameStateOptions): GameSetup {
     dimensions: normalizeDimensions(options.dimensions ?? FIELD_DIMENSIONS),
     blockSet: options.blockSet ?? DEFAULT_BLOCK_SET,
     startLevel: clampInteger(options.startLevel ?? DEFAULT_START_LEVEL, 0, MAX_START_LEVEL),
-    randomSeed: normalizeSeed(options.randomSeed ?? createRandomSeed())
+    randomSeed: normalizeSeed(options.randomSeed ?? createRandomSeed()),
+    missionMode: normalizeMissionMode(options.missionMode)
   };
+}
+
+function normalizeMissionMode(mode: MissionMode | undefined): MissionMode {
+  return mode ?? DEFAULT_MISSION_MODE;
 }
 
 function normalizeSeed(seed: number): number {

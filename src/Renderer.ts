@@ -28,8 +28,10 @@ import type { Material, Texture } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type {
   ActivePolyCubeSnapshot,
+  FootprintCellSnapshot,
   GameStateOptions,
   GamePhase,
+  MissionMode,
   SettledBlockSnapshot
 } from './GameState';
 import {
@@ -119,6 +121,16 @@ type AssetPlacement = {
   readonly rotationZ?: number;
 };
 
+const MISSION_MODES: readonly MissionMode[] = Object.freeze(['endless', 'plane-sprint']);
+const MISSION_MODE_LABELS: Record<MissionMode, string> = Object.freeze({
+  endless: 'ENDLESS',
+  'plane-sprint': 'SPRINT'
+});
+const PREVIEW_STAGE_LIMITS: Record<'queue' | 'hold', { width: number; height: number }> = Object.freeze({
+  queue: { width: 44, height: 42 },
+  hold: { width: 74, height: 42 }
+});
+
 const CAMERA_SETTINGS = {
   targetHeightFactor: 0.5,
   initialTheta: -Math.PI / 2,
@@ -173,6 +185,8 @@ export class Renderer {
   private fieldBoundsGroup: Group | null = null;
   private assetFieldLayer: Group | null = null;
   private activePolyCubeGroup: Group | null = null;
+  private landingGhostGroup: Group | null = null;
+  private footprintGroup: Group | null = null;
   private settledBlocksGroup: Group | null = null;
   private glowGroup: Group | null = null;
   private readonly gltfLoader = new GLTFLoader();
@@ -332,6 +346,8 @@ export class Renderer {
     this.fieldBoundsGroup = null;
     this.assetFieldLayer = null;
     this.activePolyCubeGroup = null;
+    this.landingGhostGroup = null;
+    this.footprintGroup = null;
     this.settledBlocksGroup = null;
     this.glowGroup = null;
     this.lastSettingsOpen = false;
@@ -344,10 +360,25 @@ export class Renderer {
     }
 
     this.disposeActivePolyCubeGroup();
+    this.disposeLandingGhostGroup();
+    this.disposeFootprintGroup();
     this.disposeGlowGroup();
 
     if (!polyCube) {
       return;
+    }
+
+    const footprint = this.createFootprintGroup(this.gameState.getActiveFootprintCells());
+    if (footprint) {
+      this.footprintGroup = footprint;
+      this.scene.add(footprint);
+    }
+
+    const projected = this.gameState.getProjectedActivePolyCube();
+    if (projected) {
+      const ghost = this.createLandingGhostGroup(projected);
+      this.landingGhostGroup = ghost;
+      this.scene.add(ghost);
     }
 
     const group = new Group();
@@ -399,6 +430,49 @@ export class Renderer {
     this.scene.add(group);
   }
 
+  private createLandingGhostGroup(polyCube: ActivePolyCubeSnapshot): Group {
+    const group = new Group();
+    const origin = this.getFieldOrigin();
+    group.position.set(origin.x, origin.y, origin.z);
+    group.name = 'landing-ghost';
+
+    polyCube.blocks.forEach((block) => {
+      const mesh = this.createGhostBlockMesh(polyCube.color);
+      mesh.position.set(
+        (block.x + 0.5) * CELL_SIZE,
+        (block.y + 0.5) * CELL_SIZE,
+        (block.z + 0.5) * CELL_SIZE
+      );
+      group.add(mesh);
+    });
+
+    return group;
+  }
+
+  private createFootprintGroup(cells: readonly FootprintCellSnapshot[]): Group | null {
+    if (cells.length === 0) {
+      return null;
+    }
+
+    const { depth } = this.gameState.getDimensions();
+    const group = new Group();
+    const origin = this.getFieldOrigin();
+    group.position.set(origin.x, origin.y, origin.z);
+    group.name = 'landing-footprint';
+
+    cells.forEach((cell) => {
+      const marker = this.createFootprintCellMesh();
+      marker.position.set(
+        (cell.x + 0.5) * CELL_SIZE,
+        (cell.y + 0.5) * CELL_SIZE,
+        depth * CELL_SIZE - CELL_SIZE * 0.018
+      );
+      group.add(marker);
+    });
+
+    return group;
+  }
+
   public updateElapsedTime(elapsedMs: number): void {
     if (!this.hudElement) {
       return;
@@ -442,8 +516,11 @@ export class Renderer {
     }
 
     const root = this.hudElement;
+    const mission = this.gameState.getMissionSnapshot();
     root.dataset.phase = this.hudState.phase;
     root.dataset.paused = String(this.hudState.isPaused);
+    root.dataset.missionActive = String(mission.mode !== 'endless');
+    root.dataset.missionComplete = String(mission.complete);
     this.setText(root, '[data-role="score"]', this.formatNumber(this.hudState.score));
     this.setText(root, '[data-role="level"]', String(this.hudState.level).padStart(2, '0'));
     this.setText(
@@ -455,6 +532,8 @@ export class Renderer {
     this.setText(root, '[data-role="block-set"]', this.gameState.getBlockSetLabel());
     this.syncDepthLayerGuide(root);
     this.syncQueue(root);
+    this.syncHeldPiece(root);
+    this.syncMission(root);
     this.syncHudTimer(root);
     this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? 'RESUME' : 'PAUSE');
     this.setText(root, '[data-role="pit-size"]', this.formatPitSize());
@@ -476,16 +555,41 @@ export class Renderer {
       '[data-role="footer-tip"]',
       this.hudState.settingsOpen
         ? 'Setup is open. The run is held until you apply or close it.'
+        : mission.complete
+        ? 'Mission clear. Start another run from setup or retry.'
         : this.hudState.phase === 'game-over'
         ? 'Rotate the view and start a fresh run.'
         : this.hudState.isPaused
         ? 'Run paused. Resume when you are ready.'
+        : mission.mode === 'plane-sprint'
+        ? `${mission.remainingPlanes} planes left in the sprint.`
         : 'Fill complete depth planes across the pit to clear them.'
     );
 
     const overlay = root.querySelector<HTMLElement>('[data-role="overlay"]');
     if (overlay) {
-      overlay.hidden = this.hudState.phase !== 'game-over' || this.hudState.settingsOpen;
+      this.setHidden(
+        overlay,
+        this.hudState.phase !== 'game-over' || this.hudState.settingsOpen
+      );
+      const missionComplete = this.gameState.getMissionSnapshot().complete;
+      this.setText(
+        overlay,
+        '[data-role="overlay-title"]',
+        missionComplete ? 'MISSION CLEAR' : 'GAME OVER'
+      );
+      this.setText(
+        overlay,
+        '[data-role="overlay-message"]',
+        missionComplete ? 'Plane sprint complete.' : 'The pit has reached the top.'
+      );
+      this.setText(
+        overlay,
+        '[data-role="overlay-footnote"]',
+        missionComplete
+          ? 'Start another run from setup or chase a higher score.'
+          : 'You can always rotate the view and look for a path.'
+      );
       this.setText(overlay, '[data-role="overlay-score"]', this.formatNumber(this.hudState.score));
       this.setText(overlay, '[data-role="overlay-level"]', String(this.hudState.level));
       this.setText(overlay, '[data-role="overlay-lines"]', String(this.hudState.clearedLayerCount));
@@ -494,13 +598,15 @@ export class Renderer {
 
     const pauseOverlay = root.querySelector<HTMLElement>('[data-role="pause-overlay"]');
     if (pauseOverlay) {
-      pauseOverlay.hidden =
-        !this.hudState.isPaused || this.hudState.phase === 'game-over' || this.hudState.settingsOpen;
+      this.setHidden(
+        pauseOverlay,
+        !this.hudState.isPaused || this.hudState.phase === 'game-over' || this.hudState.settingsOpen
+      );
     }
 
     const settings = root.querySelector<HTMLElement>('[data-role="settings-panel"]');
     if (settings) {
-      settings.hidden = !this.hudState.settingsOpen;
+      this.setHidden(settings, !this.hudState.settingsOpen);
       if (this.hudState.settingsOpen && !this.lastSettingsOpen) {
         this.syncSetupControls(root);
       }
@@ -514,6 +620,10 @@ export class Renderer {
     const blockSetButtons = BLOCK_SETS.map(
       (blockSet) =>
         `<button class="segmented-button" data-block-set="${blockSet}" type="button">${getBlockSetLabel(blockSet)}</button>`
+    ).join('');
+    const missionButtons = MISSION_MODES.map(
+      (missionMode) =>
+        `<button class="segmented-button" data-mission-mode="${missionMode}" type="button">${MISSION_MODE_LABELS[missionMode]}</button>`
     ).join('');
     hud.className = 'ui-layer';
     hud.innerHTML = `
@@ -542,9 +652,13 @@ export class Renderer {
             <div class="panel-heading">${icon('snowflake')}<span>PLANES</span></div>
             <div class="metric-inline"><strong class="metric-value" data-role="lines">000</strong><div class="meter meter-bars" data-role="layers-meter">${renderMeterSegments(8)}</div></div>
           </section>
-          <section class="panel metric-card">
+          <section class="panel metric-card queue-card">
             <div class="panel-heading">${icon('snowflake')}<span>NEXT</span></div>
             <div class="queue-list" data-role="queue-list"><span>--</span><span>--</span><span>--</span></div>
+          </section>
+          <section class="panel metric-card hold-card">
+            <div class="panel-heading">${icon('cube')}<span>HOLD</span></div>
+            <div class="hold-slot" data-role="hold-piece"><span>--</span></div>
           </section>
           <section class="panel metric-card">
             <div class="panel-heading">${icon('snowflake')}<span>BLOCK SET</span></div>
@@ -574,6 +688,7 @@ export class Renderer {
       </aside>
       <section class="status-bar">
         <div class="status-pill">${icon('snowflake')}<div><span class="status-label">STATUS</span><span class="status-state"><span class="status-dot"></span><span data-role="status-label">RUNNING</span></span></div></div>
+        <div class="status-mission" data-role="mission-pill" hidden>${icon('trophy')}<div><span class="status-label" data-role="mission-label">ENDLESS</span><div class="mission-progress" data-role="mission-progress"><span></span></div></div></div>
         <div class="status-hint">${icon('snowflake')}<div><span class="status-label">HINT</span><span data-role="footer-tip"></span></div></div>
         <div class="status-meta"><span class="status-label">TIME</span><span data-role="timer">00:00:00</span></div>
       </section>
@@ -583,6 +698,10 @@ export class Renderer {
           <div class="setup-field setup-field-wide">
             <span class="setup-label">BLOCK SET</span>
             <div class="segmented-control" data-role="block-set-control">${blockSetButtons}</div>
+          </div>
+          <div class="setup-field setup-field-wide">
+            <span class="setup-label">MISSION</span>
+            <div class="segmented-control" data-role="mission-mode-control">${missionButtons}</div>
           </div>
           <label class="setup-field">
             <span class="setup-label">WIDTH</span>
@@ -605,8 +724,8 @@ export class Renderer {
       </section>
       <section class="overlay-card" data-role="overlay" hidden>
         <div class="overlay-alert">${icon('alert')}</div>
-        <h2>GAME OVER</h2>
-        <p>The pit has reached the top.</p>
+        <h2 data-role="overlay-title">GAME OVER</h2>
+        <p data-role="overlay-message">The pit has reached the top.</p>
         <div class="overlay-scorebox">
           <span>FINAL SCORE</span>
           <strong data-role="overlay-score">0</strong>
@@ -620,7 +739,7 @@ export class Renderer {
           <button class="overlay-button overlay-button-danger" data-action="restart" type="button">${icon('restart')}<span>RETRY</span></button>
           <button class="overlay-button overlay-button-primary" data-action="settings" type="button">${icon('home')}<span>MENU</span></button>
         </div>
-        <p class="overlay-footnote">You can always rotate the view and look for a path.</p>
+        <p class="overlay-footnote" data-role="overlay-footnote">You can always rotate the view and look for a path.</p>
       </section>
       <section class="pause-card" data-role="pause-overlay" hidden>
         <div class="overlay-alert">${icon('pause')}</div>
@@ -653,6 +772,16 @@ export class Renderer {
     hud.querySelectorAll<HTMLButtonElement>('[data-block-set]').forEach((button) => {
       button.addEventListener('click', () => {
         hud.querySelectorAll<HTMLButtonElement>('[data-block-set]').forEach((item) => {
+          const isActive = item === button;
+          item.classList.toggle('is-active', isActive);
+          item.setAttribute('aria-pressed', String(isActive));
+        });
+      });
+    });
+
+    hud.querySelectorAll<HTMLButtonElement>('[data-mission-mode]').forEach((button) => {
+      button.addEventListener('click', () => {
+        hud.querySelectorAll<HTMLButtonElement>('[data-mission-mode]').forEach((item) => {
           const isActive = item === button;
           item.classList.toggle('is-active', isActive);
           item.setAttribute('aria-pressed', String(isActive));
@@ -1090,6 +1219,65 @@ export class Renderer {
       y: 0,
       z: -((depth * CELL_SIZE) / 2)
     };
+  }
+
+  private createGhostBlockMesh(color: number): Group {
+    const group = new Group();
+    const ghostColor = mixColorNumber(color, 0x42e8ff, 0.58);
+    const core = new Mesh(
+      new BoxGeometry(CELL_SIZE * 0.84, CELL_SIZE * 0.84, CELL_SIZE * 0.84),
+      new MeshBasicMaterial({
+        color: ghostColor,
+        transparent: true,
+        opacity: 0.12,
+        depthWrite: false,
+        side: DoubleSide
+      })
+    );
+    core.renderOrder = 14;
+    group.add(core);
+
+    const edges = new LineSegments(
+      new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.92, CELL_SIZE * 0.92, CELL_SIZE * 0.92)),
+      new LineBasicMaterial({
+        color: mixColorNumber(ghostColor, 0xffffff, 0.36),
+        transparent: true,
+        opacity: 0.72,
+        depthWrite: false
+      })
+    );
+    edges.renderOrder = 15;
+    group.add(edges);
+    return group;
+  }
+
+  private createFootprintCellMesh(): Group {
+    const group = new Group();
+    const fill = new Mesh(
+      new PlaneGeometry(CELL_SIZE * 0.82, CELL_SIZE * 0.82),
+      new MeshBasicMaterial({
+        color: 0x1fe7ff,
+        transparent: true,
+        opacity: 0.24,
+        depthWrite: false,
+        side: DoubleSide
+      })
+    );
+    fill.renderOrder = 8;
+    group.add(fill);
+
+    const border = new LineSegments(
+      new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.84, CELL_SIZE * 0.84, CELL_SIZE * 0.012)),
+      new LineBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.62,
+        depthWrite: false
+      })
+    );
+    border.renderOrder = 9;
+    group.add(border);
+    return group;
   }
 
   private createBlockMesh(
@@ -1709,6 +1897,24 @@ export class Renderer {
     this.activePolyCubeGroup = null;
   }
 
+  private disposeLandingGhostGroup(): void {
+    if (!this.scene || !this.landingGhostGroup) {
+      return;
+    }
+    this.disposeObjectResources(this.landingGhostGroup);
+    this.scene.remove(this.landingGhostGroup);
+    this.landingGhostGroup = null;
+  }
+
+  private disposeFootprintGroup(): void {
+    if (!this.scene || !this.footprintGroup) {
+      return;
+    }
+    this.disposeObjectResources(this.footprintGroup);
+    this.scene.remove(this.footprintGroup);
+    this.footprintGroup = null;
+  }
+
   private disposeSettledBlocksGroup(): void {
     if (!this.scene || !this.settledBlocksGroup) {
       return;
@@ -1788,6 +1994,12 @@ export class Renderer {
       button.classList.toggle('is-active', isActive);
       button.setAttribute('aria-pressed', String(isActive));
     });
+
+    root.querySelectorAll<HTMLButtonElement>('[data-mission-mode]').forEach((button) => {
+      const isActive = button.dataset.missionMode === setup.missionMode;
+      button.classList.toggle('is-active', isActive);
+      button.setAttribute('aria-pressed', String(isActive));
+    });
   }
 
   private collectSetupValues(root: ParentNode): GameStateOptions {
@@ -1795,6 +2007,11 @@ export class Renderer {
     const activeBlockSet = root.querySelector<HTMLButtonElement>('[data-block-set].is-active')
       ?.dataset.blockSet;
     const blockSet = isBlockSet(activeBlockSet) ? activeBlockSet : setup.blockSet;
+    const activeMissionMode = root.querySelector<HTMLButtonElement>('[data-mission-mode].is-active')
+      ?.dataset.missionMode;
+    const missionMode = isMissionMode(activeMissionMode)
+      ? activeMissionMode
+      : setup.missionMode;
 
     return {
       dimensions: {
@@ -1803,7 +2020,8 @@ export class Renderer {
         depth: this.readSetupNumber(root, 'depth', setup.dimensions.depth, MIN_PIT_DEPTH, MAX_PIT_DEPTH)
       },
       blockSet,
-      startLevel: this.readSetupNumber(root, 'startLevel', setup.startLevel, 0, MAX_LEVEL - 1)
+      startLevel: this.readSetupNumber(root, 'startLevel', setup.startLevel, 0, MAX_LEVEL - 1),
+      missionMode
     };
   }
 
@@ -1843,6 +2061,25 @@ export class Renderer {
     const meter = root.querySelector<HTMLElement>(selector);
     meter?.querySelectorAll<HTMLElement>('span').forEach((element, index) => {
       element.classList.toggle('is-active', index < activeCount);
+    });
+  }
+
+  private setHidden(element: HTMLElement, hidden: boolean): void {
+    element.hidden = hidden;
+    if (hidden) {
+      element.setAttribute('inert', '');
+    } else {
+      element.removeAttribute('inert');
+    }
+    element.querySelectorAll('button, input, select, textarea').forEach((control) => {
+      if (
+        control instanceof HTMLButtonElement ||
+        control instanceof HTMLInputElement ||
+        control instanceof HTMLSelectElement ||
+        control instanceof HTMLTextAreaElement
+      ) {
+        control.disabled = hidden;
+      }
     });
   }
 
@@ -1892,11 +2129,85 @@ export class Renderer {
     if (!queue) {
       return;
     }
-    const labels = this.hudState.queue.slice(0, 3).map((id) => getPolyCubeDefinition(id).label);
-    queue.querySelectorAll<HTMLElement>('span').forEach((element, index) => {
-      element.textContent = labels[index] ?? '--';
-      element.classList.toggle('is-empty', labels[index] === undefined);
-    });
+    queue.innerHTML = this.hudState.queue
+      .slice(0, 3)
+      .map((id) => this.renderPolyCubePreview(id, 'queue'))
+      .join('');
+    if (this.hudState.queue.length === 0) {
+      queue.innerHTML = '<span class="is-empty">--</span><span class="is-empty">--</span><span class="is-empty">--</span>';
+    }
+  }
+
+  private syncHeldPiece(root: ParentNode): void {
+    const hold = root.querySelector<HTMLElement>('[data-role="hold-piece"]');
+    if (!hold) {
+      return;
+    }
+
+    const heldPiece = this.gameState.getHeldPiece();
+    hold.innerHTML =
+      heldPiece === null
+        ? '<span class="is-empty">--</span>'
+        : this.renderPolyCubePreview(heldPiece, 'hold');
+  }
+
+  private syncMission(root: ParentNode): void {
+    const mission = this.gameState.getMissionSnapshot();
+    this.setText(root, '[data-role="mission-label"]', mission.label);
+
+    const missionPill = root.querySelector<HTMLElement>('[data-role="mission-pill"]');
+    if (missionPill) {
+      missionPill.hidden = mission.mode === 'endless';
+    }
+
+    const progress = root.querySelector<HTMLElement>('[data-role="mission-progress"]');
+    if (!progress) {
+      return;
+    }
+
+    progress.hidden = mission.mode === 'endless';
+    progress.dataset.complete = String(mission.complete);
+    const percent =
+      mission.targetPlanes === 0
+        ? 0
+        : Math.min(100, Math.round((mission.clearedPlanes / mission.targetPlanes) * 100));
+    progress.style.setProperty('--mission-progress', `${percent}%`);
+    progress.querySelector('span')?.replaceChildren(
+      document.createTextNode(`${mission.clearedPlanes}/${mission.targetPlanes}`)
+    );
+  }
+
+  private renderPolyCubePreview(id: number, variant: 'queue' | 'hold'): string {
+    const definition = getPolyCubeDefinition(id);
+    const projection = definition.cells.map((cell) => ({
+      x: cell.x,
+      y: cell.y,
+      z: cell.z,
+      sx: (cell.x - cell.z) * 10,
+      sy: (cell.x + cell.z) * 5 - cell.y * 8
+    }));
+    const minX = Math.min(...projection.map((cell) => cell.sx));
+    const minY = Math.min(...projection.map((cell) => cell.sy));
+    const maxX = Math.max(...projection.map((cell) => cell.sx));
+    const maxY = Math.max(...projection.map((cell) => cell.sy));
+    const width = Math.max(30, maxX - minX + 20);
+    const height = Math.max(28, maxY - minY + 20);
+    const limit = PREVIEW_STAGE_LIMITS[variant];
+    const scale = Math.min(1, limit.width / width, limit.height / height);
+    const cells = projection
+      .sort((a, b) => a.z - b.z || a.y - b.y || a.x - b.x)
+      .map((cell) => {
+        const left = cell.sx - minX + 5;
+        const top = cell.sy - minY + 5;
+        return `<span class="poly-preview-cell" style="left: ${left}px; top: ${top}px;"></span>`;
+      })
+      .join('');
+    return [
+      `<div class="poly-preview poly-preview-${variant}" style="--piece-color: ${formatHexColor(definition.color)}">`,
+      `<div class="poly-preview-stage" style="width: ${width}px; height: ${height}px; --preview-scale: ${Number(scale.toFixed(3))};">${cells}</div>`,
+      `<span class="poly-preview-label">${definition.label}</span>`,
+      '</div>'
+    ].join('');
   }
 
   private syncHudTimer(root: ParentNode): void {
@@ -1906,6 +2217,9 @@ export class Renderer {
   }
 
   private getStatusLabel(): string {
+    if (this.gameState.getMissionSnapshot().complete) {
+      return 'MISSION CLEAR';
+    }
     if (this.hudState.phase === 'game-over') {
       return 'GAME OVER';
     }
@@ -1946,6 +2260,10 @@ function clamp(value: number, min: number, max: number): number {
 
 function isBlockSet(value: string | undefined): value is BlockSet {
   return value !== undefined && (BLOCK_SETS as readonly string[]).includes(value);
+}
+
+function isMissionMode(value: string | undefined): value is MissionMode {
+  return value !== undefined && (MISSION_MODES as readonly string[]).includes(value);
 }
 
 function deterministicNoise(index: number, salt: number): number {

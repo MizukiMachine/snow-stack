@@ -39,7 +39,8 @@ describe('GameState BlockOut rules', () => {
       dimensions: { width: 3, height: 3, depth: 10 },
       blockSet: 'basic',
       startLevel: 4,
-      randomSeed: 99
+      randomSeed: 99,
+      missionMode: 'endless'
     });
     expect(state.getLevel()).toBe(4);
     expect(state.getScore()).toBe(0);
@@ -131,6 +132,60 @@ describe('GameState BlockOut rules', () => {
     expect(state.getScore()).toBeGreaterThan(1);
   });
 
+  it('projects the active polycube landing position and footprint without moving it', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
+    state.spawnPolyCube(5);
+
+    expect(state.getProjectedActivePolyCube()?.blocks).toEqual([
+      { x: 3, y: 0, z: 5 },
+      { x: 4, y: 0, z: 5 },
+      { x: 4, y: 1, z: 5 }
+    ]);
+    expect(state.getActiveFootprintCells()).toEqual([
+      { x: 3, y: 0 },
+      { x: 4, y: 0 },
+      { x: 4, y: 1 }
+    ]);
+    expect(state.getActivePolyCube()?.blocks).toEqual([
+      { x: 3, y: 0, z: 0 },
+      { x: 4, y: 0, z: 0 },
+      { x: 4, y: 1, z: 0 }
+    ]);
+  });
+
+  it('soft drops one depth cell at a time and reports blocked at the landing plane', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
+    state.spawnPolyCube(0);
+
+    expect(state.softDropActivePolyCube()).toBe('moved');
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 1 }]);
+
+    for (let i = 0; i < 4; i += 1) {
+      expect(state.softDropActivePolyCube()).toBe('moved');
+    }
+    expect(state.softDropActivePolyCube()).toBe('blocked');
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 5 }]);
+  });
+
+  it('holds and swaps pieces once per locked polycube', () => {
+    const state = new GameState({ randomSeed: 1 });
+    state.spawnPolyCube(0);
+
+    expect(state.swapHeldPiece()).toBe(true);
+    expect(state.getHeldPiece()).toBe(0);
+    const spawnedAfterHold = state.getActivePolyCube()?.id;
+    expect(spawnedAfterHold).not.toBe(0);
+
+    expect(state.swapHeldPiece()).toBe(false);
+    state.hardDropActivePolyCube();
+    state.lockActivePolyCube();
+    state.spawnPolyCube(1);
+
+    expect(state.swapHeldPiece()).toBe(true);
+    expect(state.getActivePolyCube()?.id).toBe(0);
+    expect(state.getHeldPiece()).toBe(1);
+  });
+
   it('prevents direct locking while the active polycube can still fall', () => {
     const state = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
     state.spawnPolyCube(0);
@@ -201,6 +256,33 @@ describe('GameState BlockOut rules', () => {
     expect(state.getClearedPlaneCount()).toBe(1);
     expect(coordinates(state.getSettledBlocks())).toEqual([{ x: 0, y: 0, z: 5 }]);
     expect(state.getCell({ x: 0, y: 0, z: 0 })).toBe('empty');
+  });
+
+  it('tracks plane sprint mission progress from cleared planes', () => {
+    const state = new GameState({
+      dimensions: { width: 3, height: 3, depth: 6 },
+      missionMode: 'plane-sprint'
+    });
+    seedCells(state, [
+      { x: 0, y: 0, z: 5 },
+      { x: 1, y: 0, z: 5 },
+      { x: 2, y: 0, z: 5 },
+      { x: 0, y: 1, z: 5 },
+      { x: 1, y: 1, z: 5 },
+      { x: 2, y: 1, z: 5 },
+      { x: 0, y: 2, z: 5 },
+      { x: 1, y: 2, z: 5 },
+      { x: 2, y: 2, z: 5 }
+    ]);
+
+    expect(state.clearCompletedPlanes()).toBe(1);
+    expect(state.getMissionSnapshot()).toMatchObject({
+      mode: 'plane-sprint',
+      targetPlanes: 5,
+      clearedPlanes: 1,
+      remainingPlanes: 4,
+      complete: false
+    });
   });
 
   it('sets game over when a newly spawned polycube overlaps the front plane', () => {

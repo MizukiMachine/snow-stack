@@ -51,6 +51,101 @@ describe('GameEngine BlockOut controls', () => {
     expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 1, z: 0 }]);
   });
 
+  it('soft drops with Shift without locking immediately', () => {
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValue(1_000);
+    const { state } = startEngineWithPiece(0);
+
+    pressKey('ShiftLeft');
+
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 1 }]);
+    expect(state.getSettledBlocks()).toHaveLength(0);
+  });
+
+  it('locks shortly after a soft drop reaches the landing plane without extending on repeat', () => {
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValue(1_000);
+    const { engine, state } = startEngineWithPiece(0);
+
+    for (let i = 0; i < 11; i += 1) {
+      pressKey('ShiftLeft');
+    }
+
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 11 }]);
+
+    nowSpy.mockReturnValue(1_200);
+    pressKey('ShiftLeft', { repeat: true });
+
+    advanceGame(engine, 1_449);
+    expect(state.getSettledBlocks()).toHaveLength(0);
+
+    advanceGame(engine, 1_450);
+    expect(state.getSettledBlocks()).toHaveLength(1);
+  });
+
+  it('holds the active piece with C and blocks repeated holds until lock', () => {
+    const { state } = startEngineWithPiece(0);
+
+    pressKey('KeyC');
+    const heldPiece = state.getHeldPiece();
+    const activeAfterHold = state.getActivePolyCube()?.id;
+
+    expect(heldPiece).toBe(0);
+    expect(state.getActivePolyCube()).not.toBeNull();
+
+    pressKey('KeyC');
+
+    expect(state.getHeldPiece()).toBe(heldPiece);
+    expect(state.getActivePolyCube()?.id).toBe(activeAfterHold);
+  });
+
+  it('ends the run when a sprint mission is complete after a lock', () => {
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValue(1_000);
+    const state = new GameState({ missionMode: 'plane-sprint' });
+    state.spawnPolyCube(0);
+    vi.spyOn(state, 'getMissionSnapshot').mockReturnValue({
+      mode: 'plane-sprint',
+      label: 'PLANE SPRINT',
+      targetPlanes: 5,
+      clearedPlanes: 5,
+      remainingPlanes: 0,
+      complete: true
+    });
+    const { engine, renderer } = startEngine(state);
+
+    pressKey('Space');
+    advanceGame(engine, 1_210);
+
+    expect(state.isGameOver()).toBe(true);
+    expect(state.getActivePolyCube()).toBeNull();
+    expect(lastHudCall(renderer)[1]).toBe('game-over');
+  });
+
+  it('ends a sprint run after the target planes are actually cleared', () => {
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValue(1_000);
+    const state = new GameState({
+      dimensions: { width: 3, height: 3, depth: 6 },
+      missionMode: 'plane-sprint'
+    });
+    for (let i = 0; i < 4; i += 1) {
+      seedPlane(state, 5);
+      expect(state.clearCompletedPlanes()).toBe(1);
+    }
+    seedPlane(state, 5, { x: 2, y: 0 });
+    state.spawnPolyCube(0);
+    const { engine, renderer } = startEngine(state);
+
+    pressKey('Space');
+    advanceGame(engine, 1_210);
+
+    expect(state.getMissionSnapshot().complete).toBe(true);
+    expect(state.isGameOver()).toBe(true);
+    expect(state.getActivePolyCube()).toBeNull();
+    expect(lastHudCall(renderer)[1]).toBe('game-over');
+  });
+
   it('throttles held movement keys without slowing deliberate key presses', () => {
     const nowSpy = vi.spyOn(performance, 'now');
     nowSpy.mockReturnValue(1_000);
@@ -281,6 +376,22 @@ function advanceGame(engine: GameEngine, timestamp: number): void {
 
 function toggleSettings(engine: GameEngine): void {
   (engine as unknown as { toggleSettings: () => void }).toggleSettings();
+}
+
+function seedPlane(
+  state: GameState,
+  z: number,
+  except?: { x: number; y: number }
+): void {
+  const { width, height } = state.getDimensions();
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (except && x === except.x && y === except.y) {
+        continue;
+      }
+      expect(state.setCell({ x, y, z }, 0)).toBe(true);
+    }
+  }
 }
 
 function lastHudCall(renderer: RendererMock): unknown[] {

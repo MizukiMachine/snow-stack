@@ -43,7 +43,7 @@ button {
   height: 100%;
   min-height: 720px;
   position: relative;
-  overflow: hidden;
+  overflow: clip;
 }
 
 .game-shell {
@@ -84,7 +84,7 @@ button {
 
 .scene-layer {
   position: absolute;
-  inset: 0 0 102px 0;
+  inset: 0 clamp(116px, 12vw, 224px) 102px 0;
   z-index: 2;
 }
 
@@ -111,7 +111,6 @@ button {
   display: block;
   position: relative;
   z-index: 1;
-  transform: translateX(clamp(-112px, -6vw, -58px));
 }
 
 .ui-layer {
@@ -398,13 +397,24 @@ button {
   letter-spacing: 0;
 }
 
-.queue-list {
+.queue-list,
+.hold-slot {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.queue-list span {
+.queue-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.hold-slot {
+  min-height: 56px;
+  place-items: center;
+}
+
+.queue-list > span,
+.hold-slot > span {
+  width: 100%;
   min-width: 0;
   height: 42px;
   display: grid;
@@ -417,8 +427,90 @@ button {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.62);
 }
 
-.queue-list .is-empty {
+.queue-list .is-empty,
+.hold-slot .is-empty {
   color: rgba(11, 61, 154, 0.44);
+}
+
+.poly-preview {
+  min-width: 0;
+  height: 62px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 15px;
+  place-items: center;
+  color: #0b3d9a;
+  border: 1px solid rgba(65, 139, 203, 0.5);
+  background: rgba(255, 255, 255, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.62);
+  overflow: hidden;
+}
+
+.poly-preview-stage {
+  position: relative;
+  align-self: end;
+  transform: translateY(2px) scale(var(--preview-scale, 1));
+  transform-origin: center bottom;
+}
+
+.poly-preview-cell {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgba(6, 54, 122, 0.42);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), transparent 45%),
+    var(--piece-color);
+  box-shadow:
+    inset -3px -3px 0 rgba(3, 44, 108, 0.18),
+    0 2px 4px rgba(24, 86, 148, 0.16);
+  transform: skewY(-18deg) rotate(2deg);
+}
+
+.poly-preview-label {
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.poly-preview-hold {
+  width: min(100%, 112px);
+}
+
+.mission-progress {
+  position: relative;
+  height: 20px;
+  margin-top: 10px;
+  border: 1px solid rgba(65, 139, 203, 0.5);
+  background: rgba(255, 255, 255, 0.34);
+  overflow: hidden;
+}
+
+.mission-progress[hidden] {
+  display: none;
+}
+
+.mission-progress::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--mission-progress, 0%);
+  background: linear-gradient(90deg, rgba(31, 212, 85, 0.82), rgba(30, 187, 239, 0.86));
+  box-shadow: 0 0 12px rgba(31, 212, 85, 0.38);
+}
+
+.mission-progress[data-complete="true"]::before {
+  background: linear-gradient(90deg, rgba(255, 201, 75, 0.92), rgba(31, 212, 85, 0.88));
+}
+
+.mission-progress span {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: #073486;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .metric-inline {
@@ -587,14 +679,19 @@ button {
   min-height: 74px;
   padding: 14px 24px;
   display: grid;
-  grid-template-columns: 250px minmax(320px, 1fr) 142px;
+  grid-template-columns: 250px auto minmax(320px, 1fr) 142px;
   align-items: center;
   gap: 22px;
   z-index: 4;
   pointer-events: auto;
 }
 
+.ui-layer[data-mission-active="false"] .status-bar {
+  grid-template-columns: 250px minmax(320px, 1fr) 142px;
+}
+
 .status-pill,
+.status-mission,
 .status-hint {
   display: flex;
   align-items: center;
@@ -603,10 +700,19 @@ button {
 }
 
 .status-pill > .hud-icon,
+.status-mission > .hud-icon,
 .status-hint > .hud-icon {
   width: 42px;
   height: 42px;
   color: #098fe7;
+}
+
+.status-mission {
+  min-width: 176px;
+}
+
+.status-mission[hidden] {
+  display: none;
 }
 
 .status-label {
@@ -626,6 +732,11 @@ button {
   color: #0877d3;
   font-size: 24px;
   font-weight: 800;
+}
+
+.status-mission .mission-progress {
+  width: 128px;
+  margin-top: 4px;
 }
 
 .status-hint [data-role="footer-tip"] {
@@ -649,6 +760,11 @@ button {
 
 .ui-layer[data-phase="game-over"] .status-dot {
   background: #ff5062;
+}
+
+.ui-layer[data-mission-complete="true"] .status-dot {
+  background: #ffc94b;
+  box-shadow: 0 0 11px rgba(255, 201, 75, 0.74);
 }
 
 .status-meta {
@@ -713,6 +829,10 @@ button {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+}
+
+[data-role="mission-mode-control"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .segmented-button {
@@ -922,30 +1042,90 @@ button {
     gap: 12px;
   }
 
+  .telemetry-stack,
+  .command-stack {
+    gap: 8px;
+  }
+
   .metric-card {
-    min-height: 82px;
+    min-height: 70px;
   }
 
   .metric-value {
-    font-size: 30px;
+    font-size: 28px;
   }
 
   .panel {
-    padding: 14px 15px;
+    padding: 11px 12px;
+  }
+
+  .panel-heading,
+  .controls-panel h3 {
+    margin-bottom: 8px;
+  }
+
+  .queue-list {
+    gap: 6px;
+  }
+
+  .poly-preview {
+    height: 52px;
+  }
+
+  .poly-preview-stage {
+    transform: translateY(4px) scale(calc(var(--preview-scale, 1) * 0.86));
+  }
+
+  .hold-slot {
+    min-height: 46px;
   }
 
   .controls-panel {
-    min-height: 414px;
+    min-height: 326px;
+  }
+
+  .control-grid {
+    gap: 4px;
   }
 
   .control-row {
-    font-size: 13px;
-    gap: 10px;
+    grid-template-columns: minmax(92px, 108px) 1fr;
+    font-size: 12px;
+    gap: 8px;
+  }
+
+  .keys b {
+    min-width: 22px;
+    height: 21px;
+    font-size: 11px;
+  }
+
+  .keys .combo-key {
+    min-width: 104px;
+    font-size: 9px;
+  }
+
+  .keys .wide-key {
+    min-width: 48px;
+  }
+
+  .action-button {
+    min-height: 46px;
+    font-size: 15px;
+  }
+
+  .button-icon .hud-icon {
+    width: 21px;
+    height: 21px;
   }
 
   .status-bar {
-    grid-template-columns: 210px minmax(260px, 1fr) 116px;
+    grid-template-columns: 210px auto minmax(260px, 1fr) 116px;
     gap: 14px;
+  }
+
+  .ui-layer[data-mission-active="false"] .status-bar {
+    grid-template-columns: 210px minmax(260px, 1fr) 116px;
   }
 
   .status-hint [data-role="footer-tip"] {
@@ -984,6 +1164,7 @@ button {
   .right-rail {
     top: 16px;
     bottom: 102px;
+    align-items: start;
   }
 
   .telemetry-stack,
@@ -991,41 +1172,93 @@ button {
     gap: 7px;
   }
 
+  .command-stack {
+    height: 100%;
+    min-height: 0;
+  }
+
   .panel {
     padding: 10px 12px;
   }
 
   .metric-card {
-    min-height: 68px;
+    min-height: 56px;
   }
 
-  .queue-list span {
+  .metric-value {
+    font-size: 26px;
+  }
+
+  .metric-value-small {
+    font-size: 22px;
+  }
+
+  .queue-list {
+    gap: 5px;
+  }
+
+  .queue-list > span {
     height: 30px;
     font-size: 14px;
   }
 
+  .poly-preview {
+    height: 42px;
+    grid-template-rows: minmax(0, 1fr) 12px;
+  }
+
+  .poly-preview-cell {
+    width: 10px;
+    height: 10px;
+  }
+
+  .poly-preview-stage {
+    transform: translateY(5px) scale(calc(var(--preview-scale, 1) * 0.68));
+  }
+
+  .hold-slot {
+    min-height: 38px;
+  }
+
+  .mission-progress {
+    height: 16px;
+    margin-top: 6px;
+  }
+
   .panel-heading,
   .controls-panel h3 {
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     font-size: 13px;
   }
 
   .controls-panel {
+    flex: 0 0 auto;
     min-height: 326px;
   }
 
   .control-grid {
-    gap: 5px;
+    gap: 4px;
   }
 
   .control-row {
+    grid-template-columns: minmax(92px, 108px) 1fr;
     font-size: 12px;
+    gap: 8px;
   }
 
   .keys b {
     min-width: 22px;
     height: 21px;
     font-size: 11px;
+  }
+
+  .keys .combo-key {
+    min-width: 104px;
+    font-size: 9px;
+  }
+
+  .keys .wide-key {
+    min-width: 48px;
   }
 
   .action-button {
@@ -1043,6 +1276,14 @@ button {
     bottom: 14px;
     padding-top: 10px;
     padding-bottom: 10px;
+  }
+
+  .status-mission {
+    min-width: 140px;
+  }
+
+  .status-mission .mission-progress {
+    width: 104px;
   }
 }
 
@@ -1152,6 +1393,11 @@ button {
     bottom: 14px;
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .ui-layer[data-mission-active="false"] .status-bar,
+  .ui-layer[data-mission-active="true"] .status-bar {
+    grid-template-columns: 1fr;
   }
 
   .settings-panel {

@@ -15,6 +15,11 @@ Three.js と TypeScript で作る BlockOut II 風の 3D ポリキューブパズ
 - BlockOut II 由来のスコア / レベル / 落下速度計算
 - BlockOut II 由来のバッグ式ピース生成
 - `Space` によるハードドロップ
+- 着地点ゴースト / 着地面フットプリント
+- `C` / `H` によるホールド
+- `Shift` / `5` によるソフトドロップ
+- NEXT / HOLD のポリキューブプレビュー
+- `ENDLESS` / `SPRINT` ミッション設定
 
 ## セットアップ
 
@@ -31,6 +36,8 @@ npm run dev
 - `Q` / `A`: X 軸回転
 - `W` / `S`: Y 軸回転
 - `E` / `D`: Z 軸回転
+- `Shift` / `5`: ソフトドロップ
+- `C` / `H`: ホールド
 - `Space`: ハードドロップ
 - `P`: ポーズ
 - `Escape`: 現在のランを終了
