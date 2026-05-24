@@ -138,15 +138,117 @@ describe('Renderer BlockOut layer coloring', () => {
     }
 
     const reflectionGeometry = fill.geometry as PlaneGeometry;
-    expect(reflectionGeometry.parameters.width).toBeCloseTo(CELL_SIZE * 0.96);
-    expect(reflectionGeometry.parameters.height).toBeCloseTo(CELL_SIZE * 0.96);
+    expect(reflectionGeometry.parameters.width).toBeCloseTo(CELL_SIZE);
+    expect(reflectionGeometry.parameters.height).toBeCloseTo(CELL_SIZE);
     expect(fill.material.transparent).toBe(true);
+    expect(fill.material.depthTest).toBe(false);
     expect(fill.material.depthWrite).toBe(false);
-    expect(fill.material.opacity).toBeCloseTo(0.2);
+    expect(fill.material.opacity).toBeCloseTo(0.18);
     if (!(farWallFill?.material instanceof MeshBasicMaterial)) {
       throw new Error('Far wall reflection fill should use MeshBasicMaterial');
     }
     expect(farWallFill.material.opacity).toBeCloseTo(fill.material.opacity);
+  });
+
+  it('keeps distant reflections the same size without fading their color or opacity', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 15 } });
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const scene = new Scene();
+    access.scene = scene;
+
+    renderer.updateSettledBlocks([
+      {
+        id: 0,
+        label: 'P00',
+        color: 0x123456,
+        coordinate: { x: 0, y: 0, z: 0 }
+      },
+      {
+        id: 1,
+        label: 'P01',
+        color: 0x654321,
+        coordinate: { x: 1, y: 1, z: 14 }
+      }
+    ]);
+
+    const reflections = scene.getObjectByName('settled-block-reflections') as Group | undefined;
+    const leftReflections =
+      reflections?.children
+        .filter((child): child is Group => child instanceof Group)
+        .filter((child) => child.name === 'left-wall-block-reflection')
+        .sort((a, b) => a.position.z - b.position.z) ?? [];
+    const [nearReflection, farReflection] = leftReflections;
+    const nearFill = nearReflection?.children.find((child): child is Mesh => child instanceof Mesh);
+    const farFill = farReflection?.children.find((child): child is Mesh => child instanceof Mesh);
+
+    expect(leftReflections).toHaveLength(2);
+    expect(nearReflection?.scale.x).toBeCloseTo(1);
+    expect(nearReflection?.scale.y).toBeCloseTo(1);
+    expect(farReflection?.scale.x).toBeCloseTo(1);
+    expect(farReflection?.scale.y).toBeCloseTo(1);
+
+    if (
+      !(nearFill?.material instanceof MeshBasicMaterial) ||
+      !(farFill?.material instanceof MeshBasicMaterial)
+    ) {
+      throw new Error('Reflection fills should use MeshBasicMaterial');
+    }
+
+    expect(farFill.material.opacity).toBeCloseTo(nearFill.material.opacity);
+    expect(farFill.material.depthTest).toBe(false);
+    expect(nearFill.material.depthTest).toBe(false);
+    expect(farFill.material.color.getHex()).toBe(nearFill.material.color.getHex());
+    expect(nearFill.material.color.getHex()).toBe(getBlockOutLayerColor(15, 0));
+  });
+
+  it('does not stack reflection opacity for blocks sharing the same wall projection', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 12 } });
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const scene = new Scene();
+    access.scene = scene;
+
+    renderer.updateSettledBlocks([
+      {
+        id: 0,
+        label: 'P00',
+        color: 0x123456,
+        coordinate: { x: 0, y: 0, z: 11 }
+      },
+      {
+        id: 1,
+        label: 'P01',
+        color: 0x654321,
+        coordinate: { x: 0, y: 1, z: 11 }
+      },
+      {
+        id: 2,
+        label: 'P02',
+        color: 0xabcdef,
+        coordinate: { x: 0, y: 2, z: 11 }
+      }
+    ]);
+
+    const reflections = scene.getObjectByName('settled-block-reflections') as Group | undefined;
+    const upperReflections =
+      reflections?.children
+        .filter((child): child is Group => child instanceof Group)
+        .filter((child) => child.name === 'upper-wall-block-reflection') ?? [];
+    const upperFill = upperReflections[0]?.children.find(
+      (child): child is Mesh => child instanceof Mesh
+    );
+
+    expect(upperReflections).toHaveLength(1);
+    expect(upperReflections[0]?.position.x).toBeCloseTo(CELL_SIZE * 0.5);
+    expect(upperReflections[0]?.position.z).toBeCloseTo(CELL_SIZE * 11.5);
+
+    if (!(upperFill?.material instanceof MeshBasicMaterial)) {
+      throw new Error('Upper wall reflection fill should use MeshBasicMaterial');
+    }
+
+    expect(upperFill.material.opacity).toBeCloseTo(0.18);
+    expect(upperFill.material.color.getHex()).toBe(getBlockOutLayerColor(12, 11));
   });
 
   it('refreshes landing ghost and footprint groups from the active projection', () => {

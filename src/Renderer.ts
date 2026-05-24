@@ -134,8 +134,12 @@ type ReflectionPatchPlacement = {
   readonly opacity: number;
   readonly rotationX?: number;
   readonly rotationY?: number;
-  readonly scaleX?: number;
-  readonly scaleY?: number;
+};
+
+type ReflectionPatchCandidate = {
+  readonly color: number;
+  readonly placement: ReflectionPatchPlacement;
+  readonly priority: number;
 };
 
 const CAMERA_SETTINGS = {
@@ -159,7 +163,7 @@ const DEFAULT_BLOCK_FALLBACK_CORE_SIZE = CELL_SIZE * 0.84;
 const PIT_WALL_BACKING_OFFSET = CELL_SIZE * 0.035;
 const PIT_WALL_GUIDE_INSET = CELL_SIZE * 0.018;
 const PIT_REFLECTION_INSET = CELL_SIZE * 0.028;
-const PIT_REFLECTION_OPACITY = 0.2;
+const PIT_REFLECTION_OPACITY = 0.18;
 const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, CubeWorldAssetDefinition> = Object.freeze({
   wallIce: {
     path: `${CUBE_WORLD_ASSET_ROOT}/Pixel%20Blocks/glTF/Ice.gltf`,
@@ -180,7 +184,7 @@ const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, CubeWorldAssetDefinition> = O
   }
 });
 const CUBE_WIREFRAME_BEAM_GEOMETRY = new BoxGeometry(1, 1, 1);
-const PIT_REFLECTION_PLANE_GEOMETRY = new PlaneGeometry(CELL_SIZE * 0.96, CELL_SIZE * 0.96);
+const PIT_REFLECTION_PLANE_GEOMETRY = new PlaneGeometry(CELL_SIZE, CELL_SIZE);
 const PIT_REFLECTION_FRAME_GEOMETRY = new EdgesGeometry(PIT_REFLECTION_PLANE_GEOMETRY);
 
 /**
@@ -1350,6 +1354,7 @@ export class Renderer {
     const { width, height, depth } = this.gameState.getDimensions();
     const group = new Group();
     group.name = 'settled-block-reflections';
+    const reflectionPatches = new Map<string, ReflectionPatchCandidate>();
 
     blocks.forEach((block) => {
       const color = getBlockOutLayerColor(depth, block.coordinate.z);
@@ -1357,53 +1362,101 @@ export class Renderer {
       const centerY = (block.coordinate.y + 0.5) * CELL_SIZE;
       const centerZ = (block.coordinate.z + 0.5) * CELL_SIZE;
 
-      this.addPitReflectionPatch(group, color, {
-        name: 'left-wall-block-reflection',
-        x: PIT_REFLECTION_INSET,
-        y: centerY,
-        z: centerZ,
-        opacity: PIT_REFLECTION_OPACITY,
-        rotationY: Math.PI / 2
-      });
+      this.setPitReflectionCandidate(
+        reflectionPatches,
+        `left:${block.coordinate.y}:${block.coordinate.z}`,
+        -block.coordinate.x,
+        color,
+        {
+          name: 'left-wall-block-reflection',
+          x: PIT_REFLECTION_INSET,
+          y: centerY,
+          z: centerZ,
+          opacity: PIT_REFLECTION_OPACITY,
+          rotationY: Math.PI / 2
+        }
+      );
 
-      this.addPitReflectionPatch(group, color, {
-        name: 'right-wall-block-reflection',
-        x: width * CELL_SIZE - PIT_REFLECTION_INSET,
-        y: centerY,
-        z: centerZ,
-        opacity: PIT_REFLECTION_OPACITY,
-        rotationY: -Math.PI / 2
-      });
+      this.setPitReflectionCandidate(
+        reflectionPatches,
+        `right:${block.coordinate.y}:${block.coordinate.z}`,
+        block.coordinate.x,
+        color,
+        {
+          name: 'right-wall-block-reflection',
+          x: width * CELL_SIZE - PIT_REFLECTION_INSET,
+          y: centerY,
+          z: centerZ,
+          opacity: PIT_REFLECTION_OPACITY,
+          rotationY: -Math.PI / 2
+        }
+      );
 
-      this.addPitReflectionPatch(group, color, {
-        name: 'lower-wall-block-reflection',
-        x: centerX,
-        y: PIT_REFLECTION_INSET,
-        z: centerZ,
-        opacity: PIT_REFLECTION_OPACITY,
-        rotationX: -Math.PI / 2
-      });
+      this.setPitReflectionCandidate(
+        reflectionPatches,
+        `lower:${block.coordinate.x}:${block.coordinate.z}`,
+        -block.coordinate.y,
+        color,
+        {
+          name: 'lower-wall-block-reflection',
+          x: centerX,
+          y: PIT_REFLECTION_INSET,
+          z: centerZ,
+          opacity: PIT_REFLECTION_OPACITY,
+          rotationX: -Math.PI / 2
+        }
+      );
 
-      this.addPitReflectionPatch(group, color, {
-        name: 'upper-wall-block-reflection',
-        x: centerX,
-        y: height * CELL_SIZE - PIT_REFLECTION_INSET,
-        z: centerZ,
-        opacity: PIT_REFLECTION_OPACITY,
-        rotationX: Math.PI / 2
-      });
+      this.setPitReflectionCandidate(
+        reflectionPatches,
+        `upper:${block.coordinate.x}:${block.coordinate.z}`,
+        block.coordinate.y,
+        color,
+        {
+          name: 'upper-wall-block-reflection',
+          x: centerX,
+          y: height * CELL_SIZE - PIT_REFLECTION_INSET,
+          z: centerZ,
+          opacity: PIT_REFLECTION_OPACITY,
+          rotationX: Math.PI / 2
+        }
+      );
 
-      this.addPitReflectionPatch(group, color, {
-        name: 'landing-wall-block-reflection',
-        x: centerX,
-        y: centerY,
-        z: depth * CELL_SIZE - PIT_REFLECTION_INSET,
-        opacity: PIT_REFLECTION_OPACITY,
-        rotationY: Math.PI
-      });
+      this.setPitReflectionCandidate(
+        reflectionPatches,
+        `landing:${block.coordinate.x}:${block.coordinate.y}`,
+        block.coordinate.z,
+        color,
+        {
+          name: 'landing-wall-block-reflection',
+          x: centerX,
+          y: centerY,
+          z: depth * CELL_SIZE - PIT_REFLECTION_INSET,
+          opacity: PIT_REFLECTION_OPACITY,
+          rotationY: Math.PI
+        }
+      );
+    });
+
+    reflectionPatches.forEach(({ color, placement }) => {
+      this.addPitReflectionPatch(group, color, placement);
     });
 
     return group.children.length > 0 ? group : null;
+  }
+
+  private setPitReflectionCandidate(
+    candidates: Map<string, ReflectionPatchCandidate>,
+    key: string,
+    priority: number,
+    color: number,
+    placement: ReflectionPatchPlacement
+  ): void {
+    const existing = candidates.get(key);
+    if (existing && existing.priority >= priority) {
+      return;
+    }
+    candidates.set(key, { color, placement, priority });
   }
 
   private addPitReflectionPatch(
@@ -1415,16 +1468,15 @@ export class Renderer {
     reflection.name = placement.name;
     reflection.position.set(placement.x, placement.y, placement.z);
     reflection.rotation.set(placement.rotationX ?? 0, placement.rotationY ?? 0, 0);
-    reflection.scale.set(placement.scaleX ?? 1, placement.scaleY ?? 1, 1);
 
-    const reflectionColor = mixColorNumber(color, 0xffffff, 0.32);
+    const reflectionColor = color;
     const fill = new Mesh(
       PIT_REFLECTION_PLANE_GEOMETRY,
       new MeshBasicMaterial({
         color: reflectionColor,
         transparent: true,
         opacity: placement.opacity,
-        depthTest: true,
+        depthTest: false,
         depthWrite: false,
         side: DoubleSide
       })
@@ -1437,10 +1489,10 @@ export class Renderer {
     const frame = new LineSegments(
       PIT_REFLECTION_FRAME_GEOMETRY,
       new LineBasicMaterial({
-        color: mixColorNumber(reflectionColor, 0xffffff, 0.4),
+        color: reflectionColor,
         transparent: true,
         opacity: clamp(placement.opacity * 2.15, 0.08, 0.54),
-        depthTest: true,
+        depthTest: false,
         depthWrite: false
       })
     );
