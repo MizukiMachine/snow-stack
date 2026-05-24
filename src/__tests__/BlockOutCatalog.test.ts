@@ -86,7 +86,26 @@ describe('BlockOut polycube catalog', () => {
     expect(ids).toContain(40);
   });
 
-  it('maps depth layers to the BlockOut II repeating pit colors', () => {
+  it('uses a high-contrast depth palette for the ice pit', () => {
+    expect(BLOCKOUT_LAYER_COLORS).toEqual([
+      0xff2d55,
+      0xff8a1f,
+      0xffc400,
+      0x78d12f,
+      0xb33cff,
+      0xff3fb7,
+      0x5b2a86
+    ]);
+  });
+
+  it('keeps reflected depth colors separated from the ice wall color', () => {
+    const iceWallColor = 0xb9e5ee;
+    const reflectedColors = BLOCKOUT_LAYER_COLORS.map((color) => mixColorNumber(color, 0xffffff, 0.32));
+
+    expect(reflectedColors.every((color) => colorDistance(color, iceWallColor) > 100)).toBe(true);
+  });
+
+  it('maps depth layers to the repeating high-contrast pit colors', () => {
     const depth = 12;
     const landingOutward = Array.from({ length: 8 }, (_, offset) =>
       getBlockOutLayerColor(depth, depth - 1 - offset)
@@ -112,4 +131,24 @@ function catalogSignature(): string {
       definition.cells.map((cell) => `${cell.x}${cell.y}${cell.z}`).join('.')
     ].join(':')
   ).join('|');
+}
+
+function mixColorNumber(color: number, target: number, amount: number): number {
+  const sourceRgb = numberToRgb(color);
+  const targetRgb = numberToRgb(target);
+  const mixed = sourceRgb.map((value, index) =>
+    Math.round(value + (targetRgb[index] - value) * amount)
+  );
+  return (mixed[0] << 16) | (mixed[1] << 8) | mixed[2];
+}
+
+function colorDistance(color: number, target: number): number {
+  const sourceRgb = numberToRgb(color);
+  const targetRgb = numberToRgb(target);
+  const squared = sourceRgb.map((value, index) => (value - targetRgb[index]) ** 2);
+  return Math.sqrt(squared[0] + squared[1] + squared[2]);
+}
+
+function numberToRgb(color: number): [number, number, number] {
+  return [(color >> 16) & 255, (color >> 8) & 255, color & 255];
 }

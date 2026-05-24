@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CanvasTexture, Group, Mesh, MeshBasicMaterial, Points, Scene } from 'three';
+import {
+  BoxGeometry,
+  CanvasTexture,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  PlaneGeometry,
+  Points,
+  Scene
+} from 'three';
 import { Renderer } from '../Renderer';
 import { GameState, type SettledBlockSnapshot } from '../GameState';
 import { getBlockOutLayerColor } from '../constants/blockout';
@@ -10,6 +19,8 @@ type RendererAccess = {
     queue: readonly number[];
   };
   scene: Scene | null;
+  assetsReady: boolean;
+  assetTemplates: Map<string, Group>;
   createBlockMesh: (
     color: number,
     isActive: boolean,
@@ -87,6 +98,170 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(createBlockMesh.mock.calls.map(([color]) => color)).not.toContain(0x654321);
   });
 
+  it('projects settled block reflections onto the inside ice walls', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 12 } });
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const scene = new Scene();
+    access.scene = scene;
+
+    renderer.updateSettledBlocks([
+      {
+        id: 0,
+        label: 'P00',
+        color: 0x123456,
+        coordinate: { x: 0, y: 0, z: 11 }
+      }
+    ]);
+
+    const reflections = scene.getObjectByName('settled-block-reflections') as Group | undefined;
+    const leftReflection = reflections?.getObjectByName(
+      'left-wall-block-reflection'
+    ) as Group | undefined;
+    const rightReflection = reflections?.getObjectByName(
+      'right-wall-block-reflection'
+    ) as Group | undefined;
+    const lowerReflection = reflections?.getObjectByName(
+      'lower-wall-block-reflection'
+    ) as Group | undefined;
+    const landingReflection = reflections?.getObjectByName(
+      'landing-wall-block-reflection'
+    ) as Group | undefined;
+    const fill = leftReflection?.children.find((child): child is Mesh => child instanceof Mesh);
+    const farWallFill = rightReflection?.children.find((child): child is Mesh => child instanceof Mesh);
+
+    expect(reflections).toBeDefined();
+    expect(leftReflection).toBeDefined();
+    expect(rightReflection).toBeDefined();
+    expect(lowerReflection).toBeDefined();
+    expect(landingReflection).toBeDefined();
+    expect(leftReflection?.position.x).toBeGreaterThan(0);
+    expect(leftReflection?.position.x).toBeLessThan(CELL_SIZE * 0.08);
+    expect(leftReflection?.position.y).toBeCloseTo(CELL_SIZE * 0.5);
+    expect(leftReflection?.position.z).toBeCloseTo(CELL_SIZE * 11.5);
+    expect(leftReflection?.rotation.y).toBeCloseTo(Math.PI / 2);
+    expect(leftReflection?.scale.x).toBeCloseTo(1);
+    expect(leftReflection?.scale.y).toBeCloseTo(1);
+    expect(fill?.renderOrder).toBeLessThan(18);
+
+    if (!fill || !(fill.material instanceof MeshBasicMaterial)) {
+      throw new Error('Reflection fill should use MeshBasicMaterial');
+    }
+
+    const reflectionGeometry = fill.geometry as PlaneGeometry;
+    expect(reflectionGeometry.parameters.width).toBeCloseTo(CELL_SIZE);
+    expect(reflectionGeometry.parameters.height).toBeCloseTo(CELL_SIZE);
+    expect(fill.material.transparent).toBe(true);
+    expect(fill.material.depthTest).toBe(false);
+    expect(fill.material.depthWrite).toBe(false);
+    expect(fill.material.opacity).toBeCloseTo(0.18);
+    if (!(farWallFill?.material instanceof MeshBasicMaterial)) {
+      throw new Error('Far wall reflection fill should use MeshBasicMaterial');
+    }
+    expect(farWallFill.material.opacity).toBeCloseTo(fill.material.opacity);
+  });
+
+  it('keeps distant reflections the same size without fading their color or opacity', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 15 } });
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const scene = new Scene();
+    access.scene = scene;
+
+    renderer.updateSettledBlocks([
+      {
+        id: 0,
+        label: 'P00',
+        color: 0x123456,
+        coordinate: { x: 0, y: 0, z: 0 }
+      },
+      {
+        id: 1,
+        label: 'P01',
+        color: 0x654321,
+        coordinate: { x: 1, y: 1, z: 14 }
+      }
+    ]);
+
+    const reflections = scene.getObjectByName('settled-block-reflections') as Group | undefined;
+    const leftReflections =
+      reflections?.children
+        .filter((child): child is Group => child instanceof Group)
+        .filter((child) => child.name === 'left-wall-block-reflection')
+        .sort((a, b) => a.position.z - b.position.z) ?? [];
+    const [nearReflection, farReflection] = leftReflections;
+    const nearFill = nearReflection?.children.find((child): child is Mesh => child instanceof Mesh);
+    const farFill = farReflection?.children.find((child): child is Mesh => child instanceof Mesh);
+
+    expect(leftReflections).toHaveLength(2);
+    expect(nearReflection?.scale.x).toBeCloseTo(1);
+    expect(nearReflection?.scale.y).toBeCloseTo(1);
+    expect(farReflection?.scale.x).toBeCloseTo(1);
+    expect(farReflection?.scale.y).toBeCloseTo(1);
+
+    if (
+      !(nearFill?.material instanceof MeshBasicMaterial) ||
+      !(farFill?.material instanceof MeshBasicMaterial)
+    ) {
+      throw new Error('Reflection fills should use MeshBasicMaterial');
+    }
+
+    expect(farFill.material.opacity).toBeCloseTo(nearFill.material.opacity);
+    expect(farFill.material.depthTest).toBe(false);
+    expect(nearFill.material.depthTest).toBe(false);
+    expect(farFill.material.color.getHex()).toBe(nearFill.material.color.getHex());
+    expect(nearFill.material.color.getHex()).toBe(getBlockOutLayerColor(15, 0));
+  });
+
+  it('does not stack reflection opacity for blocks sharing the same wall projection', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 12 } });
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const scene = new Scene();
+    access.scene = scene;
+
+    renderer.updateSettledBlocks([
+      {
+        id: 0,
+        label: 'P00',
+        color: 0x123456,
+        coordinate: { x: 0, y: 0, z: 11 }
+      },
+      {
+        id: 1,
+        label: 'P01',
+        color: 0x654321,
+        coordinate: { x: 0, y: 1, z: 11 }
+      },
+      {
+        id: 2,
+        label: 'P02',
+        color: 0xabcdef,
+        coordinate: { x: 0, y: 2, z: 11 }
+      }
+    ]);
+
+    const reflections = scene.getObjectByName('settled-block-reflections') as Group | undefined;
+    const upperReflections =
+      reflections?.children
+        .filter((child): child is Group => child instanceof Group)
+        .filter((child) => child.name === 'upper-wall-block-reflection') ?? [];
+    const upperFill = upperReflections[0]?.children.find(
+      (child): child is Mesh => child instanceof Mesh
+    );
+
+    expect(upperReflections).toHaveLength(1);
+    expect(upperReflections[0]?.position.x).toBeCloseTo(CELL_SIZE * 0.5);
+    expect(upperReflections[0]?.position.z).toBeCloseTo(CELL_SIZE * 11.5);
+
+    if (!(upperFill?.material instanceof MeshBasicMaterial)) {
+      throw new Error('Upper wall reflection fill should use MeshBasicMaterial');
+    }
+
+    expect(upperFill.material.opacity).toBeCloseTo(0.18);
+    expect(upperFill.material.color.getHex()).toBe(getBlockOutLayerColor(12, 11));
+  });
+
   it('refreshes landing ghost and footprint groups from the active projection', () => {
     const state = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
     state.spawnPolyCube(5);
@@ -143,6 +318,26 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(readFirstPointCoordinate(fieldBounds, 'landing-guide-grid', 'z')).toBeLessThan(
       dimensions.depth * CELL_SIZE
     );
+  });
+
+  it('can preserve loaded Cube World templates across a setup reset', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 12 } });
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const template = new Group();
+    template.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()));
+    access.assetTemplates.set('wallIce', template);
+    access.assetsReady = true;
+
+    renderer.dispose({ preserveAssets: true });
+
+    expect(access.assetTemplates.size).toBe(1);
+    expect(access.assetsReady).toBe(true);
+
+    renderer.dispose();
+
+    expect(access.assetTemplates.size).toBe(0);
+    expect(access.assetsReady).toBe(false);
   });
 
   it('shows only depth guide rows that already contain settled blocks', () => {
@@ -212,8 +407,57 @@ describe('Renderer BlockOut layer coloring', () => {
     (renderer as unknown as RendererAccess).syncMission(root);
 
     expect(root.querySelector<HTMLElement>('[data-role="mission-pill"]')?.hidden).toBe(false);
-    expect(root.querySelector<HTMLElement>('[data-role="mission-label"]')?.textContent).toBe('PLANE SPRINT');
-    expect(root.querySelector<HTMLElement>('[data-role="mission-progress"] span')?.textContent).toBe('0/5 PLANES');
+    expect(root.querySelector<HTMLElement>('[data-role="mission-label"]')?.textContent).toBe('5面スプリント');
+    expect(root.querySelector<HTMLElement>('[data-role="mission-progress"] span')?.textContent).toBe('0/5面');
+  });
+
+  it('hides the game-over overlay while the rule selection screen is open', () => {
+    const state = new GameState();
+    state.endGame();
+    const renderer = new Renderer(state);
+    const hud = (renderer as unknown as RendererAccess).createHudElement();
+
+    renderer.updateHud(
+      [],
+      'game-over',
+      0,
+      0,
+      state.getLevel(),
+      state.getDropIntervalMs(),
+      0,
+      false,
+      false,
+      true
+    );
+
+    expect(hud.querySelector<HTMLElement>('[data-role="overlay"]')?.hidden).toBe(true);
+    expect(hud.querySelector<HTMLElement>('[data-role="status-label"]')?.textContent).toBe(
+      'ルール選択'
+    );
+  });
+
+  it('updates the footer mission description from the rule selection buttons', () => {
+    const state = new GameState();
+    const renderer = new Renderer(state);
+    const hud = (renderer as unknown as RendererAccess).createHudElement();
+
+    renderer.updateHud(
+      [],
+      'running',
+      0,
+      0,
+      state.getLevel(),
+      state.getDropIntervalMs(),
+      0,
+      false,
+      false,
+      true
+    );
+    hud.querySelector<HTMLButtonElement>('[data-mission-mode="score-rush"]')?.click();
+
+    expect(hud.querySelector<HTMLElement>('[data-role="footer-tip"]')?.textContent).toBe(
+      'スコアラッシュ: スコア2,000点に到達する。'
+    );
   });
 
   it('keeps double-cut unavailable while the flat block set is selected', () => {
@@ -223,7 +467,7 @@ describe('Renderer BlockOut layer coloring', () => {
     const doubleCut = hud.querySelector<HTMLButtonElement>('[data-mission-mode="double-cut"]');
     const basic = hud.querySelector<HTMLButtonElement>('[data-block-set="basic"]');
     const flat = hud.querySelector<HTMLButtonElement>('[data-block-set="flat"]');
-    const endless = hud.querySelector<HTMLButtonElement>('[data-mission-mode="endless"]');
+    const planeSprint = hud.querySelector<HTMLButtonElement>('[data-mission-mode="plane-sprint"]');
 
     expect(doubleCut?.disabled).toBe(true);
 
@@ -236,7 +480,7 @@ describe('Renderer BlockOut layer coloring', () => {
     flat?.click();
     expect(doubleCut?.disabled).toBe(true);
     expect(doubleCut?.classList.contains('is-active')).toBe(false);
-    expect(endless?.classList.contains('is-active')).toBe(true);
+    expect(planeSprint?.classList.contains('is-active')).toBe(true);
   });
 
   it('builds polycube preview markup with one cell per cube', () => {

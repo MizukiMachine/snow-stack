@@ -783,6 +783,34 @@ button {
   pointer-events: auto;
 }
 
+.ui-layer[data-start-menu="true"] .right-rail {
+  opacity: 0.24;
+  pointer-events: none;
+}
+
+.ui-layer[data-start-menu="true"] .layer-guide-card {
+  display: none;
+}
+
+.ui-layer[data-start-menu="true"] .settings-panel {
+  left: 50%;
+  right: auto;
+  top: clamp(118px, 14vh, 172px);
+  width: min(560px, calc(100vw - 44px));
+  padding: 28px 30px 30px;
+  transform: translateX(-50%);
+  z-index: 7;
+  filter: drop-shadow(0 20px 46px rgba(47, 137, 207, 0.24));
+}
+
+.ui-layer[data-start-menu="true"] .settings-panel h3 {
+  font-size: 20px;
+}
+
+.ui-layer[data-start-menu="true"] [data-role="mission-mode-control"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .setup-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1227,7 +1255,7 @@ button {
   }
 
   .mission-progress {
-    height: 16px;
+    height: 20px;
     margin-top: 6px;
   }
 
@@ -1412,6 +1440,16 @@ button {
     width: min(300px, calc(100vw - 28px));
   }
 
+  .ui-layer[data-start-menu="true"] .settings-panel {
+    top: 178px;
+    width: min(420px, calc(100vw - 28px));
+    padding: 22px;
+  }
+
+  .ui-layer[data-start-menu="true"] [data-role="mission-mode-control"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .overlay-card,
   .pause-card {
     left: 50%;
@@ -1471,6 +1509,10 @@ button {
 
   .status-hint [data-role="footer-tip"] {
     font-size: 16px;
+  }
+
+  .ui-layer[data-start-menu="true"] .settings-panel {
+    top: 154px;
   }
 
 }

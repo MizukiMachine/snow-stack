@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GameEngine } from '../GameEngine';
-import { GameState } from '../GameState';
+import { GameState, type GameStateOptions } from '../GameState';
 import type { Renderer } from '../Renderer';
 
 type RendererMock = {
@@ -324,6 +324,22 @@ describe('GameEngine BlockOut controls', () => {
     expect(state.getActivePolyCube()).not.toBeNull();
   });
 
+  it('opens the rule selection screen by default and holds the run', () => {
+    const renderer = createRendererMock();
+    const state = new GameState();
+    const engine = new GameEngine(state, renderer as unknown as Renderer);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    engine.start(container);
+    startedEngines.push(engine);
+    pressKey('Space');
+    advanceGame(engine, 10_000);
+
+    expect(state.getActivePolyCube()).toBeNull();
+    expect(lastHudCall(renderer)[9]).toBe(true);
+  });
+
   it('holds the run and ignores gameplay keys while settings are open', () => {
     const nowSpy = vi.spyOn(performance, 'now');
     nowSpy.mockReturnValue(1_000);
@@ -371,6 +387,16 @@ describe('GameEngine BlockOut controls', () => {
     expect(state.getActivePolyCube()?.blocks).toEqual(blocksBeforeStop);
     expect(renderer.updateActivePolyCube).not.toHaveBeenCalled();
   });
+
+  it('preserves loaded renderer assets when applying setup', () => {
+    const { engine, state, renderer } = startEngineWithPiece(0);
+
+    applySetup(engine, { missionMode: 'plane-sprint' });
+
+    expect(state.getMissionSnapshot().mode).toBe('plane-sprint');
+    expect(renderer.dispose).toHaveBeenCalledWith({ preserveAssets: true });
+    expect(renderer.initialize).toHaveBeenCalledTimes(2);
+  });
 });
 
 function startEngineWithPiece(id: number): {
@@ -389,7 +415,9 @@ function startEngine(state: GameState): {
   renderer: RendererMock;
 } {
   const renderer = createRendererMock();
-  const engine = new GameEngine(state, renderer as unknown as Renderer);
+  const engine = new GameEngine(state, renderer as unknown as Renderer, {
+    showStartScreen: false
+  });
   const container = document.createElement('div');
   document.body.appendChild(container);
 
@@ -438,6 +466,10 @@ function advanceGame(engine: GameEngine, timestamp: number): void {
 
 function toggleSettings(engine: GameEngine): void {
   (engine as unknown as { toggleSettings: () => void }).toggleSettings();
+}
+
+function applySetup(engine: GameEngine, setup: GameStateOptions): void {
+  (engine as unknown as { applySetup: (setup: GameStateOptions) => void }).applySetup(setup);
 }
 
 function seedPlane(

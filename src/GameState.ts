@@ -104,6 +104,7 @@ type MissionDefinition = {
   readonly progressLabel: string;
   readonly targetValue: number;
   readonly active: boolean;
+  readonly description: string;
   readonly getProgress: (context: MissionProgressContext) => number;
   readonly getHint: (remainingValue: number) => string;
   readonly completionMessage: string;
@@ -114,7 +115,7 @@ const SCORE_RUSH_TARGET_SCORE = 2_000;
 const CLEAN_PIT_TARGET_COUNT = 1;
 const DOUBLE_CUT_TARGET_COUNT = 1;
 const CUBE_TRIAL_TARGET_CUBES = 120;
-export const DEFAULT_MISSION_MODE: MissionMode = 'endless';
+export const DEFAULT_MISSION_MODE: MissionMode = 'plane-sprint';
 export const MISSION_MODES: readonly MissionMode[] = Object.freeze([
   'endless',
   'plane-sprint',
@@ -126,68 +127,74 @@ export const MISSION_MODES: readonly MissionMode[] = Object.freeze([
 
 const MISSION_DEFINITIONS: Readonly<Record<MissionMode, MissionDefinition>> = Object.freeze({
   endless: {
-    label: 'ENDLESS',
-    shortLabel: 'ENDLESS',
-    progressLabel: 'PLANES',
+    label: 'エンドレス',
+    shortLabel: 'エンドレス',
+    progressLabel: '面',
     targetValue: 0,
     active: false,
+    description: 'ゲームオーバーまでスコアを伸ばす。',
     getProgress: (context) => context.clearedPlanes,
-    getHint: () => 'Fill complete depth planes across the pit to clear them.',
-    completionMessage: 'Keep building for a higher score.'
+    getHint: () => '奥まで埋まった面をそろえると消去できます。',
+    completionMessage: 'さらに高いスコアを狙えます。'
   },
   'plane-sprint': {
-    label: 'PLANE SPRINT',
-    shortLabel: '5 PLANES',
-    progressLabel: 'PLANES',
+    label: '5面スプリント',
+    shortLabel: '5面消去',
+    progressLabel: '面',
     targetValue: PLANE_SPRINT_TARGET_PLANES,
     active: true,
+    description: '消去面を合計5面に到達させる。',
     getProgress: (context) => context.clearedPlanes,
     getHint: (remainingValue) =>
       remainingValue === 1
-        ? '1 plane left in the sprint.'
-        : `${remainingValue} planes left in the sprint.`,
-    completionMessage: 'Plane sprint complete.'
+        ? 'あと1面消去で達成。'
+        : `あと${remainingValue}面消去で達成。`,
+    completionMessage: '5面スプリント達成。'
   },
   'score-rush': {
-    label: 'SCORE RUSH',
-    shortLabel: '2K SCORE',
-    progressLabel: 'SCORE',
+    label: 'スコアラッシュ',
+    shortLabel: '2,000点',
+    progressLabel: '点',
     targetValue: SCORE_RUSH_TARGET_SCORE,
     active: true,
+    description: 'スコア2,000点に到達する。',
     getProgress: (context) => context.score,
     getHint: (remainingValue) =>
-      `${formatMissionValue(remainingValue)} score left to reach the rush target.`,
-    completionMessage: 'Score rush target reached.'
+      `あと${formatMissionValue(remainingValue)}点で達成。`,
+    completionMessage: 'スコアラッシュ達成。'
   },
   'clean-pit': {
-    label: 'CLEAN PIT',
-    shortLabel: 'CLEAN PIT',
-    progressLabel: 'CLEARS',
+    label: 'クリーンピット',
+    shortLabel: '全消し',
+    progressLabel: '回',
     targetValue: CLEAN_PIT_TARGET_COUNT,
     active: true,
+    description: 'ピット内の固定ブロックを一度すべて消す。',
     getProgress: (context) => context.emptyPitCount,
-    getHint: () => 'Empty the entire pit once by clearing every settled block.',
-    completionMessage: 'The pit is clean.'
+    getHint: () => '固定ブロックを一度すべて消すと達成。',
+    completionMessage: 'ピットを空にしました。'
   },
   'double-cut': {
-    label: 'DOUBLE CUT',
-    shortLabel: 'DOUBLE CUT',
-    progressLabel: 'CUTS',
+    label: 'ダブルカット',
+    shortLabel: '2面同時',
+    progressLabel: '回',
     targetValue: DOUBLE_CUT_TARGET_COUNT,
     active: true,
+    description: '1回の固定で2面以上を同時に消す。',
     getProgress: (context) => context.multiPlaneClearCount,
-    getHint: () => 'Clear 2 or more planes with a single lock.',
-    completionMessage: 'Double cut achieved.'
+    getHint: () => '1回の固定で2面以上を同時に消すと達成。',
+    completionMessage: 'ダブルカット達成。'
   },
   'cube-trial': {
-    label: 'CUBE TRIAL',
-    shortLabel: '120 CUBES',
-    progressLabel: 'CUBES',
+    label: 'キューブトライアル',
+    shortLabel: '120キューブ',
+    progressLabel: '個',
     targetValue: CUBE_TRIAL_TARGET_CUBES,
     active: true,
+    description: 'キューブを合計120個配置する。',
     getProgress: (context) => context.placedCubes,
-    getHint: (remainingValue) => `${formatMissionValue(remainingValue)} placed cubes left in the trial.`,
-    completionMessage: 'Cube trial complete.'
+    getHint: (remainingValue) => `あと${formatMissionValue(remainingValue)}個配置で達成。`,
+    completionMessage: 'キューブトライアル達成。'
   }
 });
 
@@ -197,6 +204,10 @@ export function getMissionModeLabel(mode: MissionMode): string {
 
 export function getMissionModeOptionLabel(mode: MissionMode): string {
   return MISSION_DEFINITIONS[mode].shortLabel;
+}
+
+export function getMissionModeDescription(mode: MissionMode): string {
+  return MISSION_DEFINITIONS[mode].description;
 }
 
 export function isMissionModeCompatibleWithBlockSet(
@@ -981,7 +992,7 @@ function clampInteger(value: number, min: number, max: number): number {
 }
 
 function formatMissionValue(value: number): string {
-  return Math.trunc(value).toLocaleString('en-US');
+  return Math.trunc(value).toLocaleString('ja-JP');
 }
 
 function normalizeDimensions(dimensions: FieldDimensions): FieldDimensions {
