@@ -324,6 +324,22 @@ describe('GameEngine BlockOut controls', () => {
     expect(state.getActivePolyCube()).not.toBeNull();
   });
 
+  it('opens the rule selection screen by default and holds the run', () => {
+    const renderer = createRendererMock();
+    const state = new GameState();
+    const engine = new GameEngine(state, renderer as unknown as Renderer);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    engine.start(container);
+    startedEngines.push(engine);
+    pressKey('Space');
+    advanceGame(engine, 10_000);
+
+    expect(state.getActivePolyCube()).toBeNull();
+    expect(lastHudCall(renderer)[9]).toBe(true);
+  });
+
   it('holds the run and ignores gameplay keys while settings are open', () => {
     const nowSpy = vi.spyOn(performance, 'now');
     nowSpy.mockReturnValue(1_000);
@@ -399,7 +415,9 @@ function startEngine(state: GameState): {
   renderer: RendererMock;
 } {
   const renderer = createRendererMock();
-  const engine = new GameEngine(state, renderer as unknown as Renderer);
+  const engine = new GameEngine(state, renderer as unknown as Renderer, {
+    showStartScreen: false
+  });
   const container = document.createElement('div');
   document.body.appendChild(container);
 

@@ -11,12 +11,17 @@ import {
 import { GameState } from './GameState';
 import { Renderer } from './Renderer';
 
+type GameEngineOptions = {
+  readonly showStartScreen?: boolean;
+};
+
 /**
  * ゲームループと主要コンポーネントのライフサイクルを管理するクラス。
  */
 export class GameEngine {
   private readonly state: GameState;
   private readonly renderer: Renderer;
+  private readonly showStartScreen: boolean;
   private animationFrameId: number | null = null;
   private keydownHandler: ((event: KeyboardEvent) => void) | null = null;
   private lastDropAt = 0;
@@ -28,14 +33,20 @@ export class GameEngine {
   private container: HTMLElement | null = null;
   private paused = false;
   private settingsOpen = false;
+  private startMenuOpen = false;
   private settingsOpenedAt = 0;
   private settingsDuration = 0;
   private pendingLockAt = 0;
   private pendingLockAllowsAdjustment = false;
   private repeatActionAllowedAt = 0;
 
-  constructor(state: GameState = new GameState(), renderer?: Renderer) {
+  constructor(
+    state: GameState = new GameState(),
+    renderer?: Renderer,
+    options: GameEngineOptions = {}
+  ) {
     this.state = state;
+    this.showStartScreen = options.showStartScreen ?? true;
     this.renderer =
       renderer ??
       new Renderer(this.state, {
@@ -51,7 +62,10 @@ export class GameEngine {
    */
   public start(container: HTMLElement): void {
     this.container = container;
-    this.state.ensureActivePolyCube();
+    this.startMenuOpen = this.showStartScreen;
+    if (!this.startMenuOpen) {
+      this.state.ensureActivePolyCube();
+    }
     this.startedAt = performance.now();
     this.pausedDuration = 0;
     this.pausedAt = 0;
@@ -146,6 +160,11 @@ export class GameEngine {
     }
 
     if (this.settingsOpen) {
+      return;
+    }
+
+    if (this.startMenuOpen) {
+      event.preventDefault();
       return;
     }
 
@@ -253,7 +272,7 @@ export class GameEngine {
   }
 
   private advanceGame(timestamp: number): void {
-    if (this.paused || this.settingsOpen || this.state.isGameOver()) {
+    if (this.paused || this.settingsOpen || this.startMenuOpen || this.state.isGameOver()) {
       return;
     }
 
@@ -293,6 +312,7 @@ export class GameEngine {
     this.state.configure(setup);
     this.state.ensureActivePolyCube();
     this.resetRunClock();
+    this.startMenuOpen = false;
     this.settingsOpen = false;
     this.settingsOpenedAt = 0;
     this.settingsDuration = 0;
@@ -317,6 +337,7 @@ export class GameEngine {
     this.lastHudElapsedSecond = -1;
     this.paused = false;
     this.settingsOpen = false;
+    this.startMenuOpen = false;
     this.settingsOpenedAt = 0;
     this.settingsDuration = 0;
     this.pendingLockAt = 0;
@@ -342,14 +363,15 @@ export class GameEngine {
       this.state.getDropIntervalMs(),
       elapsedMs,
       this.paused,
-      this.settingsOpen
+      this.settingsOpen,
+      this.startMenuOpen
     );
     this.lastHudElapsedSecond = Math.floor(elapsedMs / 1000);
     this.renderer.renderFrame();
   }
 
   private syncElapsedHud(): void {
-    if (this.state.isGameOver()) {
+    if (this.state.isGameOver() || this.startMenuOpen) {
       return;
     }
 
@@ -364,7 +386,7 @@ export class GameEngine {
   }
 
   private togglePause(): void {
-    if (this.state.isGameOver() || this.settingsOpen) {
+    if (this.state.isGameOver() || this.settingsOpen || this.startMenuOpen) {
       return;
     }
 
@@ -381,6 +403,16 @@ export class GameEngine {
   }
 
   private toggleSettings(): void {
+    if (this.startMenuOpen) {
+      return;
+    }
+
+    if (this.state.isGameOver() && !this.settingsOpen) {
+      this.startMenuOpen = true;
+      this.syncScene({ settledBlocks: false });
+      return;
+    }
+
     const now = performance.now();
     if (this.settingsOpen) {
       this.settingsOpen = false;
@@ -415,6 +447,7 @@ export class GameEngine {
     this.markGameEnded(now);
     this.paused = false;
     this.settingsOpen = false;
+    this.startMenuOpen = false;
     this.settingsOpenedAt = 0;
     this.pendingLockAt = 0;
     this.pendingLockAllowsAdjustment = false;
@@ -491,7 +524,7 @@ export class GameEngine {
   }
 
   private getElapsedMs(): number {
-    if (this.startedAt === 0) {
+    if (this.startedAt === 0 || this.startMenuOpen) {
       return 0;
     }
 

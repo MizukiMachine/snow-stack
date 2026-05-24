@@ -31,6 +31,8 @@ import {
   DEFAULT_MISSION_MODE,
   GameState,
   MISSION_MODES,
+  getMissionModeDescription,
+  getMissionModeLabel,
   getMissionModeOptionLabel,
   isMissionModeCompatibleWithBlockSet,
   type ActivePolyCubeSnapshot,
@@ -78,6 +80,7 @@ type HudState = {
   elapsedMs: number;
   isPaused: boolean;
   settingsOpen: boolean;
+  startMenuOpen: boolean;
 };
 
 type CameraOrbitState = {
@@ -262,7 +265,8 @@ export class Renderer {
       dropIntervalMs: this.gameState.getDropIntervalMs(),
       elapsedMs: 0,
       isPaused: false,
-      settingsOpen: false
+      settingsOpen: false,
+      startMenuOpen: false
     };
   }
 
@@ -326,6 +330,7 @@ export class Renderer {
       this.gameState.getLevel(),
       this.gameState.getDropIntervalMs(),
       0,
+      false,
       false,
       false
     );
@@ -520,7 +525,8 @@ export class Renderer {
     dropIntervalMs: number,
     elapsedMs: number,
     isPaused: boolean,
-    settingsOpen: boolean
+    settingsOpen: boolean,
+    startMenuOpen = false
   ): void {
     if (!this.hudElement) {
       return;
@@ -535,6 +541,7 @@ export class Renderer {
     this.hudState.elapsedMs = elapsedMs;
     this.hudState.isPaused = isPaused;
     this.hudState.settingsOpen = settingsOpen;
+    this.hudState.startMenuOpen = startMenuOpen;
 
     this.syncHud();
   }
@@ -548,6 +555,7 @@ export class Renderer {
     const mission = this.gameState.getMissionSnapshot();
     root.dataset.phase = this.hudState.phase;
     root.dataset.paused = String(this.hudState.isPaused);
+    root.dataset.startMenu = String(this.hudState.startMenuOpen);
     root.dataset.missionActive = String(mission.active);
     root.dataset.missionComplete = String(mission.complete);
     this.setText(root, '[data-role="score"]', this.formatNumber(this.hudState.score));
@@ -564,7 +572,7 @@ export class Renderer {
     this.syncHeldPiece(root);
     this.syncMission(root);
     this.syncHudTimer(root);
-    this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? 'RESUME' : 'PAUSE');
+    this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? '再開' : '一時停止');
     this.setText(root, '[data-role="pit-size"]', this.formatPitSize());
     this.setText(
       root,
@@ -579,45 +587,33 @@ export class Renderer {
         ? 0
         : Math.min(8, Math.max(1, this.hudState.clearedLayerCount % 9))
     );
-    this.setText(
-      root,
-      '[data-role="footer-tip"]',
-      this.hudState.settingsOpen
-        ? 'Setup is open. The run is held until you apply or close it.'
-        : mission.complete
-        ? 'Mission clear. Start another run from setup or retry.'
-        : this.hudState.phase === 'game-over'
-        ? 'Rotate the view and start a fresh run.'
-        : this.hudState.isPaused
-        ? 'Run paused. Resume when you are ready.'
-        : mission.active
-        ? mission.hint
-        : 'Fill complete depth planes across the pit to clear them.'
-    );
+    this.syncFooterMissionText(root);
 
     const overlay = root.querySelector<HTMLElement>('[data-role="overlay"]');
     if (overlay) {
       this.setHidden(
         overlay,
-        this.hudState.phase !== 'game-over' || this.hudState.settingsOpen
+        this.hudState.phase !== 'game-over' ||
+          this.hudState.settingsOpen ||
+          this.hudState.startMenuOpen
       );
       const missionComplete = this.gameState.getMissionSnapshot().complete;
       this.setText(
         overlay,
         '[data-role="overlay-title"]',
-        missionComplete ? 'MISSION CLEAR' : 'GAME OVER'
+        missionComplete ? 'ミッション達成' : 'ゲームオーバー'
       );
       this.setText(
         overlay,
         '[data-role="overlay-message"]',
-        missionComplete ? mission.completionMessage : 'The pit has reached the top.'
+        missionComplete ? mission.completionMessage : 'ピットが上限に到達しました。'
       );
       this.setText(
         overlay,
         '[data-role="overlay-footnote"]',
         missionComplete
-          ? 'Start another run from setup or chase a higher score.'
-          : 'You can always rotate the view and look for a path.'
+          ? 'ルールを選び直すか、同じ設定で再挑戦できます。'
+          : '視点を回して、次の配置を探せます。'
       );
       this.setText(overlay, '[data-role="overlay-score"]', this.formatNumber(this.hudState.score));
       this.setText(overlay, '[data-role="overlay-level"]', String(this.hudState.level));
@@ -633,14 +629,35 @@ export class Renderer {
       );
     }
 
+    const rightRail = root.querySelector<HTMLElement>('.right-rail');
+    if (rightRail) {
+      if (this.hudState.startMenuOpen) {
+        rightRail.setAttribute('inert', '');
+      } else {
+        rightRail.removeAttribute('inert');
+      }
+    }
+
+    const settingsOpen = this.hudState.settingsOpen || this.hudState.startMenuOpen;
+    this.setText(
+      root,
+      '[data-role="setup-title"]',
+      this.hudState.startMenuOpen ? 'ゲーム開始' : '設定'
+    );
+    this.setText(
+      root,
+      '[data-role="setup-submit-label"]',
+      this.hudState.startMenuOpen ? 'このルールで開始' : 'この設定で再開'
+    );
+
     const settings = root.querySelector<HTMLElement>('[data-role="settings-panel"]');
     if (settings) {
-      this.setHidden(settings, !this.hudState.settingsOpen);
-      if (this.hudState.settingsOpen && !this.lastSettingsOpen) {
+      this.setHidden(settings, !settingsOpen);
+      if (settingsOpen && !this.lastSettingsOpen) {
         this.syncSetupControls(root);
       }
     }
-    this.lastSettingsOpen = this.hudState.settingsOpen;
+    this.lastSettingsOpen = settingsOpen;
   }
 
   private createHudElement(): HTMLDivElement {
@@ -659,124 +676,124 @@ export class Renderer {
       <div class="brand-panel">
         <div class="brand-emblem">${icon('snowflake')}</div>
         <div class="brand-copy">
-          <div class="brand-title">VOXEL<br />BLOCK<br />OUT</div>
+          <div class="brand-title">Boxel<br />Tris</div>
           <div class="brand-subtitle">3D POLYCUBE PUZZLE</div>
         </div>
       </div>
-      <section class="info-card layer-guide-card" aria-label="Depth layer colors">
-        <div class="card-title">${icon('layers')}<span>DEPTH</span></div>
+      <section class="info-card layer-guide-card" aria-label="奥行きレイヤーカラー">
+        <div class="card-title">${icon('layers')}<span>奥行き</span></div>
         <div class="layer-guide-stack" data-role="layer-guide-list"></div>
       </section>
       <aside class="right-rail">
         <div class="telemetry-stack">
           <section class="panel metric-card">
-            <div class="panel-heading">${icon('snowflake')}<span>SCORE</span></div>
+            <div class="panel-heading">${icon('snowflake')}<span>スコア</span></div>
             <strong class="metric-value" data-role="score">0</strong>
           </section>
           <section class="panel metric-card">
-            <div class="panel-heading">${icon('snowflake')}<span>LEVEL</span></div>
+            <div class="panel-heading">${icon('snowflake')}<span>レベル</span></div>
             <div class="metric-inline"><strong class="metric-value" data-role="level">01</strong><div class="meter meter-dots" data-role="level-meter">${renderMeterSegments(7)}</div></div>
           </section>
           <section class="panel metric-card">
-            <div class="panel-heading">${icon('snowflake')}<span>PLANES</span></div>
+            <div class="panel-heading">${icon('snowflake')}<span>消去面</span></div>
             <div class="metric-inline"><strong class="metric-value" data-role="lines">000</strong><div class="meter meter-bars" data-role="layers-meter">${renderMeterSegments(8)}</div></div>
           </section>
           <section class="panel metric-card queue-card">
-            <div class="panel-heading">${icon('snowflake')}<span>NEXT</span></div>
+            <div class="panel-heading">${icon('snowflake')}<span>次</span></div>
             <div class="queue-list" data-role="queue-list"><span>--</span></div>
           </section>
           <section class="panel metric-card hold-card">
-            <div class="panel-heading">${icon('cube')}<span>HOLD</span></div>
+            <div class="panel-heading">${icon('cube')}<span>ホールド</span></div>
             <div class="hold-slot" data-role="hold-piece"><span>--</span></div>
           </section>
           <section class="panel metric-card">
-            <div class="panel-heading">${icon('snowflake')}<span>BLOCK SET</span></div>
-            <strong class="metric-value metric-value-small" data-role="block-set">FLAT</strong>
+            <div class="panel-heading">${icon('snowflake')}<span>ピース</span></div>
+            <strong class="metric-value metric-value-small" data-role="block-set">平面</strong>
           </section>
           <section class="panel metric-card">
-            <div class="panel-heading">${icon('snowflake')}<span>PIT</span></div>
+            <div class="panel-heading">${icon('snowflake')}<span>ピット</span></div>
             <strong class="metric-value metric-value-small" data-role="pit-size">5x5x12</strong>
           </section>
         </div>
         <div class="command-stack">
           <section class="panel controls-panel">
-            <h3>${icon('snowflake')}<span>CONTROLS</span></h3>
+            <h3>${icon('snowflake')}<span>操作</span></h3>
             <div class="control-grid">
               ${KEY_ASSIGNMENT_ROWS.map(renderKeyAssignmentRow).join('')}
               <div class="control-separator"></div>
-              <div class="control-row"><span class="keys"><b class="wide-key key-icon">${icon('mouse')}Mouse</b></span><span>Tilt View</span></div>
-              <div class="control-row"><span class="keys"><b class="wide-key">Wheel</b></span><span>Zoom</span></div>
+              <div class="control-row"><span class="keys"><b class="wide-key key-icon">${icon('mouse')}マウス</b></span><span>視点回転</span></div>
+              <div class="control-row"><span class="keys"><b class="wide-key">ホイール</b></span><span>ズーム</span></div>
             </div>
           </section>
           <div class="action-row">
-            <button class="action-button" data-action="pause" type="button"><span class="button-icon">${icon('pause')}</span><span data-role="pause-label">PAUSE</span></button>
-            <button class="action-button" data-action="restart" type="button"><span class="button-icon">${icon('restart')}</span><span>RESTART</span></button>
-            <button class="action-button" data-action="settings" type="button"><span class="button-icon">${icon('settings')}</span><span>SETTINGS</span></button>
+            <button class="action-button" data-action="pause" type="button"><span class="button-icon">${icon('pause')}</span><span data-role="pause-label">一時停止</span></button>
+            <button class="action-button" data-action="restart" type="button"><span class="button-icon">${icon('restart')}</span><span>リスタート</span></button>
+            <button class="action-button" data-action="settings" type="button"><span class="button-icon">${icon('settings')}</span><span>設定</span></button>
           </div>
         </div>
       </aside>
       <section class="status-bar">
-        <div class="status-pill">${icon('snowflake')}<div><span class="status-label">STATUS</span><span class="status-state"><span class="status-dot"></span><span data-role="status-label">RUNNING</span></span></div></div>
-        <div class="status-mission" data-role="mission-pill" hidden>${icon('trophy')}<div><span class="status-label" data-role="mission-label">ENDLESS</span><div class="mission-progress" data-role="mission-progress"><span></span></div></div></div>
-        <div class="status-hint">${icon('snowflake')}<div><span class="status-label">HINT</span><span data-role="footer-tip"></span></div></div>
-        <div class="status-meta"><span class="status-label">TIME</span><span data-role="timer">00:00:00</span></div>
+        <div class="status-pill">${icon('snowflake')}<div><span class="status-label">状態</span><span class="status-state"><span class="status-dot"></span><span data-role="status-label">プレイ中</span></span></div></div>
+        <div class="status-mission" data-role="mission-pill" hidden>${icon('trophy')}<div><span class="status-label" data-role="mission-label">エンドレス</span><div class="mission-progress" data-role="mission-progress"><span></span></div></div></div>
+        <div class="status-hint">${icon('snowflake')}<div><span class="status-label">ミッション</span><span data-role="footer-tip"></span></div></div>
+        <div class="status-meta"><span class="status-label">時間</span><span data-role="timer">00:00:00</span></div>
       </section>
       <section class="panel settings-panel" data-role="settings-panel" hidden>
-        <h3>${icon('settings')}<span>SETUP</span></h3>
+        <h3>${icon('settings')}<span data-role="setup-title">ゲーム開始</span></h3>
         <form class="setup-form" data-role="setup-form">
           <div class="setup-field setup-field-wide">
-            <span class="setup-label">BLOCK SET</span>
+            <span class="setup-label">ピースセット</span>
             <div class="segmented-control" data-role="block-set-control">${blockSetButtons}</div>
           </div>
           <div class="setup-field setup-field-wide">
-            <span class="setup-label">MISSION</span>
+            <span class="setup-label">ルール</span>
             <div class="segmented-control" data-role="mission-mode-control">${missionButtons}</div>
           </div>
           <label class="setup-field">
-            <span class="setup-label">WIDTH</span>
+            <span class="setup-label">幅</span>
             <input data-setup-field="width" type="number" min="${MIN_PIT_WIDTH}" max="${MAX_PIT_WIDTH}" step="1" />
           </label>
           <label class="setup-field">
-            <span class="setup-label">HEIGHT</span>
+            <span class="setup-label">高さ</span>
             <input data-setup-field="height" type="number" min="${MIN_PIT_HEIGHT}" max="${MAX_PIT_HEIGHT}" step="1" />
           </label>
           <label class="setup-field">
-            <span class="setup-label">DEPTH</span>
+            <span class="setup-label">奥行き</span>
             <input data-setup-field="depth" type="number" min="${MIN_PIT_DEPTH}" max="${MAX_PIT_DEPTH}" step="1" />
           </label>
           <label class="setup-field">
-            <span class="setup-label">START</span>
+            <span class="setup-label">開始レベル</span>
             <input data-setup-field="startLevel" type="number" min="0" max="${MAX_LEVEL - 1}" step="1" />
           </label>
-          <button class="setup-submit" type="submit">${icon('restart')}<span>APPLY</span></button>
+          <button class="setup-submit" type="submit">${icon('restart')}<span data-role="setup-submit-label">このルールで開始</span></button>
         </form>
       </section>
       <section class="overlay-card" data-role="overlay" hidden>
         <div class="overlay-alert">${icon('alert')}</div>
-        <h2 data-role="overlay-title">GAME OVER</h2>
-        <p data-role="overlay-message">The pit has reached the top.</p>
+        <h2 data-role="overlay-title">ゲームオーバー</h2>
+        <p data-role="overlay-message">ピットが上限に到達しました。</p>
         <div class="overlay-scorebox">
-          <span>FINAL SCORE</span>
+          <span>最終スコア</span>
           <strong data-role="overlay-score">0</strong>
         </div>
         <div class="overlay-metrics">
-          <div><span>LEVEL REACHED</span><strong data-role="overlay-level">0</strong></div>
-          <div><span>PLANES CLEARED</span><strong data-role="overlay-lines">0</strong></div>
-          <div><span>TIME PLAYED</span><strong data-role="overlay-time">00:00:00</strong></div>
+          <div><span>到達レベル</span><strong data-role="overlay-level">0</strong></div>
+          <div><span>消去面</span><strong data-role="overlay-lines">0</strong></div>
+          <div><span>プレイ時間</span><strong data-role="overlay-time">00:00:00</strong></div>
         </div>
         <div class="overlay-actions">
-          <button class="overlay-button overlay-button-danger" data-action="restart" type="button">${icon('restart')}<span>RETRY</span></button>
-          <button class="overlay-button overlay-button-primary" data-action="settings" type="button">${icon('home')}<span>MENU</span></button>
+          <button class="overlay-button overlay-button-danger" data-action="restart" type="button">${icon('restart')}<span>リトライ</span></button>
+          <button class="overlay-button overlay-button-primary" data-action="settings" type="button">${icon('home')}<span>ルール選択</span></button>
         </div>
-        <p class="overlay-footnote" data-role="overlay-footnote">You can always rotate the view and look for a path.</p>
+        <p class="overlay-footnote" data-role="overlay-footnote">視点を回して、次の配置を探せます。</p>
       </section>
       <section class="pause-card" data-role="pause-overlay" hidden>
         <div class="overlay-alert">${icon('pause')}</div>
-        <h2>PAUSED</h2>
-        <p>The current run is held.</p>
+        <h2>一時停止中</h2>
+        <p>現在のランは停止中です。</p>
         <div class="overlay-actions">
-          <button class="overlay-button overlay-button-primary" data-action="pause" type="button">${icon('pause')}<span>RESUME</span></button>
-          <button class="overlay-button" data-action="settings" type="button">${icon('settings')}<span>SETUP</span></button>
+          <button class="overlay-button overlay-button-primary" data-action="pause" type="button">${icon('pause')}<span>再開</span></button>
+          <button class="overlay-button" data-action="settings" type="button">${icon('settings')}<span>設定</span></button>
         </div>
       </section>
     `;
@@ -806,6 +823,7 @@ export class Renderer {
           item.setAttribute('aria-pressed', String(isActive));
         });
         this.syncMissionAvailability(hud);
+        this.syncFooterMissionText(hud);
       });
     });
 
@@ -819,6 +837,7 @@ export class Renderer {
           item.classList.toggle('is-active', isActive);
           item.setAttribute('aria-pressed', String(isActive));
         });
+        this.syncFooterMissionText(hud);
       });
     });
 
@@ -2233,6 +2252,7 @@ export class Renderer {
     });
 
     this.syncMissionAvailability(root);
+    this.syncFooterMissionText(root);
   }
 
   private collectSetupValues(root: ParentNode): GameStateOptions {
@@ -2297,6 +2317,42 @@ export class Renderer {
     fallback.classList.add('is-active');
     fallback.setAttribute('aria-disabled', 'false');
     fallback.setAttribute('aria-pressed', 'true');
+  }
+
+  private syncFooterMissionText(root: ParentNode): void {
+    this.setText(root, '[data-role="footer-tip"]', this.getFooterMissionText(root));
+  }
+
+  private getFooterMissionText(root: ParentNode): string {
+    if (this.hudState.settingsOpen || this.hudState.startMenuOpen) {
+      const selectedMissionMode = this.getSelectedMissionMode(root);
+      return this.formatMissionBrief(
+        selectedMissionMode,
+        getMissionModeDescription(selectedMissionMode)
+      );
+    }
+
+    const mission = this.gameState.getMissionSnapshot();
+    return this.formatMissionBrief(
+      mission.mode,
+      mission.complete
+        ? mission.completionMessage
+        : mission.active
+        ? mission.hint
+        : getMissionModeDescription(mission.mode)
+    );
+  }
+
+  private getSelectedMissionMode(root: ParentNode): MissionMode {
+    const activeMissionMode = root.querySelector<HTMLButtonElement>('[data-mission-mode].is-active')
+      ?.dataset.missionMode;
+    return isMissionMode(activeMissionMode)
+      ? activeMissionMode
+      : this.gameState.getSetup().missionMode;
+  }
+
+  private formatMissionBrief(mode: MissionMode, detail: string): string {
+    return `${getMissionModeLabel(mode)}: ${detail}`;
   }
 
   private readSetupNumber(
@@ -2446,7 +2502,7 @@ export class Renderer {
     progress.style.setProperty('--mission-progress', `${percent}%`);
     progress.querySelector('span')?.replaceChildren(
       document.createTextNode(
-        `${this.formatNumber(mission.progressValue)}/${this.formatNumber(mission.targetValue)} ${mission.progressLabel}`
+        `${this.formatNumber(mission.progressValue)}/${this.formatNumber(mission.targetValue)}${mission.progressLabel}`
       )
     );
   }
@@ -2496,22 +2552,25 @@ export class Renderer {
 
   private getStatusLabel(): string {
     if (this.gameState.getMissionSnapshot().complete) {
-      return 'MISSION CLEAR';
+      return 'ミッション達成';
+    }
+    if (this.hudState.startMenuOpen) {
+      return 'ルール選択';
     }
     if (this.hudState.phase === 'game-over') {
-      return 'GAME OVER';
+      return 'ゲームオーバー';
     }
     if (this.hudState.settingsOpen) {
-      return 'SETUP';
+      return '設定中';
     }
     if (this.hudState.isPaused) {
-      return 'PAUSED';
+      return '一時停止';
     }
-    return 'RUNNING';
+    return 'プレイ中';
   }
 
   private formatNumber(value: number): string {
-    return new Intl.NumberFormat('en-US').format(value);
+    return new Intl.NumberFormat('ja-JP').format(value);
   }
 
   private formatPitSize(): string {

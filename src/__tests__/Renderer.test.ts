@@ -407,8 +407,57 @@ describe('Renderer BlockOut layer coloring', () => {
     (renderer as unknown as RendererAccess).syncMission(root);
 
     expect(root.querySelector<HTMLElement>('[data-role="mission-pill"]')?.hidden).toBe(false);
-    expect(root.querySelector<HTMLElement>('[data-role="mission-label"]')?.textContent).toBe('PLANE SPRINT');
-    expect(root.querySelector<HTMLElement>('[data-role="mission-progress"] span')?.textContent).toBe('0/5 PLANES');
+    expect(root.querySelector<HTMLElement>('[data-role="mission-label"]')?.textContent).toBe('5面スプリント');
+    expect(root.querySelector<HTMLElement>('[data-role="mission-progress"] span')?.textContent).toBe('0/5面');
+  });
+
+  it('hides the game-over overlay while the rule selection screen is open', () => {
+    const state = new GameState();
+    state.endGame();
+    const renderer = new Renderer(state);
+    const hud = (renderer as unknown as RendererAccess).createHudElement();
+
+    renderer.updateHud(
+      [],
+      'game-over',
+      0,
+      0,
+      state.getLevel(),
+      state.getDropIntervalMs(),
+      0,
+      false,
+      false,
+      true
+    );
+
+    expect(hud.querySelector<HTMLElement>('[data-role="overlay"]')?.hidden).toBe(true);
+    expect(hud.querySelector<HTMLElement>('[data-role="status-label"]')?.textContent).toBe(
+      'ルール選択'
+    );
+  });
+
+  it('updates the footer mission description from the rule selection buttons', () => {
+    const state = new GameState();
+    const renderer = new Renderer(state);
+    const hud = (renderer as unknown as RendererAccess).createHudElement();
+
+    renderer.updateHud(
+      [],
+      'running',
+      0,
+      0,
+      state.getLevel(),
+      state.getDropIntervalMs(),
+      0,
+      false,
+      false,
+      true
+    );
+    hud.querySelector<HTMLButtonElement>('[data-mission-mode="score-rush"]')?.click();
+
+    expect(hud.querySelector<HTMLElement>('[data-role="footer-tip"]')?.textContent).toBe(
+      'スコアラッシュ: スコア2,000点に到達する。'
+    );
   });
 
   it('keeps double-cut unavailable while the flat block set is selected', () => {
@@ -418,7 +467,7 @@ describe('Renderer BlockOut layer coloring', () => {
     const doubleCut = hud.querySelector<HTMLButtonElement>('[data-mission-mode="double-cut"]');
     const basic = hud.querySelector<HTMLButtonElement>('[data-block-set="basic"]');
     const flat = hud.querySelector<HTMLButtonElement>('[data-block-set="flat"]');
-    const endless = hud.querySelector<HTMLButtonElement>('[data-mission-mode="endless"]');
+    const planeSprint = hud.querySelector<HTMLButtonElement>('[data-mission-mode="plane-sprint"]');
 
     expect(doubleCut?.disabled).toBe(true);
 
@@ -431,7 +480,7 @@ describe('Renderer BlockOut layer coloring', () => {
     flat?.click();
     expect(doubleCut?.disabled).toBe(true);
     expect(doubleCut?.classList.contains('is-active')).toBe(false);
-    expect(endless?.classList.contains('is-active')).toBe(true);
+    expect(planeSprint?.classList.contains('is-active')).toBe(true);
   });
 
   it('builds polycube preview markup with one cell per cube', () => {
