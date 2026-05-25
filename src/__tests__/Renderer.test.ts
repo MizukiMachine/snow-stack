@@ -11,7 +11,7 @@ import {
 } from 'three';
 import { Renderer } from '../Renderer';
 import { GameState, type SettledBlockSnapshot } from '../GameState';
-import { getBlockOutLayerColor } from '../constants/blockout';
+import { getBlockOutLayerColor, POLYCUBE_DEFINITIONS } from '../constants/blockout';
 import { CELL_SIZE } from '../constants/field';
 
 type RendererAccess = {
@@ -615,6 +615,107 @@ describe('Renderer BlockOut layer coloring', () => {
     const svg = root.querySelector<SVGElement>('.piece-preview-svg');
     expect(root.querySelectorAll('.preview-cube')).toHaveLength(5);
     expect(svg?.getAttribute('viewBox')?.split(' ')).toHaveLength(4);
+  });
+
+  it('keeps connected 3D preview cells in one projected cluster', () => {
+    const state = new GameState();
+    const renderer = new Renderer(state);
+    const root = document.createElement('div');
+
+    POLYCUBE_DEFINITIONS.forEach((definition) => {
+      root.innerHTML = (renderer as unknown as RendererAccess).renderPolyCubePreview(
+        definition.id,
+        'queue'
+      );
+      const blockSize = Number(
+        root.querySelector<SVGRectElement>('.preview-cube-front')?.getAttribute('width')
+      );
+      const anchors = new Map(
+        Array.from(root.querySelectorAll<SVGGElement>('.preview-cube')).map((cube) => [
+          cube.dataset.cell,
+          {
+            x: Number(cube.dataset.anchorX),
+            y: Number(cube.dataset.anchorY)
+          }
+        ])
+      );
+      let checkedPairs = 0;
+
+      definition.cells.forEach((cell, index) => {
+        definition.cells.slice(index + 1).forEach((nextCell) => {
+          const cellDistance =
+            Math.abs(cell.x - nextCell.x) +
+            Math.abs(cell.y - nextCell.y) +
+            Math.abs(cell.z - nextCell.z);
+
+          if (cellDistance !== 1) {
+            return;
+          }
+
+          const cellKey = `${cell.x},${cell.y},${cell.z}`;
+          const nextCellKey = `${nextCell.x},${nextCell.y},${nextCell.z}`;
+          const anchor = anchors.get(cellKey);
+          const nextAnchor = anchors.get(nextCellKey);
+
+          expect(anchor, `${definition.label} ${cellKey} preview anchor`).toBeDefined();
+          expect(nextAnchor, `${definition.label} ${nextCellKey} preview anchor`).toBeDefined();
+          const projectedGap = Math.hypot(
+            (anchor?.x ?? 0) - (nextAnchor?.x ?? 0),
+            (anchor?.y ?? 0) - (nextAnchor?.y ?? 0)
+          );
+          expect(
+            projectedGap,
+            `${definition.label} ${cellKey} to ${nextCellKey} preview gap`
+          ).toBeLessThanOrEqual(blockSize);
+          checkedPairs += 1;
+        });
+      });
+
+      if (definition.cells.length > 1) {
+        expect(checkedPairs, `${definition.label} connected preview pairs`).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  it('draws vertical preview stacks from bottom to top', () => {
+    const state = new GameState();
+    const renderer = new Renderer(state);
+    const root = document.createElement('div');
+    let checkedStacks = 0;
+
+    POLYCUBE_DEFINITIONS.forEach((definition) => {
+      root.innerHTML = (renderer as unknown as RendererAccess).renderPolyCubePreview(
+        definition.id,
+        'queue'
+      );
+      const drawIndexes = new Map(
+        Array.from(root.querySelectorAll<SVGGElement>('.preview-cube')).map((cube, index) => [
+          cube.dataset.cell,
+          index
+        ])
+      );
+
+      definition.cells.forEach((cell) => {
+        const upperCell = definition.cells.find(
+          (nextCell) =>
+            nextCell.x === cell.x && nextCell.y === cell.y + 1 && nextCell.z === cell.z
+        );
+
+        if (!upperCell) {
+          return;
+        }
+
+        const cellKey = `${cell.x},${cell.y},${cell.z}`;
+        const upperCellKey = `${upperCell.x},${upperCell.y},${upperCell.z}`;
+        expect(
+          drawIndexes.get(cellKey),
+          `${definition.label} ${cellKey} lower preview draw index`
+        ).toBeLessThan(drawIndexes.get(upperCellKey) ?? -1);
+        checkedStacks += 1;
+      });
+    });
+
+    expect(checkedStacks).toBeGreaterThan(0);
   });
 });
 

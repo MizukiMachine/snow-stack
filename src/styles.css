@@ -458,9 +458,13 @@ button {
     drop-shadow(0 0 15px color-mix(in srgb, var(--piece-color) 42%, transparent));
 }
 
-.preview-cube rect {
+.preview-cube-face {
   stroke-width: 1.25;
   vector-effect: non-scaling-stroke;
+}
+
+.preview-cube-front {
+  filter: brightness(1.02);
 }
 
 .preview-cube-highlight {

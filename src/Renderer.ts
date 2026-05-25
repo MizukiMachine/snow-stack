@@ -2497,21 +2497,25 @@ export class Renderer {
 
   private renderPolyCubePreview(id: number, variant: 'queue' | 'hold'): string {
     const definition = getPolyCubeDefinition(id);
-    const blockSize = 30;
-    const gap = 4;
-    const step = blockSize + gap;
-    const depthOffsetX = 12;
-    const depthOffsetY = -8;
+    const blockSize = 28;
+    const step = blockSize;
+    const depthOffsetX = 14;
+    const depthOffsetY = -9;
     const projected = definition.cells.map((cell) => ({
+      cell,
       x: cell.x * step + cell.z * depthOffsetX,
       y: (definition.height - 1 - cell.y) * step + cell.z * depthOffsetY,
       z: cell.z
     }));
-    const minX = Math.min(...projected.map((cell) => cell.x));
-    const minY = Math.min(...projected.map((cell) => cell.y));
-    const maxX = Math.max(...projected.map((cell) => cell.x + blockSize));
-    const maxY = Math.max(...projected.map((cell) => cell.y + blockSize));
-    const padding = 18;
+    const minX = Math.min(...projected.map((cell) => Math.min(cell.x, cell.x + depthOffsetX)));
+    const minY = Math.min(...projected.map((cell) => Math.min(cell.y, cell.y + depthOffsetY)));
+    const maxX = Math.max(
+      ...projected.map((cell) => Math.max(cell.x + blockSize, cell.x + blockSize + depthOffsetX))
+    );
+    const maxY = Math.max(
+      ...projected.map((cell) => Math.max(cell.y + blockSize, cell.y + blockSize + depthOffsetY))
+    );
+    const padding = 10;
     const viewBox = [
       minX - padding,
       minY - padding,
@@ -2519,11 +2523,26 @@ export class Renderer {
       maxY - minY + padding * 2
     ].join(' ');
     const baseColor = definition.color;
-    const frontColor = formatHexColor(mixColorNumber(baseColor, 0xffffff, 0.08));
-    const strokeColor = formatHexColor(mixColorNumber(baseColor, 0xffffff, 0.62));
+    const frontColor = formatHexColor(mixColorNumber(baseColor, 0xffffff, 0.1));
+    const topColor = formatHexColor(mixColorNumber(baseColor, 0xffffff, 0.28));
+    const sideColor = formatHexColor(mixColorNumber(baseColor, 0x082c71, 0.18));
+    const strokeColor = formatHexColor(mixColorNumber(baseColor, 0xffffff, 0.68));
     const cubes = projected
-      .sort((a, b) => b.z - a.z || a.y - b.y || a.x - b.x)
-      .map((cell) => renderPreviewCube(cell.x, cell.y, blockSize, frontColor, strokeColor))
+      .sort((a, b) => b.z - a.z || a.cell.y - b.cell.y || a.x - b.x)
+      .map((cell) =>
+        renderPreviewCube(
+          cell.x,
+          cell.y,
+          blockSize,
+          depthOffsetX,
+          depthOffsetY,
+          frontColor,
+          topColor,
+          sideColor,
+          strokeColor,
+          `${cell.cell.x},${cell.cell.y},${cell.cell.z}`
+        )
+      )
       .join('');
     return [
       `<div class="poly-preview poly-preview-${variant}" style="--piece-color: ${formatHexColor(baseColor)}" role="img" aria-label="${definition.label}">`,
@@ -2622,12 +2641,32 @@ function renderPreviewCube(
   x: number,
   y: number,
   size: number,
+  depthX: number,
+  depthY: number,
   frontColor: string,
-  strokeColor: string
+  topColor: string,
+  sideColor: string,
+  strokeColor: string,
+  cellKey: string
 ): string {
+  const topFace = [
+    `${x},${y}`,
+    `${x + depthX},${y + depthY}`,
+    `${x + size + depthX},${y + depthY}`,
+    `${x + size},${y}`
+  ].join(' ');
+  const sideFace = [
+    `${x + size},${y}`,
+    `${x + size + depthX},${y + depthY}`,
+    `${x + size + depthX},${y + size + depthY}`,
+    `${x + size},${y + size}`
+  ].join(' ');
+
   return [
-    '<g class="preview-cube">',
-    `<rect x="${x}" y="${y}" width="${size}" height="${size}" rx="5" fill="${frontColor}" stroke="${strokeColor}" />`,
+    `<g class="preview-cube" data-cell="${cellKey}" data-anchor-x="${x}" data-anchor-y="${y}">`,
+    `<polygon points="${topFace}" class="preview-cube-face preview-cube-top" fill="${topColor}" stroke="${strokeColor}" />`,
+    `<polygon points="${sideFace}" class="preview-cube-face preview-cube-side" fill="${sideColor}" stroke="${strokeColor}" />`,
+    `<rect x="${x}" y="${y}" width="${size}" height="${size}" rx="4" class="preview-cube-face preview-cube-front" fill="${frontColor}" stroke="${strokeColor}" />`,
     `<path d="M${x + 6} ${y + 6} H${x + size - 8}" class="preview-cube-highlight" />`,
     `<path d="M${x + size - 6} ${y + 7} V${y + size - 8}" class="preview-cube-shade" />`,
     '</g>'
