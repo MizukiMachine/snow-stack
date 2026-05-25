@@ -1,8 +1,13 @@
 :root {
+  --font-ui: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+  --font-display: "Rajdhani", "DIN Condensed", "Avenir Next Condensed", "Bahnschrift", var(--font-ui);
+  --font-number: "Rajdhani", "DIN Condensed", "Bahnschrift", var(--font-ui);
   color-scheme: light;
-  font-family: "Bahnschrift", "Avenir Next Condensed", "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
   background: #dcefff;
   color: #072a75;
+  font-synthesis-weight: none;
+  text-rendering: geometricPrecision;
 }
 
 * {
@@ -205,21 +210,25 @@ button {
 
 .brand-title {
   color: #f8fdff;
-  font-size: 38px;
-  font-weight: 900;
-  line-height: 0.86;
-  text-transform: uppercase;
+  font-family: var(--font-display);
+  font-size: 43px;
+  font-weight: 700;
+  line-height: 0.82;
+  text-transform: none;
+  letter-spacing: 0;
   text-shadow:
-    0 1px 0 #266eb8,
-    0 0 9px rgba(0, 150, 255, 0.86),
-    0 0 22px rgba(28, 185, 255, 0.48);
+    0 1px 0 #1a5fa8,
+    0 0 8px rgba(0, 150, 255, 0.72),
+    0 0 20px rgba(28, 185, 255, 0.4);
 }
 
 .brand-subtitle {
   margin-top: 10px;
-  color: #0c70bf;
-  font-size: 16px;
-  font-weight: 800;
+  color: #075ca5;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
@@ -251,8 +260,10 @@ button {
   align-items: center;
   gap: 10px;
   color: #073486;
-  font-size: 16px;
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -334,10 +345,12 @@ button {
 
 .layer-guide-index {
   color: #0b3d9a;
+  font-family: var(--font-number);
   font-size: 11px;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1;
   text-align: right;
+  font-variant-numeric: tabular-nums lining-nums;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.82);
 }
 
@@ -385,15 +398,19 @@ button {
 .metric-value {
   display: block;
   color: #0b3d9a;
-  font-size: 36px;
+  font-family: var(--font-number);
+  font-size: 42px;
   line-height: 1;
-  font-weight: 900;
+  font-weight: 700;
   text-align: center;
+  font-variant-numeric: tabular-nums lining-nums;
   text-shadow: 0 0 10px rgba(255, 255, 255, 0.95);
 }
 
 .metric-value-small {
-  font-size: 28px;
+  font-family: var(--font-ui);
+  font-size: 25px;
+  font-weight: 900;
   letter-spacing: 0;
 }
 
@@ -423,7 +440,7 @@ button {
   border: 1px solid rgba(65, 139, 203, 0.5);
   background: rgba(255, 255, 255, 0.36);
   font-size: 18px;
-  font-weight: 900;
+  font-weight: 700;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.62);
 }
 
@@ -516,8 +533,10 @@ button {
   place-items: center;
   height: 100%;
   color: #073486;
+  font-family: var(--font-number);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .metric-inline {
@@ -572,7 +591,8 @@ button {
   gap: 14px;
   align-items: center;
   color: #082a78;
-  font-size: 15px;
+  font-size: 14px;
+  font-weight: 700;
   line-height: 1.1;
 }
 
@@ -594,8 +614,10 @@ button {
   justify-content: center;
   gap: 4px;
   color: #082d80;
-  font-size: 13px;
+  font-family: var(--font-number);
+  font-size: 14px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums lining-nums;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.8),
     0 3px 10px rgba(44, 112, 181, 0.12);
@@ -647,8 +669,8 @@ button {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  font-size: 22px;
-  font-weight: 800;
+  font-size: 21px;
+  font-weight: 900;
   overflow: hidden;
   clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px);
   box-shadow:
@@ -725,8 +747,10 @@ button {
 .status-label {
   display: block;
   color: #073486;
+  font-family: var(--font-display);
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -737,8 +761,10 @@ button {
   align-items: center;
   gap: 8px;
   color: #0877d3;
+  font-family: var(--font-number);
   font-size: 24px;
-  font-weight: 800;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .status-mission .mission-progress {
@@ -748,8 +774,9 @@ button {
 
 .status-hint [data-role="footer-tip"] {
   color: #082a78;
-  font-size: 21px;
-  font-weight: 500;
+  font-family: var(--font-ui);
+  font-size: 19px;
+  font-weight: 700;
   line-height: 1.15;
 }
 
@@ -827,8 +854,10 @@ button {
 
 .setup-section-heading {
   color: #073486;
-  font-size: 14px;
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -862,7 +891,8 @@ button {
   place-items: center;
   overflow: hidden;
   text-align: center;
-  font-size: 17px;
+  font-family: var(--font-ui);
+  font-size: 18px;
   font-weight: 900;
   line-height: 1.05;
   transition:
@@ -909,7 +939,7 @@ button {
   grid-column: 1 / -1;
   min-height: 72px;
   margin-top: 2px;
-  font-size: 24px;
+  font-size: 23px;
   font-weight: 900;
 }
 
@@ -958,6 +988,7 @@ button {
 .pause-card h2 {
   margin: 12px 0 8px;
   color: #d82d49;
+  font-family: var(--font-ui);
   font-size: clamp(38px, 4.4vw, 54px);
   line-height: 1;
   font-weight: 900;
@@ -993,7 +1024,10 @@ button {
   display: block;
   margin-top: 6px;
   color: #0b3d9a;
+  font-family: var(--font-number);
   font-size: 56px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .overlay-metrics {
@@ -1054,11 +1088,11 @@ button {
   }
 
   .brand-title {
-    font-size: 34px;
+    font-size: 40px;
   }
 
   .brand-subtitle {
-    font-size: 13px;
+    font-size: 12px;
   }
 
   .layer-guide-card {
@@ -1508,7 +1542,7 @@ button {
   }
 
   .brand-title {
-    font-size: 30px;
+    font-size: 36px;
   }
 
   .scene-layer {
