@@ -665,7 +665,7 @@ export class Renderer {
             <div class="metric-inline"><strong class="metric-value" data-role="lines">000</strong><div class="meter meter-bars" data-role="layers-meter">${renderMeterSegments(8)}</div></div>
           </section>
           <section class="panel metric-card queue-card">
-            <div class="panel-heading">${icon('snowflake')}<span>次</span></div>
+            <div class="panel-heading">${icon('snowflake')}<span>ネクスト</span></div>
             <div class="queue-list" data-role="queue-list"><span>--</span></div>
           </section>
           <section class="panel metric-card hold-card">

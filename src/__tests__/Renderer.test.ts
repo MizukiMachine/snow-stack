@@ -497,6 +497,7 @@ describe('Renderer BlockOut layer coloring', () => {
       '難易度'
     );
     expect(hud.querySelector('[data-role="block-set"]')?.textContent).toBe('易しい');
+    expect(hud.querySelector('.queue-card .panel-heading span')?.textContent).toBe('ネクスト');
     expect(hud.querySelectorAll('[data-role="block-set-control"] .setup-choice')).toHaveLength(3);
     expect(missionControl?.querySelectorAll('.setup-choice')).toHaveLength(5);
     expect(hud.querySelector('[data-mission-mode="endless"]')).toBeNull();

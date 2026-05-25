@@ -358,10 +358,10 @@ button {
   top: 32px;
   right: 26px;
   bottom: 130px;
-  width: min(498px, calc(100vw - 56px));
+  width: min(528px, calc(100vw - 56px));
   display: grid;
-  grid-template-columns: 214px minmax(230px, 1fr);
-  gap: 18px;
+  grid-template-columns: 230px minmax(244px, 1fr);
+  gap: 20px;
   pointer-events: auto;
   z-index: 2;
 }
@@ -379,7 +379,7 @@ button {
 }
 
 .metric-card {
-  min-height: 104px;
+  min-height: 112px;
 }
 
 .metric-value {
@@ -409,7 +409,7 @@ button {
 }
 
 .hold-slot {
-  min-height: 72px;
+  min-height: 80px;
 }
 
 .queue-list > span,
@@ -435,7 +435,7 @@ button {
 .poly-preview {
   min-width: 0;
   width: 100%;
-  height: 76px;
+  height: 86px;
   display: grid;
   place-items: center;
   color: #0b3d9a;
@@ -450,7 +450,7 @@ button {
 
 .piece-preview-svg {
   width: min(100%, 168px);
-  height: 68px;
+  height: 74px;
   display: block;
   overflow: visible;
   filter:
@@ -1067,26 +1067,26 @@ button {
   }
 
   .right-rail {
-    width: 438px;
-    grid-template-columns: 186px minmax(210px, 1fr);
-    gap: 12px;
+    width: 478px;
+    grid-template-columns: 206px minmax(230px, 1fr);
+    gap: 14px;
   }
 
   .telemetry-stack,
   .command-stack {
-    gap: 8px;
+    gap: 9px;
   }
 
   .metric-card {
-    min-height: 70px;
+    min-height: 82px;
   }
 
   .metric-value {
-    font-size: 28px;
+    font-size: 31px;
   }
 
   .panel {
-    padding: 11px 12px;
+    padding: 13px 14px;
   }
 
   .panel-heading,
@@ -1099,15 +1099,15 @@ button {
   }
 
   .poly-preview {
-    height: 58px;
+    height: 66px;
   }
 
   .piece-preview-svg {
-    height: 52px;
+    height: 58px;
   }
 
   .hold-slot {
-    min-height: 58px;
+    min-height: 66px;
   }
 
   .controls-panel {
@@ -1199,7 +1199,7 @@ button {
 
   .telemetry-stack,
   .command-stack {
-    gap: 7px;
+    gap: 8px;
   }
 
   .command-stack {
@@ -1208,15 +1208,15 @@ button {
   }
 
   .panel {
-    padding: 10px 12px;
+    padding: 12px 14px;
   }
 
   .metric-card {
-    min-height: 56px;
+    min-height: 72px;
   }
 
   .metric-value {
-    font-size: 26px;
+    font-size: 28px;
   }
 
   .metric-value-small {
@@ -1228,20 +1228,20 @@ button {
   }
 
   .queue-list > span {
-    height: 30px;
-    font-size: 14px;
+    height: 36px;
+    font-size: 15px;
   }
 
   .poly-preview {
-    height: 48px;
+    height: 58px;
   }
 
   .piece-preview-svg {
-    height: 44px;
+    height: 52px;
   }
 
   .hold-slot {
-    min-height: 48px;
+    min-height: 58px;
   }
 
   .mission-progress {
