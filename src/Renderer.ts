@@ -18,7 +18,6 @@ import {
   PlaneGeometry,
   Points,
   PointsMaterial,
-  RingGeometry,
   SRGBColorSpace,
   Scene,
   Sprite,
@@ -82,13 +81,6 @@ type CameraOrbitState = {
   theta: number;
   phi: number;
   target: Vector3;
-  dragging: boolean;
-  dragAxis: 'horizontal' | 'vertical' | null;
-  pointerId: number | null;
-  startX: number;
-  startY: number;
-  lastX: number;
-  lastY: number;
 };
 
 type HudIconName =
@@ -98,7 +90,6 @@ type HudIconName =
   | 'home'
   | 'layers'
   | 'lightbulb'
-  | 'mouse'
   | 'pause'
   | 'restart'
   | 'settings'
@@ -144,17 +135,11 @@ type ReflectionPatchCandidate = {
 };
 
 const CAMERA_SETTINGS = {
+  fov: 78,
   targetHeightFactor: 0.5,
   initialTheta: -Math.PI / 2,
   initialPhi: Math.PI / 2,
-  minPhi: 0.34,
-  maxPhi: Math.PI / 2,
-  rotateSpeedY: 0.002,
-  zoomSpeed: 0.01,
-  minRadius: 8,
-  maxRadius: 42,
-  initialRadiusMultiplier: 1.12,
-  axisLockThresholdPx: 6
+  initialRadiusMultiplier: 1.35
 } as const;
 
 const CUBE_WORLD_ASSET_ROOT = '/assets/Cube%20World%20-%20Aug%202023';
@@ -220,11 +205,6 @@ export class Renderer {
   private assetsReady = false;
   private disposed = false;
   private resizeHandler: (() => void) | null = null;
-  private controlsBound = false;
-  private pointerDownHandler: ((event: PointerEvent) => void) | null = null;
-  private pointerMoveHandler: ((event: PointerEvent) => void) | null = null;
-  private pointerUpHandler: ((event: PointerEvent) => void) | null = null;
-  private wheelHandler: ((event: WheelEvent) => void) | null = null;
   private readonly cameraOrbit: CameraOrbitState;
   private readonly hudState: HudState;
   private lastSettingsOpen = false;
@@ -246,14 +226,7 @@ export class Renderer {
       radius: 0,
       theta: CAMERA_SETTINGS.initialTheta,
       phi: CAMERA_SETTINGS.initialPhi,
-      target,
-      dragging: false,
-      dragAxis: null,
-      pointerId: null,
-      startX: 0,
-      startY: 0,
-      lastX: 0,
-      lastY: 0
+      target
     };
 
     this.hudState = {
@@ -287,7 +260,7 @@ export class Renderer {
     scene.background = null;
     scene.fog = null;
 
-    const camera = new PerspectiveCamera(60, this.getAspectRatio(), 0.1, 1000);
+    const camera = new PerspectiveCamera(CAMERA_SETTINGS.fov, this.getAspectRatio(), 0.1, 1000);
     this.configureInitialCameraOrbit(camera);
     this.applyCameraOrbit(camera);
 
@@ -318,7 +291,6 @@ export class Renderer {
 
     this.resizeHandler = () => this.onResize();
     window.addEventListener('resize', this.resizeHandler);
-    this.attachCameraControls();
 
     this.updateActivePolyCube(this.gameState.getActivePolyCube());
     this.updateSettledBlocks(this.gameState.getSettledBlocks());
@@ -354,7 +326,6 @@ export class Renderer {
       this.resizeHandler = null;
     }
 
-    this.detachCameraControls();
     if (this.scene) {
       this.disposeObjectResources(this.scene);
       this.scene.clear();
@@ -715,7 +686,7 @@ export class Renderer {
           </section>
           <section class="panel metric-card">
             <div class="panel-heading">${icon('snowflake')}<span>ピット</span></div>
-            <strong class="metric-value metric-value-small" data-role="pit-size">5x5x10</strong>
+            <strong class="metric-value metric-value-small" data-role="pit-size">5x5x9</strong>
           </section>
         </div>
         <div class="command-stack">
@@ -723,9 +694,6 @@ export class Renderer {
             <h3>${icon('snowflake')}<span>操作</span></h3>
             <div class="control-grid">
               ${KEY_ASSIGNMENT_ROWS.map(renderKeyAssignmentRow).join('')}
-              <div class="control-separator"></div>
-              <div class="control-row"><span class="keys"><b class="wide-key key-icon">${icon('mouse')}マウス</b></span><span>視点回転</span></div>
-              <div class="control-row"><span class="keys"><b class="wide-key">ホイール</b></span><span>ズーム</span></div>
             </div>
           </section>
           <div class="action-row">
@@ -1264,27 +1232,78 @@ export class Renderer {
     const group = new Group();
     const { width, height, depth } = this.gameState.getDimensions();
     const origin = this.getFieldOrigin();
-    const centerX = origin.x + (width * CELL_SIZE) / 2;
-    const centerY = (height * CELL_SIZE) / 2;
-    const landingZ = origin.z + depth * CELL_SIZE - 0.018;
-    const fieldSpan = Math.max(width, height);
+    group.name = 'depth-landing-inner-perimeter';
 
-    for (let i = 0; i < 6; i += 1) {
-      const innerRadius = fieldSpan * 0.42 + i * 0.35;
-      const outerRadius = innerRadius + 0.055;
-      const ring = new Mesh(
-        new RingGeometry(innerRadius, outerRadius, 96),
-        new MeshBasicMaterial({
-          color: i % 2 === 0 ? 0x18d6ff : 0x7da7ff,
-          transparent: true,
-          opacity: i === 0 ? 0.22 : 0.075,
-          depthWrite: false,
-          side: DoubleSide
-        })
-      );
-      ring.position.set(centerX, centerY, landingZ - i * 0.002);
-      group.add(ring);
-    }
+    const inset = PIT_WALL_GUIDE_INSET;
+    const minX = origin.x + inset;
+    const maxX = origin.x + width * CELL_SIZE - inset;
+    const minY = inset;
+    const maxY = height * CELL_SIZE - inset;
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const spanX = maxX - minX;
+    const spanY = maxY - minY;
+    const landingZ = origin.z + depth * CELL_SIZE - inset;
+
+    const haloMaterial = new MeshBasicMaterial({
+      color: 0x7deaff,
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false
+    });
+    const mainMaterial = new MeshBasicMaterial({
+      color: 0x18d6ff,
+      transparent: true,
+      opacity: 0.78,
+      depthWrite: false
+    });
+
+    const addBeam = (
+      name: string,
+      widthScale: number,
+      heightScale: number,
+      depthScale: number,
+      x: number,
+      y: number,
+      material: MeshBasicMaterial,
+      renderOrder: number
+    ) => {
+      const beam = new Mesh(CUBE_WIREFRAME_BEAM_GEOMETRY, material);
+      beam.name = name;
+      beam.position.set(x, y, landingZ);
+      beam.scale.set(widthScale, heightScale, depthScale);
+      beam.renderOrder = renderOrder;
+      beam.userData.preserveGeometry = true;
+      group.add(beam);
+    };
+
+    const addFrame = (
+      name: string,
+      thickness: number,
+      depthScale: number,
+      material: MeshBasicMaterial,
+      renderOrder: number
+    ) => {
+      addBeam(`${name}-lower`, spanX, thickness, depthScale, centerX, minY, material, renderOrder);
+      addBeam(`${name}-upper`, spanX, thickness, depthScale, centerX, maxY, material, renderOrder);
+      addBeam(`${name}-left`, thickness, spanY, depthScale, minX, centerY, material, renderOrder);
+      addBeam(`${name}-right`, thickness, spanY, depthScale, maxX, centerY, material, renderOrder);
+    };
+
+    addFrame(
+      'depth-landing-inner-perimeter-halo',
+      CELL_SIZE * 0.09,
+      CELL_SIZE * 0.018,
+      haloMaterial,
+      6
+    );
+    addFrame(
+      'depth-landing-inner-perimeter-line',
+      CELL_SIZE * 0.038,
+      CELL_SIZE * 0.024,
+      mainMaterial,
+      7
+    );
 
     return group;
   }
@@ -1997,114 +2016,6 @@ export class Renderer {
     return new Vector3(a * CELL_SIZE, offset * CELL_SIZE, b * CELL_SIZE);
   }
 
-  private attachCameraControls(): void {
-    if (!this.renderer || this.controlsBound) {
-      return;
-    }
-
-    const canvas = this.renderer.domElement;
-
-    this.pointerDownHandler = (event: PointerEvent) => {
-      this.cameraOrbit.dragging = true;
-      this.cameraOrbit.dragAxis = null;
-      this.cameraOrbit.pointerId = event.pointerId;
-      this.cameraOrbit.startX = event.clientX;
-      this.cameraOrbit.startY = event.clientY;
-      this.cameraOrbit.lastX = event.clientX;
-      this.cameraOrbit.lastY = event.clientY;
-      canvas.setPointerCapture(event.pointerId);
-    };
-
-    this.pointerMoveHandler = (event: PointerEvent) => {
-      if (!this.cameraOrbit.dragging || this.cameraOrbit.pointerId !== event.pointerId) {
-        return;
-      }
-
-      const deltaY = event.clientY - this.cameraOrbit.lastY;
-      const dragX = event.clientX - this.cameraOrbit.startX;
-      const dragY = event.clientY - this.cameraOrbit.startY;
-      this.cameraOrbit.lastX = event.clientX;
-      this.cameraOrbit.lastY = event.clientY;
-
-      if (
-        !this.cameraOrbit.dragAxis &&
-        (Math.abs(dragX) >= CAMERA_SETTINGS.axisLockThresholdPx ||
-          Math.abs(dragY) >= CAMERA_SETTINGS.axisLockThresholdPx)
-      ) {
-        this.cameraOrbit.dragAxis =
-          Math.abs(dragX) >= Math.abs(dragY) ? 'horizontal' : 'vertical';
-      }
-
-      if (this.cameraOrbit.dragAxis === 'vertical') {
-        this.cameraOrbit.phi = clamp(
-          this.cameraOrbit.phi - deltaY * CAMERA_SETTINGS.rotateSpeedY,
-          CAMERA_SETTINGS.minPhi,
-          CAMERA_SETTINGS.maxPhi
-        );
-      }
-
-      if (this.camera) {
-        this.applyCameraOrbit(this.camera);
-        this.renderFrame();
-      }
-    };
-
-    this.pointerUpHandler = (event: PointerEvent) => {
-      if (this.cameraOrbit.pointerId === event.pointerId) {
-        this.cameraOrbit.dragging = false;
-        this.cameraOrbit.dragAxis = null;
-        this.cameraOrbit.pointerId = null;
-        canvas.releasePointerCapture(event.pointerId);
-      }
-    };
-
-    this.wheelHandler = (event: WheelEvent) => {
-      event.preventDefault();
-      this.cameraOrbit.radius = clamp(
-        this.cameraOrbit.radius + event.deltaY * CAMERA_SETTINGS.zoomSpeed,
-        CAMERA_SETTINGS.minRadius,
-        CAMERA_SETTINGS.maxRadius
-      );
-      if (this.camera) {
-        this.applyCameraOrbit(this.camera);
-        this.renderFrame();
-      }
-    };
-
-    canvas.addEventListener('pointerdown', this.pointerDownHandler);
-    canvas.addEventListener('pointermove', this.pointerMoveHandler);
-    canvas.addEventListener('pointerup', this.pointerUpHandler);
-    canvas.addEventListener('pointercancel', this.pointerUpHandler);
-    canvas.addEventListener('wheel', this.wheelHandler, { passive: false });
-    this.controlsBound = true;
-  }
-
-  private detachCameraControls(): void {
-    if (!this.renderer || !this.controlsBound) {
-      return;
-    }
-
-    const canvas = this.renderer.domElement;
-    if (this.pointerDownHandler) {
-      canvas.removeEventListener('pointerdown', this.pointerDownHandler);
-    }
-    if (this.pointerMoveHandler) {
-      canvas.removeEventListener('pointermove', this.pointerMoveHandler);
-    }
-    if (this.pointerUpHandler) {
-      canvas.removeEventListener('pointerup', this.pointerUpHandler);
-      canvas.removeEventListener('pointercancel', this.pointerUpHandler);
-    }
-    if (this.wheelHandler) {
-      canvas.removeEventListener('wheel', this.wheelHandler);
-    }
-    this.pointerDownHandler = null;
-    this.pointerMoveHandler = null;
-    this.pointerUpHandler = null;
-    this.wheelHandler = null;
-    this.controlsBound = false;
-  }
-
   private applyCameraOrbit(camera: PerspectiveCamera): void {
     const { radius, theta, phi, target } = this.cameraOrbit;
     const sinPhi = Math.sin(phi);
@@ -2711,8 +2622,6 @@ function renderHudIcon(name: HudIconName): string {
       '<path d="m12 3 9 4-9 4-9-4 9-4Z"/><path d="m3 12 9 4 9-4"/><path d="m3 17 9 4 9-4"/>',
     lightbulb:
       '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M8 14a6 6 0 1 1 8 0c-.8.7-1.2 1.6-1.2 2.5H9.2c0-.9-.4-1.8-1.2-2.5Z"/>',
-    mouse:
-      '<rect x="7" y="3" width="10" height="18" rx="5"/><path d="M12 7v4"/>',
     pause:
       '<path d="M8 5v14"/><path d="M16 5v14"/>',
     restart:

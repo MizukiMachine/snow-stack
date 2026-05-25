@@ -67,11 +67,11 @@ describe('GameEngine BlockOut controls', () => {
     nowSpy.mockReturnValue(1_000);
     const { engine, state } = startEngineWithPiece(0);
 
-    for (let i = 0; i < 9; i += 1) {
+    for (let i = 0; i < 8; i += 1) {
       pressKey('ShiftLeft');
     }
 
-    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 9 }]);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 8 }]);
 
     nowSpy.mockReturnValue(1_200);
     pressKey('ShiftLeft', { repeat: true });
@@ -254,14 +254,14 @@ describe('GameEngine BlockOut controls', () => {
     pressKey('Space');
 
     expect(state.getSettledBlocks()).toHaveLength(0);
-    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 9 }]);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 8 }]);
 
     advanceGame(engine, 1_209);
     expect(state.getSettledBlocks()).toHaveLength(0);
 
     advanceGame(engine, 1_210);
     expect(state.getSettledBlocks()).toHaveLength(1);
-    expect(state.getSettledBlocks()[0].coordinate.z).toBe(9);
+    expect(state.getSettledBlocks()[0].coordinate.z).toBe(8);
     expect(state.getActivePolyCube()).not.toBeNull();
     expect(state.getScore()).toBeGreaterThan(1);
   });
