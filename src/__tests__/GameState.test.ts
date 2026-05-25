@@ -6,7 +6,7 @@ describe('GameState BlockOut rules', () => {
   it('uses fixed default pit dimensions, block set, level, and speed', () => {
     const state = new GameState();
 
-    expect(state.getDimensions()).toEqual({ width: 5, height: 5, depth: 10 });
+    expect(state.getDimensions()).toEqual({ width: 5, height: 5, depth: 9 });
     expect(state.getBlockSet()).toBe('flat');
     expect(state.getLevel()).toBe(0);
     expect(state.getDropIntervalMs()).toBe(5510);
@@ -216,7 +216,7 @@ describe('GameState BlockOut rules', () => {
     state.hardDropActivePolyCube();
     state.lockActivePolyCube();
 
-    expect(state.getScore()).toBe(10);
+    expect(state.getScore()).toBe(11);
   });
 
   it('uses the BlockOut depth cursor before moving multi-depth polycubes', () => {

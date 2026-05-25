@@ -27,6 +27,7 @@ type RendererAccess = {
     depthLayer?: number,
     settledAssetKey?: 'settledIceBlock'
   ) => Group;
+  createDepthLandingGlow: () => Group;
   createFieldBounds: () => Group;
   createSnowWallTexture: () => CanvasTexture;
   syncDepthLayerGuide: (root: ParentNode) => void;
@@ -369,6 +370,38 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(readFirstPointCoordinate(fieldBounds, 'landing-guide-grid', 'z')).toBeLessThan(
       dimensions.depth * CELL_SIZE
     );
+  });
+
+  it('marks the depth landing with a rectangular inner perimeter instead of a circle', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 9 } });
+    const renderer = new Renderer(state);
+    const perimeter = (renderer as unknown as RendererAccess).createDepthLandingGlow();
+    const lowerLine = perimeter.getObjectByName(
+      'depth-landing-inner-perimeter-line-lower'
+    ) as Mesh | undefined;
+    const upperLine = perimeter.getObjectByName(
+      'depth-landing-inner-perimeter-line-upper'
+    ) as Mesh | undefined;
+    const leftLine = perimeter.getObjectByName(
+      'depth-landing-inner-perimeter-line-left'
+    ) as Mesh | undefined;
+    const rightLine = perimeter.getObjectByName(
+      'depth-landing-inner-perimeter-line-right'
+    ) as Mesh | undefined;
+
+    expect(perimeter.name).toBe('depth-landing-inner-perimeter');
+    expect(perimeter.children).toHaveLength(8);
+    expect(
+      perimeter.children.some(
+        (child) => child instanceof Mesh && child.geometry.type === 'RingGeometry'
+      )
+    ).toBe(false);
+    expect(lowerLine?.scale.x).toBeGreaterThan(CELL_SIZE * 4.9);
+    expect(upperLine?.scale.x).toBeCloseTo(lowerLine?.scale.x ?? 0);
+    expect(leftLine?.scale.y).toBeGreaterThan(CELL_SIZE * 4.9);
+    expect(rightLine?.scale.y).toBeCloseTo(leftLine?.scale.y ?? 0);
+    expect(lowerLine?.position.z).toBeGreaterThan(CELL_SIZE * 4.45);
+    expect(lowerLine?.position.z).toBeLessThan(CELL_SIZE * 4.5);
   });
 
   it('can preserve loaded Cube World templates across a setup reset', () => {
