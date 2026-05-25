@@ -458,9 +458,13 @@ button {
     drop-shadow(0 0 15px color-mix(in srgb, var(--piece-color) 42%, transparent));
 }
 
-.preview-cube rect {
+.preview-cube-face {
   stroke-width: 1.25;
   vector-effect: non-scaling-stroke;
+}
+
+.preview-cube-front {
+  filter: brightness(1.02);
 }
 
 .preview-cube-highlight {
@@ -784,8 +788,10 @@ button {
 }
 
 .ui-layer[data-start-menu="true"] .right-rail {
-  opacity: 0.24;
+  display: none;
+  opacity: 0;
   pointer-events: none;
+  visibility: hidden;
 }
 
 .ui-layer[data-start-menu="true"] .layer-guide-card {
@@ -795,8 +801,8 @@ button {
 .ui-layer[data-start-menu="true"] .settings-panel {
   left: 50%;
   right: auto;
-  top: clamp(118px, 14vh, 172px);
-  width: min(560px, calc(100vw - 44px));
+  top: clamp(156px, 20vh, 190px);
+  width: min(1040px, calc(100vw - 72px));
   padding: 28px 30px 30px;
   transform: translateX(-50%);
   z-index: 7;
@@ -807,92 +813,79 @@ button {
   font-size: 20px;
 }
 
-.ui-layer[data-start-menu="true"] [data-role="mission-mode-control"] {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .setup-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
 }
 
-.setup-field {
+.setup-section {
   min-width: 0;
   display: grid;
-  gap: 6px;
+  gap: 10px;
 }
 
-.setup-field-wide {
-  grid-column: 1 / -1;
-}
-
-.setup-label {
+.setup-section-heading {
   color: #073486;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 800;
   text-transform: uppercase;
 }
 
-.setup-field input {
-  width: 100%;
-  height: 40px;
-  padding: 0 10px;
-  border: 1px solid rgba(65, 139, 203, 0.58);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.48);
-  color: #082d80;
-  font-size: 20px;
-  font-weight: 800;
-  text-align: center;
-  outline: none;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.68);
-}
-
-.setup-field input:focus-visible,
-.segmented-button:focus-visible,
+.setup-choice:focus-visible,
 .setup-submit:focus-visible {
   outline: 2px solid rgba(18, 143, 231, 0.72);
   outline-offset: 2px;
 }
 
-.segmented-control {
+.setup-choice-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: 12px;
 }
 
-[data-role="mission-mode-control"] {
+.settings-panel:not([hidden]) [data-role="mission-mode-control"] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.segmented-button {
-  min-height: 38px;
-  padding: 0 8px;
-  border: 1px solid rgba(65, 139, 203, 0.58);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.42);
-  color: #0b3b91;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 900;
-  line-height: 1.05;
-  transition: transform 120ms ease, filter 120ms ease, background 120ms ease;
+.ui-layer[data-start-menu="true"] [data-role="mission-mode-control"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.segmented-button:hover {
+.setup-choice {
+  position: relative;
+  min-height: 76px;
+  border: 1px solid rgba(65, 139, 203, 0.58);
+  color: #0b3b91;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.05;
+  transition:
+    transform 120ms ease,
+    filter 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease,
+    border-color 120ms ease;
+}
+
+.setup-choice:hover {
   transform: translateY(-1px);
   filter: brightness(1.05);
 }
 
-.segmented-button:disabled {
+.setup-choice:disabled {
   cursor: not-allowed;
   opacity: 0.44;
   transform: none;
   filter: grayscale(0.18);
 }
 
-.segmented-button.is-active {
+.setup-choice.is-active {
   color: #ffffff;
   background: linear-gradient(180deg, rgba(68, 167, 239, 0.95), rgba(22, 109, 204, 0.88));
   border-color: rgba(24, 121, 216, 0.84);
@@ -902,30 +895,27 @@ button {
     inset 0 0 0 1px rgba(255, 255, 255, 0.42);
 }
 
+.setup-choice-label {
+  position: relative;
+  z-index: 1;
+}
+
+.ui-layer[data-start-menu="true"] .setup-choice {
+  min-height: 92px;
+  font-size: 22px;
+}
+
 .setup-submit {
   grid-column: 1 / -1;
-  min-height: 48px;
+  min-height: 72px;
   margin-top: 2px;
-  border: 1px solid rgba(105, 177, 231, 0.72);
-  border-radius: 0;
-  color: #ffffff;
-  background:
-    linear-gradient(180deg, rgba(93, 184, 244, 0.96), rgba(31, 116, 207, 0.88)),
-    linear-gradient(120deg, rgba(255, 255, 255, 0.48), transparent 44%);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  font-size: 17px;
+  font-size: 24px;
   font-weight: 900;
-  text-shadow: 0 1px 3px rgba(7, 54, 121, 0.5);
-  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px);
 }
 
 .setup-submit .hud-icon {
-  width: 22px;
-  height: 22px;
+  width: 25px;
+  height: 25px;
 }
 
 .overlay-card,
@@ -1312,6 +1302,26 @@ button {
     padding-bottom: 10px;
   }
 
+  .ui-layer[data-start-menu="true"] .settings-panel {
+    top: 168px;
+    width: min(920px, calc(100vw - 72px));
+    padding: 20px 26px 22px;
+  }
+
+  .ui-layer[data-start-menu="true"] .setup-choice {
+    min-height: 66px;
+    font-size: 18px;
+  }
+
+  .setup-form {
+    gap: 14px;
+  }
+
+  .setup-submit {
+    min-height: 58px;
+    font-size: 20px;
+  }
+
   .status-mission {
     min-width: 156px;
   }
@@ -1442,12 +1452,28 @@ button {
 
   .ui-layer[data-start-menu="true"] .settings-panel {
     top: 178px;
-    width: min(420px, calc(100vw - 28px));
+    width: min(520px, calc(100vw - 28px));
     padding: 22px;
   }
 
+  .setup-choice-grid,
   .ui-layer[data-start-menu="true"] [data-role="mission-mode-control"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .setup-choice {
+    min-height: 68px;
+    font-size: 16px;
+  }
+
+  .ui-layer[data-start-menu="true"] .setup-choice {
+    min-height: 78px;
+    font-size: 18px;
+  }
+
+  .setup-submit {
+    min-height: 64px;
+    font-size: 20px;
   }
 
   .overlay-card,
@@ -1513,6 +1539,15 @@ button {
 
   .ui-layer[data-start-menu="true"] .settings-panel {
     top: 154px;
+  }
+
+  .setup-form {
+    gap: 14px;
+  }
+
+  .setup-choice-grid,
+  .ui-layer[data-start-menu="true"] [data-role="mission-mode-control"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
 }

@@ -16,12 +16,12 @@ export interface FieldDimensions {
 export const CELL_SIZE = 1;
 
 /**
- * BlockOut II の標準ピット寸法。
+ * 通常プレイで使用する固定ピット寸法。
  */
 export const FIELD_DIMENSIONS: FieldDimensions = Object.freeze({
   width: 5,
   height: 5,
-  depth: 12
+  depth: 10
 });
 
 /**

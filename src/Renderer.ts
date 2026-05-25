@@ -44,13 +44,7 @@ import {
 } from './GameState';
 import {
   BLOCK_SETS,
-  MAX_LEVEL,
-  MAX_PIT_DEPTH,
-  MAX_PIT_HEIGHT,
-  MAX_PIT_WIDTH,
-  MIN_PIT_DEPTH,
-  MIN_PIT_HEIGHT,
-  MIN_PIT_WIDTH,
+  DEFAULT_START_LEVEL,
   getBlockSetLabel,
   getBlockOutLayerColor,
   getPolyCubeDefinition,
@@ -171,6 +165,12 @@ const PIT_WALL_BACKING_OFFSET = CELL_SIZE * 0.035;
 const PIT_WALL_GUIDE_INSET = CELL_SIZE * 0.018;
 const PIT_REFLECTION_INSET = CELL_SIZE * 0.028;
 const PIT_REFLECTION_OPACITY = 0.18;
+const LANDING_FOOTPRINT_OUTER_SIZE = CELL_SIZE * 1.01;
+const LANDING_FOOTPRINT_FILL_SIZE = CELL_SIZE * 0.82;
+const LANDING_FOOTPRINT_WIRE_THICKNESS = CELL_SIZE * 0.064;
+const LANDING_FOOTPRINT_WIRE_DEPTH = CELL_SIZE * 0.018;
+const LANDING_FOOTPRINT_FILL_RENDER_ORDER = 37;
+const LANDING_FOOTPRINT_WIRE_RENDER_ORDER = 39;
 const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, CubeWorldAssetDefinition> = Object.freeze({
   wallIce: {
     path: `${CUBE_WORLD_ASSET_ROOT}/Pixel%20Blocks/glTF/Ice.gltf`,
@@ -499,7 +499,7 @@ export class Renderer {
       marker.position.set(
         (cell.x + 0.5) * CELL_SIZE,
         (cell.y + 0.5) * CELL_SIZE,
-        depth * CELL_SIZE - CELL_SIZE * 0.018
+        Math.min(cell.contactZ, depth) * CELL_SIZE - CELL_SIZE * 0.018
       );
       group.add(marker);
     });
@@ -631,6 +631,9 @@ export class Renderer {
 
     const rightRail = root.querySelector<HTMLElement>('.right-rail');
     if (rightRail) {
+      rightRail.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
+        button.disabled = this.hudState.startMenuOpen;
+      });
       if (this.hudState.startMenuOpen) {
         rightRail.setAttribute('inert', '');
       } else {
@@ -665,11 +668,11 @@ export class Renderer {
     const icon = (name: HudIconName) => renderHudIcon(name);
     const blockSetButtons = BLOCK_SETS.map(
       (blockSet) =>
-        `<button class="segmented-button" data-block-set="${blockSet}" type="button">${getBlockSetLabel(blockSet)}</button>`
+        `<button class="panel setup-choice setup-choice-difficulty" data-block-set="${blockSet}" type="button"><span class="setup-choice-label">${getBlockSetLabel(blockSet)}</span></button>`
     ).join('');
     const missionButtons = MISSION_MODES.map(
       (missionMode) =>
-        `<button class="segmented-button" data-mission-mode="${missionMode}" type="button">${getMissionModeOptionLabel(missionMode)}</button>`
+        `<button class="panel setup-choice setup-choice-rule" data-mission-mode="${missionMode}" type="button"><span class="setup-choice-label">${getMissionModeOptionLabel(missionMode)}</span></button>`
     ).join('');
     hud.className = 'ui-layer';
     hud.innerHTML = `
@@ -707,12 +710,12 @@ export class Renderer {
             <div class="hold-slot" data-role="hold-piece"><span>--</span></div>
           </section>
           <section class="panel metric-card">
-            <div class="panel-heading">${icon('snowflake')}<span>ピース</span></div>
-            <strong class="metric-value metric-value-small" data-role="block-set">平面</strong>
+            <div class="panel-heading">${icon('snowflake')}<span>難易度</span></div>
+            <strong class="metric-value metric-value-small" data-role="block-set">易しい</strong>
           </section>
           <section class="panel metric-card">
             <div class="panel-heading">${icon('snowflake')}<span>ピット</span></div>
-            <strong class="metric-value metric-value-small" data-role="pit-size">5x5x12</strong>
+            <strong class="metric-value metric-value-small" data-role="pit-size">5x5x10</strong>
           </section>
         </div>
         <div class="command-stack">
@@ -741,31 +744,15 @@ export class Renderer {
       <section class="panel settings-panel" data-role="settings-panel" hidden>
         <h3>${icon('settings')}<span data-role="setup-title">ゲーム開始</span></h3>
         <form class="setup-form" data-role="setup-form">
-          <div class="setup-field setup-field-wide">
-            <span class="setup-label">ピースセット</span>
-            <div class="segmented-control" data-role="block-set-control">${blockSetButtons}</div>
+          <div class="setup-section">
+            <span class="setup-section-heading">難易度</span>
+            <div class="setup-choice-grid setup-choice-grid-difficulty" data-role="block-set-control">${blockSetButtons}</div>
           </div>
-          <div class="setup-field setup-field-wide">
-            <span class="setup-label">ルール</span>
-            <div class="segmented-control" data-role="mission-mode-control">${missionButtons}</div>
+          <div class="setup-section">
+            <span class="setup-section-heading">ルール</span>
+            <div class="setup-choice-grid setup-choice-grid-rules" data-role="mission-mode-control">${missionButtons}</div>
           </div>
-          <label class="setup-field">
-            <span class="setup-label">幅</span>
-            <input data-setup-field="width" type="number" min="${MIN_PIT_WIDTH}" max="${MAX_PIT_WIDTH}" step="1" />
-          </label>
-          <label class="setup-field">
-            <span class="setup-label">高さ</span>
-            <input data-setup-field="height" type="number" min="${MIN_PIT_HEIGHT}" max="${MAX_PIT_HEIGHT}" step="1" />
-          </label>
-          <label class="setup-field">
-            <span class="setup-label">奥行き</span>
-            <input data-setup-field="depth" type="number" min="${MIN_PIT_DEPTH}" max="${MAX_PIT_DEPTH}" step="1" />
-          </label>
-          <label class="setup-field">
-            <span class="setup-label">開始レベル</span>
-            <input data-setup-field="startLevel" type="number" min="0" max="${MAX_LEVEL - 1}" step="1" />
-          </label>
-          <button class="setup-submit" type="submit">${icon('restart')}<span data-role="setup-submit-label">このルールで開始</span></button>
+          <button class="setup-submit action-button" type="submit"><span class="button-icon">${icon('restart')}</span><span data-role="setup-submit-label">このルールで開始</span></button>
         </form>
       </section>
       <section class="overlay-card" data-role="overlay" hidden>
@@ -1344,29 +1331,65 @@ export class Renderer {
   private createFootprintCellMesh(): Group {
     const group = new Group();
     const fill = new Mesh(
-      new PlaneGeometry(CELL_SIZE * 0.82, CELL_SIZE * 0.82),
+      new PlaneGeometry(LANDING_FOOTPRINT_FILL_SIZE, LANDING_FOOTPRINT_FILL_SIZE),
       new MeshBasicMaterial({
         color: 0x1fe7ff,
         transparent: true,
         opacity: 0.24,
+        depthTest: false,
         depthWrite: false,
         side: DoubleSide
       })
     );
-    fill.renderOrder = 8;
+    fill.renderOrder = LANDING_FOOTPRINT_FILL_RENDER_ORDER;
     group.add(fill);
 
-    const border = new LineSegments(
-      new EdgesGeometry(new BoxGeometry(CELL_SIZE * 0.84, CELL_SIZE * 0.84, CELL_SIZE * 0.012)),
-      new LineBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.62,
-        depthWrite: false
-      })
+    group.add(
+      this.createFootprintFaceWireframe(
+        0xffffff,
+        0.96,
+        LANDING_FOOTPRINT_WIRE_THICKNESS,
+        LANDING_FOOTPRINT_WIRE_RENDER_ORDER
+      )
     );
-    border.renderOrder = 9;
-    group.add(border);
+    return group;
+  }
+
+  private createFootprintFaceWireframe(
+    color: number,
+    opacity: number,
+    thickness: number,
+    renderOrder: number
+  ): Group {
+    const group = new Group();
+    const material = new MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      depthTest: false,
+      depthWrite: false
+    });
+    const half = LANDING_FOOTPRINT_OUTER_SIZE / 2;
+    const centerOffset = half - thickness / 2;
+    const addBeam = (
+      width: number,
+      height: number,
+      x: number,
+      y: number
+    ) => {
+      const beam = new Mesh(CUBE_WIREFRAME_BEAM_GEOMETRY, material);
+      beam.position.set(x, y, 0);
+      beam.scale.set(width, height, LANDING_FOOTPRINT_WIRE_DEPTH);
+      beam.renderOrder = renderOrder;
+      beam.userData.preserveGeometry = true;
+      group.add(beam);
+    };
+
+    addBeam(LANDING_FOOTPRINT_OUTER_SIZE, thickness, 0, -centerOffset);
+    addBeam(LANDING_FOOTPRINT_OUTER_SIZE, thickness, 0, centerOffset);
+    addBeam(thickness, LANDING_FOOTPRINT_OUTER_SIZE, -centerOffset, 0);
+    addBeam(thickness, LANDING_FOOTPRINT_OUTER_SIZE, centerOffset, 0);
+
     return group;
   }
 
@@ -2234,10 +2257,6 @@ export class Renderer {
 
   private syncSetupControls(root: ParentNode): void {
     const setup = this.gameState.getSetup();
-    this.setInputValue(root, 'width', setup.dimensions.width);
-    this.setInputValue(root, 'height', setup.dimensions.height);
-    this.setInputValue(root, 'depth', setup.dimensions.depth);
-    this.setInputValue(root, 'startLevel', setup.startLevel);
 
     root.querySelectorAll<HTMLButtonElement>('[data-block-set]').forEach((button) => {
       const isActive = button.dataset.blockSet === setup.blockSet;
@@ -2270,13 +2289,8 @@ export class Renderer {
     }
 
     return {
-      dimensions: {
-        width: this.readSetupNumber(root, 'width', setup.dimensions.width, MIN_PIT_WIDTH, MAX_PIT_WIDTH),
-        height: this.readSetupNumber(root, 'height', setup.dimensions.height, MIN_PIT_HEIGHT, MAX_PIT_HEIGHT),
-        depth: this.readSetupNumber(root, 'depth', setup.dimensions.depth, MIN_PIT_DEPTH, MAX_PIT_DEPTH)
-      },
       blockSet,
-      startLevel: this.readSetupNumber(root, 'startLevel', setup.startLevel, 0, MAX_LEVEL - 1),
+      startLevel: DEFAULT_START_LEVEL,
       missionMode
     };
   }
@@ -2353,32 +2367,6 @@ export class Renderer {
 
   private formatMissionBrief(mode: MissionMode, detail: string): string {
     return `${getMissionModeLabel(mode)}: ${detail}`;
-  }
-
-  private readSetupNumber(
-    root: ParentNode,
-    field: string,
-    fallback: number,
-    min: number,
-    max: number
-  ): number {
-    const input = root.querySelector<HTMLInputElement>(`[data-setup-field="${field}"]`);
-    const rawValue = input?.value.trim();
-    if (!rawValue) {
-      return fallback;
-    }
-    const value = Number(rawValue);
-    if (!Number.isFinite(value)) {
-      return fallback;
-    }
-    return Math.min(Math.max(Math.trunc(value), min), max);
-  }
-
-  private setInputValue(root: ParentNode, field: string, value: number): void {
-    const input = root.querySelector<HTMLInputElement>(`[data-setup-field="${field}"]`);
-    if (input) {
-      input.value = String(value);
-    }
   }
 
   private setText(root: ParentNode, selector: string, text: string): void {
@@ -2509,21 +2497,25 @@ export class Renderer {
 
   private renderPolyCubePreview(id: number, variant: 'queue' | 'hold'): string {
     const definition = getPolyCubeDefinition(id);
-    const blockSize = 30;
-    const gap = 4;
-    const step = blockSize + gap;
-    const depthOffsetX = 12;
-    const depthOffsetY = -8;
+    const blockSize = 28;
+    const step = blockSize;
+    const depthOffsetX = 14;
+    const depthOffsetY = -9;
     const projected = definition.cells.map((cell) => ({
+      cell,
       x: cell.x * step + cell.z * depthOffsetX,
       y: (definition.height - 1 - cell.y) * step + cell.z * depthOffsetY,
       z: cell.z
     }));
-    const minX = Math.min(...projected.map((cell) => cell.x));
-    const minY = Math.min(...projected.map((cell) => cell.y));
-    const maxX = Math.max(...projected.map((cell) => cell.x + blockSize));
-    const maxY = Math.max(...projected.map((cell) => cell.y + blockSize));
-    const padding = 18;
+    const minX = Math.min(...projected.map((cell) => Math.min(cell.x, cell.x + depthOffsetX)));
+    const minY = Math.min(...projected.map((cell) => Math.min(cell.y, cell.y + depthOffsetY)));
+    const maxX = Math.max(
+      ...projected.map((cell) => Math.max(cell.x + blockSize, cell.x + blockSize + depthOffsetX))
+    );
+    const maxY = Math.max(
+      ...projected.map((cell) => Math.max(cell.y + blockSize, cell.y + blockSize + depthOffsetY))
+    );
+    const padding = 10;
     const viewBox = [
       minX - padding,
       minY - padding,
@@ -2531,11 +2523,26 @@ export class Renderer {
       maxY - minY + padding * 2
     ].join(' ');
     const baseColor = definition.color;
-    const frontColor = formatHexColor(mixColorNumber(baseColor, 0xffffff, 0.08));
-    const strokeColor = formatHexColor(mixColorNumber(baseColor, 0xffffff, 0.62));
+    const frontColor = formatHexColor(mixColorNumber(baseColor, 0xffffff, 0.1));
+    const topColor = formatHexColor(mixColorNumber(baseColor, 0xffffff, 0.28));
+    const sideColor = formatHexColor(mixColorNumber(baseColor, 0x082c71, 0.18));
+    const strokeColor = formatHexColor(mixColorNumber(baseColor, 0xffffff, 0.68));
     const cubes = projected
-      .sort((a, b) => b.z - a.z || a.y - b.y || a.x - b.x)
-      .map((cell) => renderPreviewCube(cell.x, cell.y, blockSize, frontColor, strokeColor))
+      .sort((a, b) => b.z - a.z || a.cell.y - b.cell.y || a.x - b.x)
+      .map((cell) =>
+        renderPreviewCube(
+          cell.x,
+          cell.y,
+          blockSize,
+          depthOffsetX,
+          depthOffsetY,
+          frontColor,
+          topColor,
+          sideColor,
+          strokeColor,
+          `${cell.cell.x},${cell.cell.y},${cell.cell.z}`
+        )
+      )
       .join('');
     return [
       `<div class="poly-preview poly-preview-${variant}" style="--piece-color: ${formatHexColor(baseColor)}" role="img" aria-label="${definition.label}">`,
@@ -2634,12 +2641,32 @@ function renderPreviewCube(
   x: number,
   y: number,
   size: number,
+  depthX: number,
+  depthY: number,
   frontColor: string,
-  strokeColor: string
+  topColor: string,
+  sideColor: string,
+  strokeColor: string,
+  cellKey: string
 ): string {
+  const topFace = [
+    `${x},${y}`,
+    `${x + depthX},${y + depthY}`,
+    `${x + size + depthX},${y + depthY}`,
+    `${x + size},${y}`
+  ].join(' ');
+  const sideFace = [
+    `${x + size},${y}`,
+    `${x + size + depthX},${y + depthY}`,
+    `${x + size + depthX},${y + size + depthY}`,
+    `${x + size},${y + size}`
+  ].join(' ');
+
   return [
-    '<g class="preview-cube">',
-    `<rect x="${x}" y="${y}" width="${size}" height="${size}" rx="5" fill="${frontColor}" stroke="${strokeColor}" />`,
+    `<g class="preview-cube" data-cell="${cellKey}" data-anchor-x="${x}" data-anchor-y="${y}">`,
+    `<polygon points="${topFace}" class="preview-cube-face preview-cube-top" fill="${topColor}" stroke="${strokeColor}" />`,
+    `<polygon points="${sideFace}" class="preview-cube-face preview-cube-side" fill="${sideColor}" stroke="${strokeColor}" />`,
+    `<rect x="${x}" y="${y}" width="${size}" height="${size}" rx="4" class="preview-cube-face preview-cube-front" fill="${frontColor}" stroke="${strokeColor}" />`,
     `<path d="M${x + 6} ${y + 6} H${x + size - 8}" class="preview-cube-highlight" />`,
     `<path d="M${x + size - 6} ${y + 7} V${y + size - 8}" class="preview-cube-shade" />`,
     '</g>'

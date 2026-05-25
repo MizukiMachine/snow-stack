@@ -30,9 +30,9 @@ export const MIN_PIT_DEPTH = 6;
 export const MAX_PIT_DEPTH = 18;
 
 export const BLOCK_SET_LABELS: Record<BlockSet, string> = Object.freeze({
-  flat: '平面',
-  basic: '基本',
-  extended: '拡張'
+  flat: '易しい',
+  basic: '普通',
+  extended: '難しい'
 });
 
 export const P_LEVEL_FACTOR = Object.freeze([
