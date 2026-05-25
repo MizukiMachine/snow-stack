@@ -474,6 +474,20 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(access.collectSetupValues(hud)).toHaveProperty('startLevel', 0);
   });
 
+  it('does not render fixed pit size or level as player-facing metrics', () => {
+    const renderer = new Renderer(new GameState());
+    const hud = (renderer as unknown as RendererAccess).createHudElement();
+    const metricCards = Array.from(hud.querySelectorAll<HTMLElement>('.telemetry-stack .metric-card'));
+
+    expect(hud.querySelector('[data-role="pit-size"]')).toBeNull();
+    expect(hud.querySelector('[data-role="level"]')).toBeNull();
+    expect(hud.querySelector('[data-role="level-meter"]')).toBeNull();
+    expect(hud.querySelector('[data-role="overlay-level"]')).toBeNull();
+    expect(metricCards.some((card) => card.textContent?.includes('ピット'))).toBe(false);
+    expect(metricCards.some((card) => card.textContent?.includes('レベル'))).toBe(false);
+    expect(hud.querySelector('[data-role="overlay"]')?.textContent).not.toContain('到達レベル');
+  });
+
   it('lays out difficulty and rule choices as setup panels', () => {
     const renderer = new Renderer(new GameState());
     const hud = (renderer as unknown as RendererAccess).createHudElement();
@@ -511,6 +525,23 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(root.querySelectorAll('.preview-cube')).toHaveLength(1);
     expect(root.querySelector('.poly-preview-hold')?.getAttribute('role')).toBe('img');
     expect(root.querySelector('.poly-preview-hold')?.getAttribute('aria-label')).toBe('P00');
+  });
+
+  it('leaves the hold slot blank when no piece is held', () => {
+    const renderer = new Renderer(new GameState());
+    const hud = (renderer as unknown as RendererAccess).createHudElement();
+    const hold = hud.querySelector<HTMLElement>('[data-role="hold-piece"]');
+
+    expect(hold?.textContent).toBe('');
+
+    if (hold) {
+      hold.innerHTML = '<span class="is-empty">--</span>';
+    }
+
+    (renderer as unknown as RendererAccess).syncHeldPiece(hud);
+
+    expect(hold?.textContent).toBe('');
+    expect(hold?.querySelector('.is-empty')).toBeNull();
   });
 
   it('renders sprint mission progress in the status pill', () => {

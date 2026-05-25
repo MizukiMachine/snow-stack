@@ -530,7 +530,6 @@ export class Renderer {
     root.dataset.missionActive = String(mission.active);
     root.dataset.missionComplete = String(mission.complete);
     this.setText(root, '[data-role="score"]', this.formatNumber(this.hudState.score));
-    this.setText(root, '[data-role="level"]', String(this.hudState.level).padStart(2, '0'));
     this.setText(
       root,
       '[data-role="lines"]',
@@ -544,13 +543,11 @@ export class Renderer {
     this.syncMission(root);
     this.syncHudTimer(root);
     this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? '再開' : '一時停止');
-    this.setText(root, '[data-role="pit-size"]', this.formatPitSize());
     this.setText(
       root,
       '[data-role="start-level"]',
       String(this.gameState.getSetup().startLevel).padStart(2, '0')
     );
-    this.setMeter(root, '[data-role="level-meter"]', Math.min(7, this.hudState.level));
     this.setMeter(
       root,
       '[data-role="layers-meter"]',
@@ -587,7 +584,6 @@ export class Renderer {
           : '視点を回して、次の配置を探せます。'
       );
       this.setText(overlay, '[data-role="overlay-score"]', this.formatNumber(this.hudState.score));
-      this.setText(overlay, '[data-role="overlay-level"]', String(this.hudState.level));
       this.setText(overlay, '[data-role="overlay-lines"]', String(this.hudState.clearedLayerCount));
       this.setText(overlay, '[data-role="overlay-time"]', this.formatElapsed(this.hudState.elapsedMs));
     }
@@ -665,10 +661,6 @@ export class Renderer {
             <strong class="metric-value" data-role="score">0</strong>
           </section>
           <section class="panel metric-card">
-            <div class="panel-heading">${icon('snowflake')}<span>レベル</span></div>
-            <div class="metric-inline"><strong class="metric-value" data-role="level">01</strong><div class="meter meter-dots" data-role="level-meter">${renderMeterSegments(7)}</div></div>
-          </section>
-          <section class="panel metric-card">
             <div class="panel-heading">${icon('snowflake')}<span>消去面</span></div>
             <div class="metric-inline"><strong class="metric-value" data-role="lines">000</strong><div class="meter meter-bars" data-role="layers-meter">${renderMeterSegments(8)}</div></div>
           </section>
@@ -678,15 +670,11 @@ export class Renderer {
           </section>
           <section class="panel metric-card hold-card">
             <div class="panel-heading">${icon('cube')}<span>ホールド</span></div>
-            <div class="hold-slot" data-role="hold-piece"><span>--</span></div>
+            <div class="hold-slot" data-role="hold-piece"></div>
           </section>
           <section class="panel metric-card">
             <div class="panel-heading">${icon('snowflake')}<span>難易度</span></div>
             <strong class="metric-value metric-value-small" data-role="block-set">易しい</strong>
-          </section>
-          <section class="panel metric-card">
-            <div class="panel-heading">${icon('snowflake')}<span>ピット</span></div>
-            <strong class="metric-value metric-value-small" data-role="pit-size">5x5x9</strong>
           </section>
         </div>
         <div class="command-stack">
@@ -732,7 +720,6 @@ export class Renderer {
           <strong data-role="overlay-score">0</strong>
         </div>
         <div class="overlay-metrics">
-          <div><span>到達レベル</span><strong data-role="overlay-level">0</strong></div>
           <div><span>消去面</span><strong data-role="overlay-lines">0</strong></div>
           <div><span>プレイ時間</span><strong data-role="overlay-time">00:00:00</strong></div>
         </div>
@@ -2374,7 +2361,7 @@ export class Renderer {
     const heldPiece = this.gameState.getHeldPiece();
     hold.innerHTML =
       heldPiece === null
-        ? '<span class="is-empty">--</span>'
+        ? ''
         : this.renderPolyCubePreview(heldPiece, 'hold');
   }
 
@@ -2489,11 +2476,6 @@ export class Renderer {
 
   private formatNumber(value: number): string {
     return new Intl.NumberFormat('ja-JP').format(value);
-  }
-
-  private formatPitSize(): string {
-    const { width, height, depth } = this.gameState.getDimensions();
-    return `${width}x${height}x${depth}`;
   }
 
   private formatElapsed(elapsedMs: number): string {
