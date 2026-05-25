@@ -3,10 +3,10 @@ import { GameState } from '../GameState';
 import { POLYCUBE_DEFINITIONS } from '../constants/blockout';
 
 describe('GameState BlockOut rules', () => {
-  it('uses BlockOut default pit dimensions, block set, level, and speed', () => {
+  it('uses fixed default pit dimensions, block set, level, and speed', () => {
     const state = new GameState();
 
-    expect(state.getDimensions()).toEqual({ width: 5, height: 5, depth: 12 });
+    expect(state.getDimensions()).toEqual({ width: 5, height: 5, depth: 10 });
     expect(state.getBlockSet()).toBe('flat');
     expect(state.getLevel()).toBe(0);
     expect(state.getDropIntervalMs()).toBe(5510);
@@ -142,15 +142,24 @@ describe('GameState BlockOut rules', () => {
       { x: 4, y: 1, z: 5 }
     ]);
     expect(state.getActiveFootprintCells()).toEqual([
-      { x: 3, y: 0 },
-      { x: 4, y: 0 },
-      { x: 4, y: 1 }
+      { x: 3, y: 0, contactZ: 6 },
+      { x: 4, y: 0, contactZ: 6 },
+      { x: 4, y: 1, contactZ: 6 }
     ]);
     expect(state.getActivePolyCube()?.blocks).toEqual([
       { x: 3, y: 0, z: 0 },
       { x: 4, y: 0, z: 0 },
       { x: 4, y: 1, z: 0 }
     ]);
+  });
+
+  it('projects the active footprint onto the first blocking depth surface', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
+    state.setCell({ x: 4, y: 0, z: 5 }, 0);
+    state.spawnPolyCube(0);
+
+    expect(state.getProjectedActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 4 }]);
+    expect(state.getActiveFootprintCells()).toEqual([{ x: 4, y: 0, contactZ: 5 }]);
   });
 
   it('soft drops one depth cell at a time and reports blocked at the landing plane', () => {
@@ -200,14 +209,14 @@ describe('GameState BlockOut rules', () => {
     });
   });
 
-  it('matches the BlockOut score table for a top-dropped single cube in Flat Fun', () => {
+  it('scores a top-dropped single cube using the fixed default pit depth', () => {
     const state = new GameState();
     state.spawnPolyCube(0);
 
     state.hardDropActivePolyCube();
     state.lockActivePolyCube();
 
-    expect(state.getScore()).toBe(9);
+    expect(state.getScore()).toBe(10);
   });
 
   it('uses the BlockOut depth cursor before moving multi-depth polycubes', () => {
@@ -329,18 +338,18 @@ describe('GameState BlockOut rules', () => {
     });
   });
 
-  it('keeps double-cut on a block set that can actually clear multiple planes', () => {
+  it('allows double-cut on the easy difficulty', () => {
     const state = new GameState({ missionMode: 'double-cut' });
 
     expect(state.getSetup()).toMatchObject({
-      blockSet: 'basic',
+      blockSet: 'flat',
       missionMode: 'double-cut'
     });
 
     state.configure({ blockSet: 'flat' });
 
     expect(state.getSetup()).toMatchObject({
-      blockSet: 'basic',
+      blockSet: 'flat',
       missionMode: 'double-cut'
     });
   });

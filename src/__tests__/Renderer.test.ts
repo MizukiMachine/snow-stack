@@ -33,6 +33,7 @@ type RendererAccess = {
   syncQueue: (root: ParentNode) => void;
   syncHeldPiece: (root: ParentNode) => void;
   syncMission: (root: ParentNode) => void;
+  collectSetupValues: (root: ParentNode) => unknown;
   createHudElement: () => HTMLDivElement;
   renderPolyCubePreview: (id: number, variant: 'queue' | 'hold') => string;
 };
@@ -278,6 +279,7 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(footprint?.children).toHaveLength(3);
     expect(ghost?.children[0].position.x).toBe(3.5);
     expect(ghost?.children[0].position.z).toBe(5.5);
+    expect(footprint?.children[0].position.z).toBeCloseTo(6 - 0.018);
 
     state.moveActivePolyCube({ x: -1, y: 0, z: 0 });
     renderer.updateActivePolyCube(state.getActivePolyCube());
@@ -292,6 +294,55 @@ describe('Renderer BlockOut layer coloring', () => {
 
     expect(scene.getObjectByName('landing-ghost')).toBeUndefined();
     expect(scene.getObjectByName('landing-footprint')).toBeUndefined();
+  });
+
+  it('places the landing footprint on top of the first settled blocking surface', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 6 } });
+    state.setCell({ x: 4, y: 0, z: 5 }, 0);
+    state.spawnPolyCube(0);
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const scene = new Scene();
+    access.scene = scene;
+
+    renderer.updateActivePolyCube(state.getActivePolyCube());
+
+    const ghost = scene.getObjectByName('landing-ghost') as Group | undefined;
+    const footprint = scene.getObjectByName('landing-footprint') as Group | undefined;
+    const marker = footprint?.children[0] as Group | undefined;
+    const fill = marker?.children[0] as Mesh | undefined;
+    const whiteFrame = marker?.children[1] as Group | undefined;
+    const whiteFrameMeshes: Mesh[] = [];
+    whiteFrame?.traverse((child) => {
+      if (child instanceof Mesh) {
+        whiteFrameMeshes.push(child);
+      }
+    });
+    expect(ghost?.children[0].position.z).toBeCloseTo(4.5);
+    expect(footprint?.children[0].position.z).toBeCloseTo(5 - 0.018);
+    expect(fill?.renderOrder).toBeGreaterThan(36);
+    expect(fill?.renderOrder).toBeLessThan(41);
+    expect(marker?.children).toHaveLength(2);
+    expect(whiteFrameMeshes).toHaveLength(4);
+    expect(whiteFrameMeshes[0]?.renderOrder).toBeGreaterThan(fill?.renderOrder ?? 0);
+
+    if (!(fill?.material instanceof MeshBasicMaterial)) {
+      throw new Error('Footprint fill should use MeshBasicMaterial');
+    }
+    if (!(whiteFrameMeshes[0]?.material instanceof MeshBasicMaterial)) {
+      throw new Error('Footprint wire should use MeshBasicMaterial');
+    }
+    const fillGeometry = fill.geometry as PlaneGeometry;
+    expect(fillGeometry.parameters.width).toBeCloseTo(CELL_SIZE * 0.82);
+    expect(fillGeometry.parameters.height).toBeCloseTo(CELL_SIZE * 0.82);
+    expect(whiteFrameMeshes[0].scale.x).toBeCloseTo(CELL_SIZE * 1.01);
+    expect(whiteFrameMeshes[0].scale.y).toBeCloseTo(CELL_SIZE * 0.064);
+    expect(Math.abs(whiteFrameMeshes[0].position.y) + whiteFrameMeshes[0].scale.y / 2).toBeCloseTo(
+      (CELL_SIZE * 1.01) / 2
+    );
+    expect(whiteFrameMeshes[0].material.color.getHex()).toBe(0xffffff);
+    expect(fill.material.depthTest).toBe(false);
+    expect(whiteFrameMeshes[0].material.depthTest).toBe(false);
   });
 
   it('keeps wall backing and guide grids off Cube World wall asset planes', () => {
@@ -376,6 +427,42 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(root.querySelectorAll('.layer-guide-row')).toHaveLength(0);
   });
 
+  it('does not expose pit dimension controls in the setup form', () => {
+    const state = new GameState({ dimensions: { width: 5, height: 5, depth: 10 } });
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const hud = access.createHudElement();
+
+    expect(hud.querySelector('[data-setup-field="width"]')).toBeNull();
+    expect(hud.querySelector('[data-setup-field="height"]')).toBeNull();
+    expect(hud.querySelector('[data-setup-field="depth"]')).toBeNull();
+    expect(hud.querySelector('[data-setup-field="startLevel"]')).toBeNull();
+    expect(access.collectSetupValues(hud)).not.toHaveProperty('dimensions');
+    expect(access.collectSetupValues(hud)).toHaveProperty('startLevel', 0);
+  });
+
+  it('lays out difficulty and rule choices as setup panels', () => {
+    const renderer = new Renderer(new GameState());
+    const hud = (renderer as unknown as RendererAccess).createHudElement();
+    const missionControl = hud.querySelector('[data-role="mission-mode-control"]');
+
+    expect(hud.querySelector('[data-role="block-set-control"]')?.parentElement?.textContent).toContain(
+      '難易度'
+    );
+    expect(hud.querySelector('[data-role="block-set"]')?.textContent).toBe('易しい');
+    expect(hud.querySelectorAll('[data-role="block-set-control"] .setup-choice')).toHaveLength(3);
+    expect(missionControl?.querySelectorAll('.setup-choice')).toHaveLength(5);
+    expect(hud.querySelector('[data-mission-mode="endless"]')).toBeNull();
+    expect(hud.querySelector('[data-mission-mode="cube-trial"]')?.textContent).toBe('120ブロック');
+    expect(hud.querySelector('[data-block-set="flat"]')?.textContent).toBe('易しい');
+    expect(hud.querySelector('[data-block-set="basic"]')?.textContent).toBe('普通');
+    expect(hud.querySelector('[data-block-set="extended"]')?.textContent).toBe('難しい');
+    expect(missionControl?.textContent).not.toContain('エンドレス');
+    expect(missionControl?.textContent).not.toContain('120キューブ');
+    expect(hud.textContent).not.toContain('ピースセット');
+    expect(hud.textContent).not.toContain('開始レベル');
+  });
+
   it('renders a held piece preview into the HUD slot', () => {
     const state = new GameState({ randomSeed: 1 });
     state.spawnPolyCube(0);
@@ -458,29 +545,29 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(hud.querySelector<HTMLElement>('[data-role="footer-tip"]')?.textContent).toBe(
       'スコアラッシュ: スコア2,000点に到達する。'
     );
+
+    hud.querySelector<HTMLButtonElement>('[data-mission-mode="cube-trial"]')?.click();
+
+    expect(hud.querySelector<HTMLElement>('[data-role="footer-tip"]')?.textContent).toBe(
+      'ブロックトライアル: ブロックを合計120個配置する。'
+    );
   });
 
-  it('keeps double-cut unavailable while the flat block set is selected', () => {
+  it('keeps double-cut selectable while the easy difficulty is selected', () => {
     const state = new GameState();
     const renderer = new Renderer(state);
     const hud = (renderer as unknown as RendererAccess).createHudElement();
     const doubleCut = hud.querySelector<HTMLButtonElement>('[data-mission-mode="double-cut"]');
-    const basic = hud.querySelector<HTMLButtonElement>('[data-block-set="basic"]');
     const flat = hud.querySelector<HTMLButtonElement>('[data-block-set="flat"]');
-    const planeSprint = hud.querySelector<HTMLButtonElement>('[data-mission-mode="plane-sprint"]');
 
-    expect(doubleCut?.disabled).toBe(true);
-
-    basic?.click();
     expect(doubleCut?.disabled).toBe(false);
 
     doubleCut?.click();
     expect(doubleCut?.classList.contains('is-active')).toBe(true);
 
     flat?.click();
-    expect(doubleCut?.disabled).toBe(true);
-    expect(doubleCut?.classList.contains('is-active')).toBe(false);
-    expect(planeSprint?.classList.contains('is-active')).toBe(true);
+    expect(doubleCut?.disabled).toBe(false);
+    expect(doubleCut?.classList.contains('is-active')).toBe(true);
   });
 
   it('builds polycube preview markup with one cell per cube', () => {

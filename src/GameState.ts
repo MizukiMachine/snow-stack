@@ -2,6 +2,7 @@ import type { FieldCoordinate, FieldDimensions } from './constants/field';
 import { FIELD_DIMENSIONS } from './constants/field';
 import type { Axis } from './types/coordinates';
 import {
+  BLOCK_SETS,
   DEFAULT_BLOCK_SET,
   DEFAULT_START_LEVEL,
   DEPTH_FACTOR,
@@ -68,6 +69,7 @@ export interface SettledBlockSnapshot {
 export interface FootprintCellSnapshot {
   readonly x: number;
   readonly y: number;
+  readonly contactZ: number;
 }
 
 export interface ScoreStatistics {
@@ -114,10 +116,9 @@ const PLANE_SPRINT_TARGET_PLANES = 5;
 const SCORE_RUSH_TARGET_SCORE = 2_000;
 const CLEAN_PIT_TARGET_COUNT = 1;
 const DOUBLE_CUT_TARGET_COUNT = 1;
-const CUBE_TRIAL_TARGET_CUBES = 120;
+const BLOCK_TRIAL_TARGET_BLOCKS = 120;
 export const DEFAULT_MISSION_MODE: MissionMode = 'plane-sprint';
 export const MISSION_MODES: readonly MissionMode[] = Object.freeze([
-  'endless',
   'plane-sprint',
   'score-rush',
   'clean-pit',
@@ -186,15 +187,15 @@ const MISSION_DEFINITIONS: Readonly<Record<MissionMode, MissionDefinition>> = Ob
     completionMessage: 'ダブルカット達成。'
   },
   'cube-trial': {
-    label: 'キューブトライアル',
-    shortLabel: '120キューブ',
+    label: 'ブロックトライアル',
+    shortLabel: '120ブロック',
     progressLabel: '個',
-    targetValue: CUBE_TRIAL_TARGET_CUBES,
+    targetValue: BLOCK_TRIAL_TARGET_BLOCKS,
     active: true,
-    description: 'キューブを合計120個配置する。',
+    description: 'ブロックを合計120個配置する。',
     getProgress: (context) => context.placedCubes,
     getHint: (remainingValue) => `あと${formatMissionValue(remainingValue)}個配置で達成。`,
-    completionMessage: 'キューブトライアル達成。'
+    completionMessage: 'ブロックトライアル達成。'
   }
 });
 
@@ -214,7 +215,7 @@ export function isMissionModeCompatibleWithBlockSet(
   mode: MissionMode,
   blockSet: BlockSet
 ): boolean {
-  return mode !== 'double-cut' || blockSet !== 'flat';
+  return MISSION_MODES.includes(mode) && BLOCK_SETS.includes(blockSet);
 }
 
 /**
@@ -438,8 +439,10 @@ export class GameState {
     const uniqueCells = new Map<string, FootprintCellSnapshot>();
     projected.blocks.forEach((block) => {
       const key = `${block.x},${block.y}`;
-      if (!uniqueCells.has(key)) {
-        uniqueCells.set(key, { x: block.x, y: block.y });
+      const contactZ = block.z + 1;
+      const existing = uniqueCells.get(key);
+      if (!existing || contactZ > existing.contactZ) {
+        uniqueCells.set(key, { x: block.x, y: block.y, contactZ });
       }
     });
     return Array.from(uniqueCells.values()).sort((a, b) => a.y - b.y || a.x - b.x);

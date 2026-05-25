@@ -4,7 +4,7 @@ Three.js と TypeScript で作る BlockOut II 風の 3D ポリキューブパズ
 
 現状は以下まで実装済みです。
 
-- BlockOut II 標準の `5x5x12` ピット
+- 通常プレイ用の固定 `5x5x10` ピット
 - `FLAT` / `BASIC` / `EXTENDED` ブロックセット定義
 - 41 種の BlockOut II ポリキューブ定義
 - `Z` 奥行き方向への自動落下
@@ -52,5 +52,5 @@ npm run dev
 - 消去判定は `Z` プレーン単位です。
 - 回転時は BlockOut II の回転中心に近い補正を行います。
 - スコアとレベルは `/home/mizuki2/dev/BlockOut` の係数を移植しています。
-- ピット寸法は BlockOut II と同じ `width/height: 3-7`, `depth: 6-18` にクランプします。
+- プレイヤー向け設定ではピット寸法を固定しています。内部設定値は `width/height: 3-7`, `depth: 6-18` にクランプします。
 - 効果音は未実装です。
