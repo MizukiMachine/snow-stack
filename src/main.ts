@@ -1,5 +1,5 @@
 import './styles.css';
-import softFreshWidescreenBackgroundUrl from './assets/backgrounds/snow-ground-soft-fresh-a-widescreen.png';
+import softFreshWidescreenBackgroundUrl from './assets/backgrounds/snow-ground-soft-fresh-a-widescreen-topdown.png';
 import { GameEngine } from './GameEngine';
 
 type AppLogEntry = {

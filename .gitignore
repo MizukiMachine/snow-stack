@@ -13,6 +13,7 @@ public/
 # Keep only the snow ground background used by the game shell.
 src/assets/backgrounds/snow-ground-*.png
 !src/assets/backgrounds/snow-ground-soft-fresh-a-widescreen.png
+!src/assets/backgrounds/snow-ground-soft-fresh-a-widescreen-topdown.png
 
 # Browser verification output.
 .mcpheadlessbrowser/

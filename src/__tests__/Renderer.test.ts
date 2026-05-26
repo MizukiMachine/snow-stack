@@ -27,7 +27,6 @@ type RendererAccess = {
     depthLayer?: number,
     settledAssetKey?: 'settledIceBlock'
   ) => Group;
-  createBackgroundDecorationLayer: () => Group;
   createCubeWorldFieldLayer: () => Group;
   createDepthLandingGlow: () => Group;
   createFieldBounds: () => Group;
@@ -374,30 +373,20 @@ describe('Renderer BlockOut layer coloring', () => {
     );
   });
 
-  it('keeps snow scenery in a separate background layer from the pit ice assets', () => {
+  it('does not add removed snow scenery props to the field asset layer', () => {
     const state = new GameState({ dimensions: { width: 3, height: 3, depth: 6 } });
     const renderer = new Renderer(state);
     const access = renderer as unknown as RendererAccess;
     const wallTemplate = new Group();
-    const natureTemplate = new Group();
     wallTemplate.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()));
-    natureTemplate.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()));
     access.assetTemplates.set('wallIce', wallTemplate);
-    access.assetTemplates.set('snowPine1', natureTemplate);
 
     const fieldLayer = access.createCubeWorldFieldLayer();
-    const backgroundLayer = access.createBackgroundDecorationLayer();
-    const natureGroup = backgroundLayer.getObjectByName(
-      'ultimate-nature-snow-decorations'
-    ) as Group | undefined;
 
     expect(fieldLayer.name).toBe('cube-world-field-assets');
     expect(fieldLayer.getObjectByName('ultimate-nature-snow-decorations')).toBeUndefined();
-    expect(backgroundLayer.name).toBe('background-scene-decorations');
-    expect(natureGroup).toBeDefined();
-    expect(natureGroup?.children.length).toBeGreaterThan(0);
-    expect(natureGroup?.children.every((child) => child.name.startsWith('ultimate-nature-'))).toBe(
-      true
+    expect(fieldLayer.children.some((child) => child.name.startsWith('ultimate-nature-'))).toBe(
+      false
     );
   });
 
@@ -467,7 +456,7 @@ describe('Renderer BlockOut layer coloring', () => {
     const guide = root.querySelector<HTMLElement>('[data-role="layer-guide-list"]');
     expect(root.dataset.depthLayers).toBe('2');
     expect(guide?.style.getPropertyValue('--layer-count')).toBe('12');
-    expect(guide?.style.getPropertyValue('--layer-stack-height')).toBe('308px');
+    expect(guide?.style.getPropertyValue('--layer-stack-height')).toBe('426px');
     expect(rows.map((row) => row.textContent)).toEqual(['03', '01']);
     expect(rows.map((row) => row.style.getPropertyValue('--layer-row'))).toEqual(['10', '12']);
     expect(root.querySelectorAll('.layer-guide-swatch')).toHaveLength(2);
@@ -523,10 +512,21 @@ describe('Renderer BlockOut layer coloring', () => {
     const missionControl = hud.querySelector('[data-role="mission-mode-control"]');
 
     expect(hud.querySelector('[data-role="block-set-control"]')?.parentElement?.textContent).toContain(
-      '難易度'
+      'LEVEL'
     );
+    expect(
+      hud.querySelector('[data-role="block-set"]')?.parentElement?.textContent
+    ).toContain('LEVEL');
     expect(hud.querySelector('[data-role="block-set"]')?.textContent).toBe('易しい');
-    expect(hud.querySelector('.queue-card .panel-heading span')?.textContent).toBe('ネクスト');
+    expect(hud.querySelector('.queue-card .panel-heading span')?.textContent).toBe('Next');
+    const controlKeyLabels = Array.from(hud.querySelectorAll('.control-grid b')).map(
+      (key) => key.textContent
+    );
+    expect(controlKeyLabels).not.toContain('2/4/6/8');
+    expect(controlKeyLabels).not.toContain('1/3/7/9');
+    expect(controlKeyLabels).not.toContain('Home/PgUp/End/PgDn');
+    expect(controlKeyLabels).not.toContain('P');
+    expect(controlKeyLabels).not.toContain('R');
     expect(hud.querySelectorAll('[data-role="block-set-control"] .setup-choice')).toHaveLength(3);
     expect(missionControl?.querySelectorAll('.setup-choice')).toHaveLength(5);
     expect(hud.querySelector('[data-mission-mode="endless"]')).toBeNull();
@@ -637,13 +637,13 @@ describe('Renderer BlockOut layer coloring', () => {
     hud.querySelector<HTMLButtonElement>('[data-mission-mode="score-rush"]')?.click();
 
     expect(hud.querySelector<HTMLElement>('[data-role="footer-tip"]')?.textContent).toBe(
-      'スコアラッシュ: スコア2,000点に到達する。'
+      'Score Rush: Score 2,000点に到達する'
     );
 
     hud.querySelector<HTMLButtonElement>('[data-mission-mode="cube-trial"]')?.click();
 
     expect(hud.querySelector<HTMLElement>('[data-role="footer-tip"]')?.textContent).toBe(
-      'ブロックトライアル: ブロックを合計120個配置する。'
+      'ブロックトライアル: ブロックを合計120個配置する'
     );
   });
 

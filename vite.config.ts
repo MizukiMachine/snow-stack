@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   publicDir: false,
-  assetsInclude: ['**/*.fbx', '**/*.gltf'],
+  assetsInclude: ['**/*.gltf'],
   build: {
     chunkSizeWarningLimit: 700
   },
