@@ -54,7 +54,7 @@ button {
 .game-shell {
   isolation: isolate;
   background-color: #dcefff;
-  background-image: var(--game-shell-background-image, url("./assets/backgrounds/snow-ground-soft-fresh-a-widescreen.png"));
+  background-image: var(--game-shell-background-image, url("./assets/backgrounds/snow-ground-soft-fresh-a-widescreen-topdown.png"));
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -240,6 +240,19 @@ button {
   filter: drop-shadow(0 0 7px rgba(33, 175, 255, 0.42));
 }
 
+.right-rail .panel-heading,
+.right-rail .controls-panel h3 {
+  margin-bottom: 16px;
+  gap: 13px;
+  font-size: 24px;
+}
+
+.right-rail .panel-heading .hud-icon,
+.right-rail .controls-panel h3 .hud-icon {
+  width: 34px;
+  height: 34px;
+}
+
 .tip-card p {
   margin: 0;
   color: #06296f;
@@ -270,15 +283,22 @@ button {
 .layer-guide-card {
   top: 226px;
   left: 40px;
-  width: 190px;
+  width: 252px;
   min-height: 0;
-  padding: 18px 18px 16px;
+  padding: 21px 22px 20px;
   color: #082a78;
   filter: drop-shadow(0 0 18px rgba(47, 178, 255, 0.2));
 }
 
 .layer-guide-card .card-title {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  gap: 13px;
+  font-size: 24px;
+}
+
+.layer-guide-card .card-title .hud-icon {
+  width: 34px;
+  height: 34px;
 }
 
 .ui-layer[data-depth-layers="0"] .layer-guide-card {
@@ -287,12 +307,12 @@ button {
 
 .layer-guide-stack {
   --layer-count: 12;
-  --layer-stack-height: 308px;
+  --layer-stack-height: 426px;
   display: grid;
-  grid-template-rows: repeat(var(--layer-count), 22px);
-  gap: 4px;
-  height: min(var(--layer-stack-height), clamp(168px, calc(100vh - 348px), 360px));
-  max-height: clamp(168px, calc(100vh - 348px), 360px);
+  grid-template-rows: repeat(var(--layer-count), 30px);
+  gap: 6px;
+  height: min(var(--layer-stack-height), clamp(220px, calc(100vh - 348px), 430px));
+  max-height: clamp(220px, calc(100vh - 348px), 430px);
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -300,16 +320,16 @@ button {
 .layer-guide-row {
   min-height: 0;
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr);
   grid-row: var(--layer-row);
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .layer-guide-index {
   color: #0b3d9a;
   font-family: var(--font-number);
-  font-size: 11px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1;
   text-align: right;
@@ -319,7 +339,7 @@ button {
 
 .layer-guide-swatch {
   position: relative;
-  height: 16px;
+  height: 22px;
   border: 2px solid var(--layer-color);
   border-radius: 2px;
   background:
@@ -334,11 +354,11 @@ button {
   top: 22px;
   right: 22px;
   bottom: 116px;
-  width: min(462px, calc(100vw - 56px));
+  width: min(612px, calc(100vw - 56px));
   display: grid;
-  grid-template-columns: 196px minmax(228px, 1fr);
+  grid-template-columns: minmax(238px, 252px) minmax(320px, 1fr);
   align-content: start;
-  gap: 14px;
+  gap: 18px;
   pointer-events: auto;
   z-index: 2;
 }
@@ -348,7 +368,7 @@ button {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
 }
 
 .telemetry-stack {
@@ -369,8 +389,21 @@ button {
   padding: 17px 18px;
 }
 
+.right-rail .panel {
+  padding: 21px 22px;
+}
+
 .metric-card {
   min-height: 88px;
+}
+
+.right-rail .metric-card {
+  min-height: 118px;
+}
+
+.right-rail .queue-card,
+.right-rail .hold-card {
+  min-height: 142px;
 }
 
 .metric-value {
@@ -385,11 +418,19 @@ button {
   text-shadow: 0 0 10px rgba(255, 255, 255, 0.95);
 }
 
+.right-rail .metric-value {
+  font-size: 54px;
+}
+
 .metric-value-small {
   font-family: var(--font-ui);
   font-size: 22px;
   font-weight: 900;
   letter-spacing: 0;
+}
+
+.right-rail .metric-value-small {
+  font-size: 32px;
 }
 
 .queue-list,
@@ -405,6 +446,10 @@ button {
 
 .hold-slot {
   min-height: 72px;
+}
+
+.right-rail .hold-slot {
+  min-height: 102px;
 }
 
 .queue-list > span,
@@ -443,6 +488,10 @@ button {
   clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px);
 }
 
+.right-rail .poly-preview {
+  height: 102px;
+}
+
 .piece-preview-svg {
   width: min(100%, 168px);
   height: 62px;
@@ -451,6 +500,11 @@ button {
   filter:
     drop-shadow(0 0 8px color-mix(in srgb, var(--piece-color) 82%, transparent))
     drop-shadow(0 0 15px color-mix(in srgb, var(--piece-color) 42%, transparent));
+}
+
+.right-rail .piece-preview-svg {
+  width: min(100%, 210px);
+  height: 88px;
 }
 
 .preview-cube-face {
@@ -563,6 +617,10 @@ button {
   gap: 6px;
 }
 
+.right-rail .control-grid {
+  gap: 8px;
+}
+
 .control-row {
   display: grid;
   grid-template-columns: minmax(92px, 112px) 1fr;
@@ -574,10 +632,21 @@ button {
   line-height: 1.1;
 }
 
+.right-rail .control-row {
+  grid-template-columns: minmax(126px, 148px) 1fr;
+  gap: 14px;
+  font-size: 16px;
+  line-height: 1.18;
+}
+
 .keys {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.right-rail .keys {
+  gap: 8px;
 }
 
 .keys b {
@@ -601,14 +670,32 @@ button {
     0 3px 10px rgba(44, 112, 181, 0.12);
 }
 
+.right-rail .keys b {
+  min-width: 31px;
+  height: 31px;
+  padding: 0 9px;
+  font-size: 14px;
+  border-radius: 7px;
+}
+
 .keys .wide-key {
   min-width: 48px;
+}
+
+.right-rail .keys .wide-key {
+  min-width: 64px;
 }
 
 .keys .combo-key {
   min-width: 104px;
   padding: 0 6px;
   font-size: 9px;
+}
+
+.right-rail .keys .combo-key {
+  min-width: 132px;
+  padding: 0 8px;
+  font-size: 11px;
 }
 
 .keys .key-icon {
@@ -628,7 +715,11 @@ button {
 
 .action-row {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+}
+
+.right-rail .action-row {
+  gap: 14px;
 }
 
 .action-button,
@@ -679,14 +770,19 @@ button {
   stroke-width: 2;
 }
 
+.right-rail .button-icon .hud-icon {
+  width: 36px;
+  height: 36px;
+}
+
 .status-bar {
   left: 50px;
   right: 50px;
-  bottom: 24px;
-  min-height: 74px;
-  padding: 14px 24px;
+  bottom: 18px;
+  min-height: 96px;
+  padding: 17px 26px;
   display: grid;
-  grid-template-columns: 250px auto minmax(320px, 1fr) 142px;
+  grid-template-columns: 244px minmax(530px, 580px) minmax(240px, 1fr) 142px;
   align-items: center;
   gap: 22px;
   z-index: 4;
@@ -694,7 +790,7 @@ button {
 }
 
 .ui-layer[data-mission-active="false"] .status-bar {
-  grid-template-columns: 250px minmax(320px, 1fr) 142px;
+  grid-template-columns: 252px minmax(360px, 1fr) 148px;
 }
 
 .status-pill,
@@ -709,24 +805,39 @@ button {
 .status-pill > .hud-icon,
 .status-mission > .hud-icon,
 .status-hint > .hud-icon {
-  width: 42px;
-  height: 42px;
+  width: 50px;
+  height: 50px;
   color: #098fe7;
 }
 
 .status-mission {
-  min-width: 190px;
+  min-width: 0;
 }
 
 .status-mission[hidden] {
   display: none;
 }
 
+.status-mission > div {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(210px, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.status-mission .status-label {
+  font-size: 25px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .status-label {
   display: block;
   color: #073486;
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -740,27 +851,39 @@ button {
   gap: 8px;
   color: #0877d3;
   font-family: var(--font-number);
-  font-size: 24px;
+  font-size: 31px;
   font-weight: 700;
   font-variant-numeric: tabular-nums lining-nums;
 }
 
+.status-state,
+.status-state [data-role="status-label"],
+.status-meta [data-role="timer"] {
+  white-space: nowrap;
+}
+
 .status-mission .mission-progress {
-  width: 164px;
-  margin-top: 4px;
+  width: 100%;
+  height: 42px;
+  margin-top: 0;
+}
+
+.status-mission .mission-progress span {
+  font-size: 27px;
+  line-height: 1;
 }
 
 .status-hint [data-role="footer-tip"] {
   color: #082a78;
   font-family: var(--font-ui);
-  font-size: 19px;
+  font-size: 23px;
   font-weight: 700;
   line-height: 1.15;
 }
 
 .status-dot {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: 999px;
   background: #1ed34f;
   box-shadow: 0 0 11px rgba(27, 211, 79, 0.74);
@@ -1075,103 +1198,150 @@ button {
 
   .layer-guide-card {
     left: 34px;
-    width: 176px;
+    width: 236px;
+    padding: 18px 20px;
+  }
+
+  .layer-guide-card .card-title {
+    margin-bottom: 12px;
+    font-size: 21px;
+    gap: 12px;
+  }
+
+  .layer-guide-card .card-title .hud-icon {
+    width: 30px;
+    height: 30px;
   }
 
   .right-rail {
-    width: 430px;
-    grid-template-columns: 180px minmax(236px, 1fr);
-    gap: 14px;
+    width: min(560px, calc(100vw - 44px));
+    grid-template-columns: minmax(226px, 240px) minmax(292px, 1fr);
+    gap: 16px;
   }
 
   .telemetry-stack,
   .command-stack {
-    gap: 9px;
+    gap: 12px;
   }
 
-  .metric-card {
-    min-height: 82px;
+  .right-rail .metric-card {
+    min-height: 108px;
   }
 
-  .metric-value {
-    font-size: 31px;
+  .right-rail .queue-card,
+  .right-rail .hold-card {
+    min-height: 128px;
   }
 
-  .panel {
-    padding: 13px 14px;
+  .right-rail .metric-value {
+    font-size: 48px;
   }
 
-  .panel-heading,
-  .controls-panel h3 {
-    margin-bottom: 8px;
+  .right-rail .metric-value-small {
+    font-size: 29px;
+  }
+
+  .right-rail .panel {
+    padding: 18px 20px;
+  }
+
+  .right-rail .panel-heading,
+  .right-rail .controls-panel h3 {
+    margin-bottom: 12px;
+    font-size: 21px;
+    gap: 12px;
+  }
+
+  .right-rail .panel-heading .hud-icon,
+  .right-rail .controls-panel h3 .hud-icon {
+    width: 30px;
+    height: 30px;
   }
 
   .queue-list {
     gap: 6px;
   }
 
-  .poly-preview {
-    height: 66px;
+  .right-rail .poly-preview {
+    height: 90px;
   }
 
-  .piece-preview-svg {
-    height: 58px;
+  .right-rail .piece-preview-svg {
+    height: 78px;
   }
 
-  .hold-slot {
-    min-height: 66px;
+  .right-rail .hold-slot {
+    min-height: 90px;
   }
 
   .controls-panel {
     min-height: 0;
   }
 
-  .control-grid {
-    gap: 4px;
+  .right-rail .control-grid {
+    gap: 6px;
   }
 
-  .control-row {
-    grid-template-columns: minmax(92px, 108px) 1fr;
-    font-size: 12px;
-    gap: 8px;
+  .right-rail .control-row {
+    grid-template-columns: minmax(114px, 136px) 1fr;
+    font-size: 14px;
+    gap: 11px;
   }
 
-  .keys b {
-    min-width: 22px;
-    height: 21px;
-    font-size: 11px;
+  .right-rail .keys b {
+    min-width: 27px;
+    height: 27px;
+    font-size: 13px;
   }
 
-  .keys .combo-key {
-    min-width: 104px;
-    font-size: 9px;
+  .right-rail .keys .combo-key {
+    min-width: 122px;
+    font-size: 10px;
   }
 
-  .keys .wide-key {
-    min-width: 48px;
+  .right-rail .keys .wide-key {
+    min-width: 58px;
   }
 
-  .action-button {
-    min-height: 44px;
-    font-size: 15px;
-  }
-
-  .button-icon .hud-icon {
-    width: 21px;
-    height: 21px;
-  }
-
-  .status-bar {
-    grid-template-columns: 210px auto minmax(260px, 1fr) 116px;
+  .right-rail .action-button {
+    min-height: 64px;
+    font-size: 21px;
     gap: 14px;
   }
 
+  .right-rail .button-icon .hud-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .status-bar {
+    grid-template-columns: 230px minmax(490px, 510px) minmax(200px, 1fr) 126px;
+    gap: 16px;
+  }
+
   .ui-layer[data-mission-active="false"] .status-bar {
-    grid-template-columns: 210px minmax(260px, 1fr) 116px;
+    grid-template-columns: 236px minmax(300px, 1fr) 134px;
   }
 
   .status-hint [data-role="footer-tip"] {
-    font-size: 17px;
+    font-size: 23px;
+  }
+
+  .status-mission > div {
+    grid-template-columns: max-content minmax(190px, 1fr);
+    gap: 14px;
+  }
+
+  .status-mission .status-label {
+    font-size: 23px;
+  }
+
+  .status-mission .mission-progress {
+    height: 38px;
+  }
+
+  .status-mission .mission-progress span {
+    font-size: 24px;
   }
 }
 
@@ -1195,8 +1365,8 @@ button {
   }
 
   .layer-guide-stack {
-    height: min(var(--layer-stack-height), clamp(150px, calc(100vh - 292px), 306px));
-    max-height: clamp(150px, calc(100vh - 292px), 306px);
+    height: min(var(--layer-stack-height), clamp(190px, calc(100vh - 292px), 392px));
+    max-height: clamp(190px, calc(100vh - 292px), 392px);
   }
 
   .tip-card p {
@@ -1204,8 +1374,11 @@ button {
   }
 
   .right-rail {
-    top: 16px;
-    bottom: 102px;
+    top: 12px;
+    bottom: 84px;
+    width: min(552px, calc(100vw - 40px));
+    grid-template-columns: minmax(220px, 236px) minmax(286px, 1fr);
+    gap: 16px;
     align-items: start;
   }
 
@@ -1219,20 +1392,25 @@ button {
     min-height: 0;
   }
 
-  .panel {
-    padding: 12px 14px;
+  .right-rail .panel {
+    padding: 13px 16px;
   }
 
-  .metric-card {
-    min-height: 72px;
+  .right-rail .metric-card {
+    min-height: 86px;
   }
 
-  .metric-value {
-    font-size: 28px;
+  .right-rail .queue-card,
+  .right-rail .hold-card {
+    min-height: 104px;
   }
 
-  .metric-value-small {
-    font-size: 22px;
+  .right-rail .metric-value {
+    font-size: 42px;
+  }
+
+  .right-rail .metric-value-small {
+    font-size: 26px;
   }
 
   .queue-list {
@@ -1244,16 +1422,16 @@ button {
     font-size: 15px;
   }
 
-  .poly-preview {
-    height: 58px;
+  .right-rail .poly-preview {
+    height: 68px;
   }
 
-  .piece-preview-svg {
-    height: 52px;
+  .right-rail .piece-preview-svg {
+    height: 62px;
   }
 
-  .hold-slot {
-    min-height: 58px;
+  .right-rail .hold-slot {
+    min-height: 68px;
   }
 
   .mission-progress {
@@ -1261,10 +1439,17 @@ button {
     margin-top: 6px;
   }
 
-  .panel-heading,
-  .controls-panel h3 {
+  .right-rail .panel-heading,
+  .right-rail .controls-panel h3 {
     margin-bottom: 6px;
-    font-size: 13px;
+    font-size: 18px;
+    gap: 10px;
+  }
+
+  .right-rail .panel-heading .hud-icon,
+  .right-rail .controls-panel h3 .hud-icon {
+    width: 26px;
+    height: 26px;
   }
 
   .controls-panel {
@@ -1272,46 +1457,52 @@ button {
     min-height: 0;
   }
 
-  .control-grid {
+  .right-rail .control-grid {
     gap: 4px;
   }
 
-  .control-row {
-    grid-template-columns: minmax(92px, 108px) 1fr;
+  .right-rail .control-row {
+    grid-template-columns: minmax(106px, 124px) 1fr;
     font-size: 12px;
     gap: 8px;
   }
 
-  .keys b {
-    min-width: 22px;
-    height: 21px;
+  .right-rail .keys b {
+    min-width: 23px;
+    height: 23px;
     font-size: 11px;
   }
 
-  .keys .combo-key {
-    min-width: 104px;
+  .right-rail .keys .combo-key {
+    min-width: 106px;
     font-size: 9px;
   }
 
-  .keys .wide-key {
-    min-width: 48px;
+  .right-rail .keys .wide-key {
+    min-width: 50px;
   }
 
-  .action-button {
-    min-height: 44px;
-    font-size: 15px;
+  .right-rail .action-row {
+    gap: 7px;
   }
 
-  .button-icon .hud-icon {
-    width: 21px;
-    height: 21px;
+  .right-rail .action-button {
+    min-height: 52px;
+    font-size: 17px;
+    gap: 11px;
+  }
+
+  .right-rail .button-icon .hud-icon {
+    width: 26px;
+    height: 26px;
   }
 
   .status-bar {
-    min-height: 60px;
-    bottom: 14px;
-    padding-top: 10px;
-    padding-bottom: 10px;
+    min-height: 88px;
+    bottom: 8px;
+    padding: 12px 22px;
+    grid-template-columns: 220px minmax(480px, 500px) minmax(260px, 1fr) 122px;
+    gap: 18px;
   }
 
   .ui-layer[data-start-menu="true"] .settings-panel {
@@ -1334,12 +1525,26 @@ button {
     font-size: 20px;
   }
 
-  .status-mission {
-    min-width: 156px;
+  .status-mission > div {
+    grid-template-columns: max-content minmax(180px, 1fr);
+    gap: 12px;
+  }
+
+  .status-hint [data-role="footer-tip"] {
+    font-size: 18px;
+    line-height: 1.04;
   }
 
   .status-mission .mission-progress {
-    width: 142px;
+    height: 36px;
+  }
+
+  .status-mission .status-label {
+    font-size: 22px;
+  }
+
+  .status-mission .mission-progress span {
+    font-size: 23px;
   }
 }
 
@@ -1351,7 +1556,8 @@ button {
   .app-viewport,
   .game-shell {
     height: auto;
-    min-height: 2280px;
+    min-height: 2400px;
+    overflow: visible;
   }
 
   .ui-layer {
@@ -1384,17 +1590,36 @@ button {
     left: 14px;
     right: 14px;
     width: auto;
-    padding: 16px;
+    padding: 18px;
+  }
+
+  .layer-guide-card .card-title {
+    margin-bottom: 12px;
+    font-size: 17px;
+    gap: 10px;
+  }
+
+  .layer-guide-card .card-title .hud-icon {
+    width: 24px;
+    height: 24px;
   }
 
   .layer-guide-stack {
-    height: min(var(--layer-stack-height), 260px);
+    height: min(var(--layer-stack-height), 300px);
   }
 
   .layer-guide-row {
     min-height: 0;
-    grid-template-columns: 24px minmax(0, 1fr);
-    gap: 6px;
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .layer-guide-index {
+    font-size: 13px;
+  }
+
+  .layer-guide-swatch {
+    height: 20px;
   }
 
   .ui-layer[data-depth-layers="0"] .right-rail {
@@ -1410,6 +1635,40 @@ button {
     bottom: auto;
     width: auto;
     grid-template-columns: 1fr;
+  }
+
+  .right-rail .panel {
+    padding: 17px 18px;
+  }
+
+  .right-rail .metric-card {
+    min-height: 88px;
+  }
+
+  .right-rail .queue-card,
+  .right-rail .hold-card {
+    min-height: 110px;
+  }
+
+  .right-rail .metric-value {
+    font-size: 42px;
+  }
+
+  .right-rail .metric-value-small {
+    font-size: 24px;
+  }
+
+  .right-rail .panel-heading,
+  .right-rail .controls-panel h3 {
+    margin-bottom: 12px;
+    font-size: 17px;
+    gap: 10px;
+  }
+
+  .right-rail .panel-heading .hud-icon,
+  .right-rail .controls-panel h3 .hud-icon {
+    width: 24px;
+    height: 24px;
   }
 
   .telemetry-stack {
@@ -1429,17 +1688,49 @@ button {
     min-height: auto;
   }
 
+  .right-rail .control-grid {
+    gap: 6px;
+  }
+
+  .right-rail .control-row {
+    grid-template-columns: minmax(104px, 126px) 1fr;
+    gap: 9px;
+    font-size: 12px;
+  }
+
+  .right-rail .keys {
+    gap: 6px;
+  }
+
+  .right-rail .keys b {
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    font-size: 11px;
+    border-radius: 5px;
+  }
+
+  .right-rail .keys .wide-key {
+    min-width: 48px;
+  }
+
+  .right-rail .keys .combo-key {
+    min-width: 104px;
+    padding: 0 6px;
+    font-size: 9px;
+  }
+
   .action-row {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .action-button {
+  .right-rail .action-button {
     min-height: 54px;
     font-size: 13px;
     gap: 7px;
   }
 
-  .button-icon .hud-icon {
+  .right-rail .button-icon .hud-icon {
     width: 20px;
     height: 20px;
   }
@@ -1458,6 +1749,23 @@ button {
   .ui-layer[data-mission-active="false"] .status-bar,
   .ui-layer[data-mission-active="true"] .status-bar {
     grid-template-columns: 1fr;
+  }
+
+  .status-mission > div {
+    grid-template-columns: max-content minmax(170px, 1fr);
+    gap: 12px;
+  }
+
+  .status-mission .status-label {
+    font-size: 21px;
+  }
+
+  .status-mission .mission-progress {
+    height: 34px;
+  }
+
+  .status-mission .mission-progress span {
+    font-size: 21px;
   }
 
   .ui-layer[data-depth-layers="0"] .status-bar {
@@ -1530,7 +1838,7 @@ button {
 @media (max-width: 520px) {
   .app-viewport,
   .game-shell {
-    min-height: 2260px;
+    min-height: 2380px;
   }
 
   .ui-layer {
@@ -1572,13 +1880,34 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .control-row {
+  .right-rail .control-row {
     grid-template-columns: minmax(112px, 132px) 1fr;
     font-size: 13px;
   }
 
   .status-hint [data-role="footer-tip"] {
     font-size: 16px;
+  }
+
+  .status-mission {
+    align-items: flex-start;
+  }
+
+  .status-mission > div {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .status-mission .status-label {
+    font-size: 20px;
+  }
+
+  .status-mission .mission-progress {
+    height: 34px;
+  }
+
+  .status-mission .mission-progress span {
+    font-size: 20px;
   }
 
   .ui-layer[data-start-menu="true"] .settings-panel {

@@ -27,7 +27,6 @@ type RendererAccess = {
     depthLayer?: number,
     settledAssetKey?: 'settledIceBlock'
   ) => Group;
-  createBackgroundDecorationLayer: () => Group;
   createCubeWorldFieldLayer: () => Group;
   createDepthLandingGlow: () => Group;
   createFieldBounds: () => Group;
@@ -374,30 +373,20 @@ describe('Renderer BlockOut layer coloring', () => {
     );
   });
 
-  it('keeps snow scenery in a separate background layer from the pit ice assets', () => {
+  it('does not add removed snow scenery props to the field asset layer', () => {
     const state = new GameState({ dimensions: { width: 3, height: 3, depth: 6 } });
     const renderer = new Renderer(state);
     const access = renderer as unknown as RendererAccess;
     const wallTemplate = new Group();
-    const natureTemplate = new Group();
     wallTemplate.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()));
-    natureTemplate.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()));
     access.assetTemplates.set('wallIce', wallTemplate);
-    access.assetTemplates.set('snowPine1', natureTemplate);
 
     const fieldLayer = access.createCubeWorldFieldLayer();
-    const backgroundLayer = access.createBackgroundDecorationLayer();
-    const natureGroup = backgroundLayer.getObjectByName(
-      'ultimate-nature-snow-decorations'
-    ) as Group | undefined;
 
     expect(fieldLayer.name).toBe('cube-world-field-assets');
     expect(fieldLayer.getObjectByName('ultimate-nature-snow-decorations')).toBeUndefined();
-    expect(backgroundLayer.name).toBe('background-scene-decorations');
-    expect(natureGroup).toBeDefined();
-    expect(natureGroup?.children.length).toBeGreaterThan(0);
-    expect(natureGroup?.children.every((child) => child.name.startsWith('ultimate-nature-'))).toBe(
-      true
+    expect(fieldLayer.children.some((child) => child.name.startsWith('ultimate-nature-'))).toBe(
+      false
     );
   });
 
@@ -467,7 +456,7 @@ describe('Renderer BlockOut layer coloring', () => {
     const guide = root.querySelector<HTMLElement>('[data-role="layer-guide-list"]');
     expect(root.dataset.depthLayers).toBe('2');
     expect(guide?.style.getPropertyValue('--layer-count')).toBe('12');
-    expect(guide?.style.getPropertyValue('--layer-stack-height')).toBe('308px');
+    expect(guide?.style.getPropertyValue('--layer-stack-height')).toBe('426px');
     expect(rows.map((row) => row.textContent)).toEqual(['03', '01']);
     expect(rows.map((row) => row.style.getPropertyValue('--layer-row'))).toEqual(['10', '12']);
     expect(root.querySelectorAll('.layer-guide-swatch')).toHaveLength(2);
