@@ -459,7 +459,10 @@ export class GameEngine {
     this.pendingLockAt = 0;
     this.pendingLockAllowsAdjustment = false;
     this.repeatActionAllowedAt = 0;
-    this.state.lockActivePolyCube();
+    const clearedPlanes = this.state.lockActivePolyCube();
+    if (clearedPlanes > 0) {
+      this.renderer.playPlaneClearEffect(this.state.getLastClearedPlaneBlocks());
+    }
     if (this.state.getMissionSnapshot().complete) {
       this.state.endGame();
       this.markGameEnded();

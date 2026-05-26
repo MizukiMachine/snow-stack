@@ -71,11 +71,9 @@ public/assets/UltimateNaturePack/**
 !public/assets/UltimateNaturePack/UltimateNaturePack/FBX/Willow_Dead_Snow_5.fbx
 !public/assets/UltimateNaturePack/UltimateNaturePack/FBX/WoodLog_Snow.fbx
 
-# Keep only the snow ground tiles used by the randomized background.
+# Keep only the snow ground background used by the game shell.
 src/assets/backgrounds/snow-ground-*.png
-!src/assets/backgrounds/snow-ground-forest-floor-d-v2.png
-!src/assets/backgrounds/snow-ground-soft-fresh-a-v2.png
-!src/assets/backgrounds/snow-ground-thin-ice-c-v2.png
+!src/assets/backgrounds/snow-ground-soft-fresh-a-widescreen.png
 
 # Browser verification output.
 .mcpheadlessbrowser/

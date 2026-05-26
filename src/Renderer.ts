@@ -1,4 +1,5 @@
 import {
+  AdditiveBlending,
   AmbientLight,
   Box3,
   BufferGeometry,
@@ -172,6 +173,25 @@ type ReflectionPatchCandidate = {
   readonly priority: number;
 };
 
+type PlaneClearBlockEffect = {
+  readonly root: Group;
+  readonly flash: Mesh;
+  readonly particleCloud: Points;
+  readonly flashMaterial: MeshBasicMaterial;
+  readonly particleMaterial: PointsMaterial;
+  readonly startPosition: Vector3;
+  readonly outwardVector: Vector3;
+  readonly staggerMs: number;
+};
+
+type PlaneClearSweepEffect = {
+  readonly sweep: Mesh;
+  readonly material: MeshBasicMaterial;
+  readonly baseScaleX: number;
+  readonly baseScaleY: number;
+  readonly staggerMs: number;
+};
+
 const CAMERA_SETTINGS = {
   fov: 78,
   targetHeightFactor: 0.5,
@@ -189,6 +209,8 @@ const PIT_WALL_BACKING_OFFSET = CELL_SIZE * 0.035;
 const PIT_WALL_GUIDE_INSET = CELL_SIZE * 0.018;
 const PIT_REFLECTION_INSET = CELL_SIZE * 0.028;
 const PIT_REFLECTION_OPACITY = 0.18;
+const PLANE_CLEAR_EFFECT_MS = 620;
+const PLANE_CLEAR_SWEEP_MS = 260;
 const LANDING_FOOTPRINT_OUTER_SIZE = CELL_SIZE * 1.01;
 const LANDING_FOOTPRINT_FILL_SIZE = CELL_SIZE * 0.82;
 const LANDING_FOOTPRINT_WIRE_THICKNESS = CELL_SIZE * 0.064;
@@ -255,6 +277,12 @@ const ULTIMATE_NATURE_ASSETS: Record<UltimateNatureAssetKey, SceneAssetDefinitio
 const CUBE_WIREFRAME_BEAM_GEOMETRY = new BoxGeometry(1, 1, 1);
 const PIT_REFLECTION_PLANE_GEOMETRY = new PlaneGeometry(CELL_SIZE, CELL_SIZE);
 const PIT_REFLECTION_FRAME_GEOMETRY = new EdgesGeometry(PIT_REFLECTION_PLANE_GEOMETRY);
+const PLANE_CLEAR_FLASH_GEOMETRY = new BoxGeometry(
+  CELL_SIZE * 0.84,
+  CELL_SIZE * 0.84,
+  CELL_SIZE * 0.84
+);
+const PLANE_CLEAR_SWEEP_GEOMETRY = new PlaneGeometry(1, 1);
 
 /**
  * Three.js scene rendering and DOM-based HUD for the BlockOut pit.
@@ -275,6 +303,12 @@ export class Renderer {
   private footprintGroup: Group | null = null;
   private settledBlocksGroup: Group | null = null;
   private glowGroup: Group | null = null;
+  private planeClearEffectGroup: Group | null = null;
+  private planeClearEffectFrameId: number | null = null;
+  private planeClearEffectStartedAt = 0;
+  private planeClearEffectTotalMs = 0;
+  private planeClearBlockEffects: PlaneClearBlockEffect[] = [];
+  private planeClearSweepEffects: PlaneClearSweepEffect[] = [];
   private readonly fbxLoader = new FBXLoader();
   private readonly gltfLoader = new GLTFLoader();
   private readonly assetTemplates = new Map<SceneAssetKey, Group>();
@@ -399,6 +433,7 @@ export class Renderer {
     const shouldPreserveLoadedAssets = options.preserveAssets === true && this.assetsReady;
     this.disposed = true;
     this.assetLoadGeneration += 1;
+    this.disposePlaneClearEffect();
     if (this.resizeHandler) {
       window.removeEventListener('resize', this.resizeHandler);
       this.resizeHandler = null;
@@ -428,6 +463,9 @@ export class Renderer {
     this.footprintGroup = null;
     this.settledBlocksGroup = null;
     this.glowGroup = null;
+    this.planeClearEffectGroup = null;
+    this.planeClearBlockEffects = [];
+    this.planeClearSweepEffects = [];
     this.lastSettingsOpen = false;
     this.depthLayerGuideSignature = '';
   }
@@ -511,6 +549,233 @@ export class Renderer {
 
     this.settledBlocksGroup = group;
     this.scene.add(group);
+  }
+
+  public playPlaneClearEffect(blocks: readonly SettledBlockSnapshot[]): void {
+    this.disposePlaneClearEffect();
+    if (!this.scene || blocks.length === 0) {
+      return;
+    }
+
+    const effect = this.createPlaneClearEffectGroup(blocks);
+    this.planeClearEffectGroup = effect.group;
+    this.planeClearBlockEffects = effect.blocks;
+    this.planeClearSweepEffects = effect.sweeps;
+    this.planeClearEffectStartedAt = 0;
+    this.planeClearEffectTotalMs = effect.totalMs;
+    this.scene.add(effect.group);
+    this.updatePlaneClearEffect(0);
+    this.renderFrame();
+    this.startPlaneClearEffectAnimation();
+  }
+
+  private createPlaneClearEffectGroup(blocks: readonly SettledBlockSnapshot[]): {
+    group: Group;
+    blocks: PlaneClearBlockEffect[];
+    sweeps: PlaneClearSweepEffect[];
+    totalMs: number;
+  } {
+    const group = new Group();
+    const origin = this.getFieldOrigin();
+    const { width, height, depth } = this.gameState.getDimensions();
+    group.position.set(origin.x, origin.y, origin.z);
+    group.name = 'plane-clear-effect';
+
+    const blockEffects: PlaneClearBlockEffect[] = [];
+    const sweepEffects = this.createPlaneClearSweeps(blocks);
+    sweepEffects.forEach((effect) => group.add(effect.sweep));
+
+    let maxStaggerMs = 0;
+    blocks.forEach((block, index) => {
+      const centerX = (block.coordinate.x + 0.5) * CELL_SIZE;
+      const centerY = (block.coordinate.y + 0.5) * CELL_SIZE;
+      const centerZ = (block.coordinate.z + 0.5) * CELL_SIZE;
+      const planeCenterX = (width * CELL_SIZE) / 2;
+      const planeCenterY = (height * CELL_SIZE) / 2;
+      const offsetX = centerX - planeCenterX;
+      const offsetY = centerY - planeCenterY;
+      const distanceFromCenter = Math.sqrt(offsetX * offsetX + offsetY * offsetY);
+      const staggerMs = distanceFromCenter * 18 + deterministicNoise(index, 11) * 28;
+      const color = getBlockOutLayerColor(depth, block.coordinate.z);
+      const root = new Group();
+      root.position.set(centerX, centerY, centerZ);
+      root.name = 'plane-clear-block';
+
+      const flashMaterial = new MeshBasicMaterial({
+        color: mixColorNumber(color, 0xffffff, 0.66),
+        transparent: true,
+        opacity: 0.48,
+        depthTest: false,
+        depthWrite: false,
+        blending: AdditiveBlending
+      });
+      const flash = new Mesh(PLANE_CLEAR_FLASH_GEOMETRY, flashMaterial);
+      flash.renderOrder = 86;
+      flash.userData.preserveGeometry = true;
+      root.add(flash);
+
+      const particleMaterial = new PointsMaterial({
+        color: mixColorNumber(color, 0xffffff, 0.78),
+        size: CELL_SIZE * 0.2,
+        transparent: true,
+        opacity: 0.95,
+        depthTest: false,
+        depthWrite: false,
+        blending: AdditiveBlending
+      });
+      const particleCloud = new Points(this.createPlaneClearParticleGeometry(index), particleMaterial);
+      particleCloud.renderOrder = 88;
+      root.add(particleCloud);
+
+      const outwardVector = new Vector3(
+        offsetX * 0.55,
+        offsetY * 0.55,
+        -0.72 - deterministicNoise(index, 17) * 0.38
+      );
+      if (outwardVector.lengthSq() < 0.001) {
+        outwardVector.set(0, 0, -1);
+      }
+      outwardVector.normalize();
+
+      blockEffects.push({
+        root,
+        flash,
+        particleCloud,
+        flashMaterial,
+        particleMaterial,
+        startPosition: new Vector3(centerX, centerY, centerZ),
+        outwardVector,
+        staggerMs
+      });
+      maxStaggerMs = Math.max(maxStaggerMs, staggerMs);
+      group.add(root);
+    });
+
+    return {
+      group,
+      blocks: blockEffects,
+      sweeps: sweepEffects,
+      totalMs: maxStaggerMs + PLANE_CLEAR_EFFECT_MS
+    };
+  }
+
+  private createPlaneClearSweeps(
+    blocks: readonly SettledBlockSnapshot[]
+  ): PlaneClearSweepEffect[] {
+    const { width, height, depth } = this.gameState.getDimensions();
+    const planeIndices = [...new Set(blocks.map((block) => block.coordinate.z))].sort(
+      (a, b) => b - a
+    );
+
+    return planeIndices.map((z, index) => {
+      const color = getBlockOutLayerColor(depth, z);
+      const material = new MeshBasicMaterial({
+        color: mixColorNumber(color, 0xffffff, 0.82),
+        transparent: true,
+        opacity: 0,
+        depthTest: false,
+        depthWrite: false,
+        side: DoubleSide,
+        blending: AdditiveBlending
+      });
+      const sweep = new Mesh(PLANE_CLEAR_SWEEP_GEOMETRY, material);
+      sweep.name = 'plane-clear-sweep';
+      sweep.position.set(
+        (width * CELL_SIZE) / 2,
+        (height * CELL_SIZE) / 2,
+        (z + 0.5) * CELL_SIZE
+      );
+      sweep.scale.set(CELL_SIZE * 0.08, height * CELL_SIZE * 1.08, 1);
+      sweep.renderOrder = 84;
+      sweep.visible = false;
+      sweep.userData.preserveGeometry = true;
+
+      return {
+        sweep,
+        material,
+        baseScaleX: width * CELL_SIZE * 1.08,
+        baseScaleY: height * CELL_SIZE * 1.08,
+        staggerMs: index * 36
+      };
+    });
+  }
+
+  private createPlaneClearParticleGeometry(seed: number): BufferGeometry {
+    const vertices: number[] = [];
+    for (let i = 0; i < 12; i += 1) {
+      const angle = deterministicNoise(seed * 31 + i, 3) * Math.PI * 2;
+      const radius = CELL_SIZE * (0.1 + deterministicNoise(seed * 31 + i, 5) * 0.36);
+      const z = CELL_SIZE * (deterministicNoise(seed * 31 + i, 7) - 0.5) * 0.7;
+      vertices.push(Math.cos(angle) * radius, Math.sin(angle) * radius, z);
+    }
+
+    const geometry = new BufferGeometry();
+    geometry.setAttribute('position', new Float32BufferAttribute(vertices, 3));
+    return geometry;
+  }
+
+  private startPlaneClearEffectAnimation(): void {
+    if (typeof requestAnimationFrame !== 'function') {
+      return;
+    }
+
+    const animate = (timestamp: number) => {
+      if (!this.planeClearEffectGroup) {
+        return;
+      }
+      if (this.planeClearEffectStartedAt === 0) {
+        this.planeClearEffectStartedAt = timestamp;
+      }
+
+      const elapsedMs = timestamp - this.planeClearEffectStartedAt;
+      this.updatePlaneClearEffect(elapsedMs);
+      this.renderFrame();
+
+      if (elapsedMs < this.planeClearEffectTotalMs && !this.disposed) {
+        this.planeClearEffectFrameId = requestAnimationFrame(animate);
+        return;
+      }
+
+      this.disposePlaneClearEffect();
+      this.renderFrame();
+    };
+
+    this.planeClearEffectFrameId = requestAnimationFrame(animate);
+  }
+
+  private updatePlaneClearEffect(elapsedMs: number): void {
+    this.planeClearSweepEffects.forEach((effect) => {
+      const progress = clamp((elapsedMs - effect.staggerMs) / PLANE_CLEAR_SWEEP_MS, 0, 1);
+      effect.sweep.visible = elapsedMs >= effect.staggerMs && progress < 1;
+      const eased = easeOutCubic(progress);
+      effect.sweep.scale.set(
+        effect.baseScaleX * (0.08 + eased * 0.92),
+        effect.baseScaleY,
+        1
+      );
+      effect.material.opacity = Math.max(0, 0.34 * (1 - eased));
+    });
+
+    this.planeClearBlockEffects.forEach((effect, index) => {
+      const progress = clamp((elapsedMs - effect.staggerMs) / PLANE_CLEAR_EFFECT_MS, 0, 1);
+      effect.root.visible = elapsedMs >= effect.staggerMs && progress < 1;
+      if (!effect.root.visible) {
+        return;
+      }
+
+      const eased = easeOutCubic(progress);
+      const fadeProgress = clamp((progress - 0.16) / 0.84, 0, 1);
+      const fade = 1 - easeOutCubic(fadeProgress);
+      effect.root.position
+        .copy(effect.startPosition)
+        .addScaledVector(effect.outwardVector, CELL_SIZE * 0.72 * eased);
+      effect.root.rotation.x = eased * (0.6 + deterministicNoise(index, 23) * 0.7);
+      effect.root.rotation.y = eased * (0.5 + deterministicNoise(index, 29) * 0.8);
+      effect.flash.scale.setScalar(1 + eased * 0.44);
+      effect.particleCloud.scale.setScalar(0.25 + eased * 2.8);
+      effect.flashMaterial.opacity = 0.48 * fade;
+      effect.particleMaterial.opacity = Math.sin(progress * Math.PI) * 0.95;
+    });
   }
 
   private createLandingGhostGroup(polyCube: ActivePolyCubeSnapshot): Group {
@@ -2327,6 +2592,24 @@ export class Renderer {
     this.glowGroup = null;
   }
 
+  private disposePlaneClearEffect(): void {
+    if (this.planeClearEffectFrameId !== null) {
+      cancelAnimationFrame(this.planeClearEffectFrameId);
+      this.planeClearEffectFrameId = null;
+    }
+
+    if (this.planeClearEffectGroup) {
+      this.disposeObjectResources(this.planeClearEffectGroup);
+      this.scene?.remove(this.planeClearEffectGroup);
+    }
+
+    this.planeClearEffectGroup = null;
+    this.planeClearEffectStartedAt = 0;
+    this.planeClearEffectTotalMs = 0;
+    this.planeClearBlockEffects = [];
+    this.planeClearSweepEffects = [];
+  }
+
   private disposeObjectResources(root: Group | Scene): void {
     const geometries = new Set<BufferGeometry>();
     const materials = new Set<Material>();
@@ -2716,6 +2999,11 @@ export class Renderer {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function easeOutCubic(value: number): number {
+  const progress = clamp(value, 0, 1);
+  return 1 - Math.pow(1 - progress, 3);
 }
 
 function winterNatureAsset(fileName: string): SceneAssetDefinition {

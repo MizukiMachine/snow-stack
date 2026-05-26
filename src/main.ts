@@ -1,22 +1,10 @@
 import './styles.css';
-import forestFloorBackgroundUrl from './assets/backgrounds/snow-ground-forest-floor-d-v2.png';
-import softFreshBackgroundUrl from './assets/backgrounds/snow-ground-soft-fresh-a-v2.png';
-import thinIceBackgroundUrl from './assets/backgrounds/snow-ground-thin-ice-c-v2.png';
+import softFreshWidescreenBackgroundUrl from './assets/backgrounds/snow-ground-soft-fresh-a-widescreen.png';
 import { GameEngine } from './GameEngine';
 
 type AppLogEntry = {
   level: 'error' | 'warn';
   message: string;
-};
-
-const BACKGROUND_IMAGE_URLS = [
-  forestFloorBackgroundUrl,
-  softFreshBackgroundUrl,
-  thinIceBackgroundUrl
-] as const;
-
-const getRandomBackgroundImageUrl = (): string => {
-  return BACKGROUND_IMAGE_URLS[Math.floor(Math.random() * BACKGROUND_IMAGE_URLS.length)];
 };
 
 declare global {
@@ -61,7 +49,10 @@ if (!root) {
 
 const viewport = document.createElement('div');
 viewport.className = 'app-viewport';
-viewport.style.setProperty('--game-shell-background-image', `url("${getRandomBackgroundImageUrl()}")`);
+viewport.style.setProperty(
+  '--game-shell-background-image',
+  `url("${softFreshWidescreenBackgroundUrl}")`
+);
 root.appendChild(viewport);
 
 const engine = new GameEngine();

@@ -54,10 +54,10 @@ button {
 .game-shell {
   isolation: isolate;
   background-color: #dcefff;
-  background-image: var(--game-shell-background-image, url("./assets/backgrounds/snow-ground-soft-fresh-a-v2.png"));
+  background-image: var(--game-shell-background-image, url("./assets/backgrounds/snow-ground-soft-fresh-a-widescreen.png"));
   background-position: center;
-  background-repeat: repeat;
-  background-size: 720px 720px;
+  background-repeat: no-repeat;
+  background-size: cover;
 }
 
 .ui-layer::before {
