@@ -69,7 +69,7 @@ button {
 
 .scene-layer {
   position: absolute;
-  inset: 0 clamp(116px, 12vw, 224px) 102px 0;
+  inset: 0 0 104px 0;
   z-index: 2;
 }
 
@@ -331,13 +331,14 @@ button {
 }
 
 .right-rail {
-  top: 32px;
-  right: 26px;
-  bottom: 130px;
-  width: min(528px, calc(100vw - 56px));
+  top: 22px;
+  right: 22px;
+  bottom: 116px;
+  width: min(462px, calc(100vw - 56px));
   display: grid;
-  grid-template-columns: 230px minmax(244px, 1fr);
-  gap: 20px;
+  grid-template-columns: 196px minmax(228px, 1fr);
+  align-content: start;
+  gap: 14px;
   pointer-events: auto;
   z-index: 2;
 }
@@ -350,12 +351,26 @@ button {
   gap: 10px;
 }
 
+.telemetry-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.telemetry-stack .metric-card:nth-child(3),
+.telemetry-stack .metric-card:nth-child(4) {
+  min-height: 96px;
+}
+
+.telemetry-stack .metric-card:nth-child(5) {
+  grid-column: 1 / -1;
+}
+
 .panel {
   padding: 17px 18px;
 }
 
 .metric-card {
-  min-height: 112px;
+  min-height: 88px;
 }
 
 .metric-value {
@@ -372,7 +387,7 @@ button {
 
 .metric-value-small {
   font-family: var(--font-ui);
-  font-size: 25px;
+  font-size: 22px;
   font-weight: 900;
   letter-spacing: 0;
 }
@@ -389,7 +404,7 @@ button {
 }
 
 .hold-slot {
-  min-height: 80px;
+  min-height: 72px;
 }
 
 .queue-list > span,
@@ -415,7 +430,7 @@ button {
 .poly-preview {
   min-width: 0;
   width: 100%;
-  height: 86px;
+  height: 72px;
   display: grid;
   place-items: center;
   color: #0b3d9a;
@@ -430,7 +445,7 @@ button {
 
 .piece-preview-svg {
   width: min(100%, 168px);
-  height: 74px;
+  height: 62px;
   display: block;
   overflow: visible;
   filter:
@@ -540,21 +555,21 @@ button {
 
 .controls-panel {
   flex: 1 1 auto;
-  min-height: 454px;
+  min-height: 0;
 }
 
 .control-grid {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .control-row {
   display: grid;
-  grid-template-columns: minmax(112px, 132px) 1fr;
-  gap: 14px;
+  grid-template-columns: minmax(92px, 112px) 1fr;
+  gap: 9px;
   align-items: center;
   color: #082a78;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.1;
 }
@@ -566,9 +581,9 @@ button {
 }
 
 .keys b {
-  min-width: 26px;
-  height: 25px;
-  padding: 0 7px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
   border-radius: 5px;
   border: 1px solid rgba(39, 103, 175, 0.54);
   background: rgba(255, 255, 255, 0.42);
@@ -578,7 +593,7 @@ button {
   gap: 4px;
   color: #082d80;
   font-family: var(--font-number);
-  font-size: 14px;
+  font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums lining-nums;
   box-shadow:
@@ -587,13 +602,13 @@ button {
 }
 
 .keys .wide-key {
-  min-width: 56px;
+  min-width: 48px;
 }
 
 .keys .combo-key {
-  min-width: 132px;
+  min-width: 104px;
   padding: 0 6px;
-  font-size: 11px;
+  font-size: 9px;
 }
 
 .keys .key-icon {
@@ -613,7 +628,7 @@ button {
 
 .action-row {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .action-button,
@@ -769,8 +784,8 @@ button {
 }
 
 .settings-panel {
-  right: 544px;
-  top: 32px;
+  right: 488px;
+  top: 22px;
   width: 336px;
   padding: 22px 24px;
   z-index: 5;
@@ -791,9 +806,9 @@ button {
 .ui-layer[data-start-menu="true"] .settings-panel {
   left: 50%;
   right: auto;
-  top: clamp(156px, 20vh, 190px);
-  width: min(1040px, calc(100vw - 72px));
-  padding: 28px 30px 30px;
+  top: clamp(170px, 22vh, 210px);
+  width: min(880px, calc(100vw - 96px));
+  padding: 24px 28px 28px;
   transform: translateX(-50%);
   z-index: 7;
   filter: drop-shadow(0 20px 46px rgba(47, 137, 207, 0.24));
@@ -894,15 +909,15 @@ button {
 }
 
 .ui-layer[data-start-menu="true"] .setup-choice {
-  min-height: 92px;
-  font-size: 22px;
+  min-height: 76px;
+  font-size: 20px;
 }
 
 .setup-submit {
   grid-column: 1 / -1;
-  min-height: 72px;
+  min-height: 62px;
   margin-top: 2px;
-  font-size: 23px;
+  font-size: 21px;
   font-weight: 900;
 }
 
@@ -1064,8 +1079,8 @@ button {
   }
 
   .right-rail {
-    width: 478px;
-    grid-template-columns: 206px minmax(230px, 1fr);
+    width: 430px;
+    grid-template-columns: 180px minmax(236px, 1fr);
     gap: 14px;
   }
 
@@ -1108,7 +1123,7 @@ button {
   }
 
   .controls-panel {
-    min-height: 326px;
+    min-height: 0;
   }
 
   .control-grid {
@@ -1137,7 +1152,7 @@ button {
   }
 
   .action-button {
-    min-height: 46px;
+    min-height: 44px;
     font-size: 15px;
   }
 
@@ -1254,7 +1269,7 @@ button {
 
   .controls-panel {
     flex: 0 0 auto;
-    min-height: 326px;
+    min-height: 0;
   }
 
   .control-grid {
@@ -1283,7 +1298,7 @@ button {
   }
 
   .action-button {
-    min-height: 46px;
+    min-height: 44px;
     font-size: 15px;
   }
 
@@ -1301,7 +1316,7 @@ button {
 
   .ui-layer[data-start-menu="true"] .settings-panel {
     top: 168px;
-    width: min(920px, calc(100vw - 72px));
+    width: min(820px, calc(100vw - 72px));
     padding: 20px 26px 22px;
   }
 
@@ -1336,12 +1351,13 @@ button {
   .app-viewport,
   .game-shell {
     height: auto;
-    min-height: 2400px;
+    min-height: 1840px;
   }
 
   .ui-layer {
     --mobile-depth-guide-top: 650px;
     --mobile-depth-guide-reserved-height: clamp(274px, 32vw, 332px);
+    --mobile-status-reserved-height: 264px;
   }
 
   .scene-canvas {
@@ -1382,12 +1398,12 @@ button {
   }
 
   .ui-layer[data-depth-layers="0"] .right-rail {
-    top: var(--mobile-depth-guide-top);
+    top: calc(var(--mobile-depth-guide-top) + var(--mobile-status-reserved-height) + 22px);
   }
 
   .right-rail {
     top: calc(
-      var(--mobile-depth-guide-top) + var(--mobile-depth-guide-reserved-height) + 28px
+      var(--mobile-depth-guide-top) + var(--mobile-depth-guide-reserved-height) + var(--mobile-status-reserved-height) + 50px
     );
     left: 14px;
     right: 14px;
@@ -1429,16 +1445,46 @@ button {
   }
 
   .status-bar {
+    top: calc(var(--mobile-depth-guide-top) + var(--mobile-depth-guide-reserved-height) + 28px);
     left: 14px;
     right: 14px;
-    bottom: 14px;
+    bottom: auto;
+    min-height: 0;
+    padding: 12px 18px;
     grid-template-columns: 1fr;
-    gap: 12px;
+    gap: 9px;
   }
 
   .ui-layer[data-mission-active="false"] .status-bar,
   .ui-layer[data-mission-active="true"] .status-bar {
     grid-template-columns: 1fr;
+  }
+
+  .ui-layer[data-depth-layers="0"] .status-bar {
+    top: var(--mobile-depth-guide-top);
+  }
+
+  .ui-layer[data-start-menu="true"] .status-bar {
+    display: none;
+  }
+
+  .status-pill,
+  .status-mission,
+  .status-hint {
+    gap: 10px;
+  }
+
+  .status-pill > .hud-icon,
+  .status-mission > .hud-icon,
+  .status-hint > .hud-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .status-state,
+  .status-hint [data-role="footer-tip"],
+  .status-meta [data-role="timer"] {
+    font-size: 21px;
   }
 
   .settings-panel {
@@ -1484,12 +1530,13 @@ button {
 @media (max-width: 520px) {
   .app-viewport,
   .game-shell {
-    min-height: 2560px;
+    min-height: 1960px;
   }
 
   .ui-layer {
     --mobile-depth-guide-top: 570px;
     --mobile-depth-guide-reserved-height: 332px;
+    --mobile-status-reserved-height: 264px;
   }
 
   .brand-panel {
@@ -1518,7 +1565,7 @@ button {
   }
 
   .ui-layer[data-depth-layers="0"] .right-rail {
-    top: var(--mobile-depth-guide-top);
+    top: calc(var(--mobile-depth-guide-top) + var(--mobile-status-reserved-height) + 22px);
   }
 
   .telemetry-stack {
