@@ -1,15 +1,15 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  publicDir: false,
+  assetsInclude: ['**/*.fbx', '**/*.gltf'],
   build: {
     chunkSizeWarningLimit: 700
   },
   server: {
     open: true,
     watch: {
-      ignored: ['**/public/assets/Cube World - Aug 2023/**', '**/dist/**'],
-      usePolling: true,
-      interval: 1000
+      ignored: ['**/public/**', '**/dist/**', '**/docs/**', '**/.mcpheadlessbrowser/**']
     }
   },
   test: {

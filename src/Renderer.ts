@@ -200,8 +200,11 @@ const CAMERA_SETTINGS = {
   initialRadiusMultiplier: 1.55
 } as const;
 
-const CUBE_WORLD_ASSET_ROOT = '/assets/CubeWorld';
-const ULTIMATE_NATURE_ASSET_ROOT = '/assets/UltimateNaturePack/UltimateNaturePack/FBX';
+const MODEL_ASSET_URLS = import.meta.glob<string>('./assets/models/**/*.{fbx,gltf}', {
+  eager: true,
+  query: '?url',
+  import: 'default'
+});
 const SETTLED_BLOCK_ASSET_SCALE = CELL_SIZE * 0.5;
 const SETTLED_BLOCK_FALLBACK_CORE_SIZE = CELL_SIZE;
 const DEFAULT_BLOCK_FALLBACK_CORE_SIZE = CELL_SIZE * 0.84;
@@ -223,7 +226,7 @@ const NATURE_TEMPLATE_MAX_SPAN = CELL_SIZE * 2.35;
 const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, SceneAssetDefinition> = Object.freeze({
   wallIce: {
     loader: 'gltf',
-    path: `${CUBE_WORLD_ASSET_ROOT}/Pixel%20Blocks/glTF/Ice.gltf`,
+    path: sceneModelAsset('cube-world/pixel-blocks/Ice.gltf'),
     palette: 'cubeWorld',
     tint: 0xc3f3ff,
     opacity: 1,
@@ -231,7 +234,7 @@ const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, SceneAssetDefinition> = Objec
   },
   blockCore: {
     loader: 'gltf',
-    path: `${CUBE_WORLD_ASSET_ROOT}/Blocks/glTF/Block_Blank.gltf`,
+    path: sceneModelAsset('cube-world/blocks/Block_Blank.gltf'),
     palette: 'cubeWorld',
     tint: 0xffffff,
     opacity: 0.12,
@@ -239,7 +242,7 @@ const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, SceneAssetDefinition> = Objec
   },
   settledIceBlock: {
     loader: 'gltf',
-    path: `${CUBE_WORLD_ASSET_ROOT}/Blocks/glTF/Block_Ice.gltf`,
+    path: sceneModelAsset('cube-world/blocks/Block_Ice.gltf'),
     palette: 'cubeWorld',
     opacity: 0.96,
     depthWrite: true
@@ -3009,10 +3012,18 @@ function easeOutCubic(value: number): number {
 function winterNatureAsset(fileName: string): SceneAssetDefinition {
   return {
     loader: 'fbx',
-    path: `${ULTIMATE_NATURE_ASSET_ROOT}/${fileName}`,
+    path: sceneModelAsset(`ultimate-nature/${fileName}`),
     palette: 'winterNature',
     depthWrite: true
   };
+}
+
+function sceneModelAsset(path: string): string {
+  const url = MODEL_ASSET_URLS[`./assets/models/${path}`];
+  if (!url) {
+    throw new Error(`Scene model asset not found: ${path}`);
+  }
+  return url;
 }
 
 function isBlockSet(value: string | undefined): value is BlockSet {
