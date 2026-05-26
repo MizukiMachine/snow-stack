@@ -27,6 +27,8 @@ type RendererAccess = {
     depthLayer?: number,
     settledAssetKey?: 'settledIceBlock'
   ) => Group;
+  createBackgroundDecorationLayer: () => Group;
+  createCubeWorldFieldLayer: () => Group;
   createDepthLandingGlow: () => Group;
   createFieldBounds: () => Group;
   createSnowWallTexture: () => CanvasTexture;
@@ -369,6 +371,33 @@ describe('Renderer BlockOut layer coloring', () => {
     );
     expect(readFirstPointCoordinate(fieldBounds, 'landing-guide-grid', 'z')).toBeLessThan(
       dimensions.depth * CELL_SIZE
+    );
+  });
+
+  it('keeps snow scenery in a separate background layer from the pit ice assets', () => {
+    const state = new GameState({ dimensions: { width: 3, height: 3, depth: 6 } });
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const wallTemplate = new Group();
+    const natureTemplate = new Group();
+    wallTemplate.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()));
+    natureTemplate.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()));
+    access.assetTemplates.set('wallIce', wallTemplate);
+    access.assetTemplates.set('snowPine1', natureTemplate);
+
+    const fieldLayer = access.createCubeWorldFieldLayer();
+    const backgroundLayer = access.createBackgroundDecorationLayer();
+    const natureGroup = backgroundLayer.getObjectByName(
+      'ultimate-nature-snow-decorations'
+    ) as Group | undefined;
+
+    expect(fieldLayer.name).toBe('cube-world-field-assets');
+    expect(fieldLayer.getObjectByName('ultimate-nature-snow-decorations')).toBeUndefined();
+    expect(backgroundLayer.name).toBe('background-scene-decorations');
+    expect(natureGroup).toBeDefined();
+    expect(natureGroup?.children.length).toBeGreaterThan(0);
+    expect(natureGroup?.children.every((child) => child.name.startsWith('ultimate-nature-'))).toBe(
+      true
     );
   });
 

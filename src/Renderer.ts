@@ -199,6 +199,11 @@ const CAMERA_SETTINGS = {
   initialPhi: Math.PI / 2,
   initialRadiusMultiplier: 1.55
 } as const;
+const BACKGROUND_CAMERA_SETTINGS = {
+  fov: 34,
+  far: 2000,
+  radiusMultiplier: 1.05
+} as const;
 
 const MODEL_ASSET_URLS = import.meta.glob<string>('./assets/models/**/*.{fbx,gltf}', {
   eager: true,
@@ -294,13 +299,16 @@ export class Renderer {
   private readonly gameState: GameState;
   private readonly callbacks: RendererCallbacks;
   private scene: Scene | null = null;
+  private backgroundScene: Scene | null = null;
   private camera: PerspectiveCamera | null = null;
+  private backgroundCamera: PerspectiveCamera | null = null;
   private renderer: WebGLRenderer | null = null;
   private container: HTMLElement | null = null;
   private canvasHost: HTMLDivElement | null = null;
   private hudElement: HTMLDivElement | null = null;
   private fieldBoundsGroup: Group | null = null;
   private assetFieldLayer: Group | null = null;
+  private backgroundDecorationsGroup: Group | null = null;
   private activePolyCubeGroup: Group | null = null;
   private landingGhostGroup: Group | null = null;
   private footprintGroup: Group | null = null;
@@ -375,15 +383,28 @@ export class Renderer {
     scene.background = null;
     scene.fog = null;
 
+    const backgroundScene = new Scene();
+    backgroundScene.background = null;
+    backgroundScene.fog = null;
+
     const camera = new PerspectiveCamera(CAMERA_SETTINGS.fov, this.getAspectRatio(), 0.1, 1000);
     this.configureInitialCameraOrbit(camera);
     this.applyCameraOrbit(camera);
+
+    const backgroundCamera = new PerspectiveCamera(
+      BACKGROUND_CAMERA_SETTINGS.fov,
+      this.getAspectRatio(),
+      0.1,
+      BACKGROUND_CAMERA_SETTINGS.far
+    );
+    this.applyBackgroundCameraOrbit(backgroundCamera);
 
     const renderer = new WebGLRenderer({
       antialias: true,
       alpha: true,
       powerPreference: 'high-performance'
     });
+    renderer.autoClear = false;
     renderer.outputColorSpace = SRGBColorSpace;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
@@ -394,6 +415,7 @@ export class Renderer {
 
     container.appendChild(this.createHudElement());
 
+    backgroundScene.add(this.createLighting());
     scene.add(this.createLighting());
     const fieldBounds = this.createFieldBounds();
     this.fieldBoundsGroup = fieldBounds;
@@ -401,8 +423,13 @@ export class Renderer {
     scene.add(this.createDepthLandingGlow());
 
     this.scene = scene;
+    this.backgroundScene = backgroundScene;
     this.camera = camera;
+    this.backgroundCamera = backgroundCamera;
     this.renderer = renderer;
+    if (this.assetsReady) {
+      this.rebuildBackgroundDecorations();
+    }
 
     this.resizeHandler = () => this.onResize();
     window.addEventListener('resize', this.resizeHandler);
@@ -429,6 +456,11 @@ export class Renderer {
     if (!this.scene || !this.camera || !this.renderer) {
       return;
     }
+    this.renderer.clear();
+    if (this.backgroundScene && this.backgroundCamera) {
+      this.renderer.render(this.backgroundScene, this.backgroundCamera);
+      this.renderer.clearDepth();
+    }
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -446,6 +478,10 @@ export class Renderer {
       this.disposeObjectResources(this.scene);
       this.scene.clear();
     }
+    if (this.backgroundScene) {
+      this.disposeObjectResources(this.backgroundScene);
+      this.backgroundScene.clear();
+    }
     if (!shouldPreserveLoadedAssets) {
       this.disposeLoadedCubeWorldAssets();
     }
@@ -455,12 +491,15 @@ export class Renderer {
     this.canvasHost?.remove();
     this.renderer = null;
     this.scene = null;
+    this.backgroundScene = null;
     this.camera = null;
+    this.backgroundCamera = null;
     this.hudElement = null;
     this.container = null;
     this.canvasHost = null;
     this.fieldBoundsGroup = null;
     this.assetFieldLayer = null;
+    this.backgroundDecorationsGroup = null;
     this.activePolyCubeGroup = null;
     this.landingGhostGroup = null;
     this.footprintGroup = null;
@@ -1377,6 +1416,7 @@ export class Renderer {
     }
 
     this.rebuildCubeWorldFieldLayer();
+    this.rebuildBackgroundDecorations();
     this.updateSettledBlocks(this.gameState.getSettledBlocks());
     this.updateActivePolyCube(this.gameState.getActivePolyCube());
     this.renderFrame();
@@ -1493,12 +1533,36 @@ export class Renderer {
     this.fieldBoundsGroup.add(this.assetFieldLayer);
   }
 
+  private rebuildBackgroundDecorations(): void {
+    if (!this.backgroundScene) {
+      return;
+    }
+
+    if (this.backgroundDecorationsGroup) {
+      this.backgroundScene.remove(this.backgroundDecorationsGroup);
+      this.disposeObjectResources(this.backgroundDecorationsGroup);
+    }
+
+    this.backgroundDecorationsGroup = this.createBackgroundDecorationLayer();
+    this.backgroundScene.add(this.backgroundDecorationsGroup);
+  }
+
   private createCubeWorldFieldLayer(): Group {
     const group = new Group();
     group.name = 'cube-world-field-assets';
     const { width, height, depth } = this.gameState.getDimensions();
 
     this.addCubeWorldIceWell(group, width, height, depth);
+    return group;
+  }
+
+  private createBackgroundDecorationLayer(): Group {
+    const group = new Group();
+    const origin = this.getFieldOrigin();
+    const { width, height } = this.gameState.getDimensions();
+    group.name = 'background-scene-decorations';
+    group.position.set(origin.x, origin.y, origin.z);
+
     this.addUltimateNatureDecorations(group, width, height);
     return group;
   }
@@ -2495,7 +2559,22 @@ export class Renderer {
   }
 
   private applyCameraOrbit(camera: PerspectiveCamera): void {
-    const { radius, theta, phi, target } = this.cameraOrbit;
+    this.applyCameraOrbitAtRadius(camera, this.cameraOrbit.radius);
+  }
+
+  private applyBackgroundCameraOrbit(camera: PerspectiveCamera): void {
+    const foregroundHalfFov = (CAMERA_SETTINGS.fov * Math.PI) / 360;
+    const backgroundHalfFov = (camera.fov * Math.PI) / 360;
+    const radius =
+      this.cameraOrbit.radius *
+      (Math.tan(foregroundHalfFov) / Math.tan(backgroundHalfFov)) *
+      BACKGROUND_CAMERA_SETTINGS.radiusMultiplier;
+
+    this.applyCameraOrbitAtRadius(camera, radius);
+  }
+
+  private applyCameraOrbitAtRadius(camera: PerspectiveCamera, radius: number): void {
+    const { theta, phi, target } = this.cameraOrbit;
     const sinPhi = Math.sin(phi);
     const x = target.x + radius * sinPhi * Math.cos(theta);
     const y = target.y + radius * Math.cos(phi);
@@ -2530,8 +2609,14 @@ export class Renderer {
       return;
     }
 
-    this.camera.aspect = this.getAspectRatio();
+    const aspectRatio = this.getAspectRatio();
+    this.camera.aspect = aspectRatio;
     this.camera.updateProjectionMatrix();
+    if (this.backgroundCamera) {
+      this.backgroundCamera.aspect = aspectRatio;
+      this.backgroundCamera.updateProjectionMatrix();
+      this.applyBackgroundCameraOrbit(this.backgroundCamera);
+    }
     const renderSize = this.getRenderSize();
     this.renderer.setSize(renderSize.width, renderSize.height, false);
     this.renderFrame();
