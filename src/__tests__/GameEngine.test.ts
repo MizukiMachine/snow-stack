@@ -44,12 +44,15 @@ describe('GameEngine BlockOut controls', () => {
     expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 0, z: 0 }]);
   });
 
-  it('supports BlockOut diagonal movement with numeric keys', () => {
+  it('ignores removed numeric and diagonal movement keys', () => {
     const { state } = startEngineWithPiece(0);
+    const blocksBeforeKeys = state.getActivePolyCube()?.blocks;
 
-    pressKey('Digit9');
+    for (const code of ['Digit8', 'Numpad8', 'Digit9', 'Numpad9', 'PageUp']) {
+      pressKey(code);
+    }
 
-    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 1, z: 0 }]);
+    expect(state.getActivePolyCube()?.blocks).toEqual(blocksBeforeKeys);
   });
 
   it('soft drops with Shift without locking immediately', () => {
@@ -115,8 +118,8 @@ describe('GameEngine BlockOut controls', () => {
       remainingValue: 0,
       active: true,
       complete: true,
-      hint: '0 planes left in the sprint.',
-      completionMessage: 'Plane sprint complete.'
+      hint: '0 planes left in the sprint',
+      completionMessage: 'Plane sprint complete'
     });
     const { engine, renderer } = startEngine(state);
 
@@ -302,12 +305,14 @@ describe('GameEngine BlockOut controls', () => {
     expect(clearedBlocks.map((block) => block.coordinate.z)).toEqual(Array(9).fill(5));
   });
 
-  it('syncs paused HUD state when KeyP toggles pause', () => {
-    const { renderer } = startEngineWithPiece(0);
+  it('ignores the removed KeyP pause shortcut', () => {
+    const { state, renderer } = startEngineWithPiece(0);
 
     pressKey('KeyP');
+    pressKey('ArrowRight');
 
-    expect(lastHudCall(renderer)[7]).toBe(true);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 0, z: 0 }]);
+    expect(lastHudCall(renderer)[7]).toBe(false);
   });
 
   it('ends the current run when Escape is pressed', () => {
@@ -324,10 +329,10 @@ describe('GameEngine BlockOut controls', () => {
   it('does not count paused time when Escape ends the current run', () => {
     const nowSpy = vi.spyOn(performance, 'now');
     nowSpy.mockReturnValue(1_000);
-    const { renderer } = startEngineWithPiece(0);
+    const { engine, renderer } = startEngineWithPiece(0);
 
     nowSpy.mockReturnValue(2_000);
-    pressKey('KeyP');
+    togglePause(engine);
 
     nowSpy.mockReturnValue(7_000);
     pressKey('Escape');
@@ -336,15 +341,16 @@ describe('GameEngine BlockOut controls', () => {
     expect(lastHudCall(renderer)[7]).toBe(false);
   });
 
-  it('restarts with KeyR and resets BlockOut score state', () => {
+  it('ignores the removed KeyR restart shortcut', () => {
     const { state } = startEngineWithPiece(0);
-    pressKey('Space');
+    pressKey('ArrowRight');
+    const blocksBeforeRestartShortcut = state.getActivePolyCube()?.blocks;
 
     pressKey('KeyR');
 
     expect(state.getScore()).toBe(0);
     expect(state.getSettledBlocks()).toHaveLength(0);
-    expect(state.getActivePolyCube()).not.toBeNull();
+    expect(state.getActivePolyCube()?.blocks).toEqual(blocksBeforeRestartShortcut);
   });
 
   it('opens the rule selection screen by default and holds the run', () => {
@@ -490,6 +496,10 @@ function advanceGame(engine: GameEngine, timestamp: number): void {
 
 function toggleSettings(engine: GameEngine): void {
   (engine as unknown as { toggleSettings: () => void }).toggleSettings();
+}
+
+function togglePause(engine: GameEngine): void {
+  (engine as unknown as { togglePause: () => void }).togglePause();
 }
 
 function applySetup(engine: GameEngine, setup: GameStateOptions): void {

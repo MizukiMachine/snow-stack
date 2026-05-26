@@ -168,21 +168,9 @@ export class GameEngine {
       return;
     }
 
-    if (event.code === 'KeyR') {
-      event.preventDefault();
-      this.restart();
-      return;
-    }
-
     if (event.code === 'Escape') {
       event.preventDefault();
       this.endGame();
-      return;
-    }
-
-    if (event.code === 'KeyP') {
-      event.preventDefault();
-      this.togglePause();
       return;
     }
 

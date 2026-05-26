@@ -872,7 +872,7 @@ export class Renderer {
       this.setText(
         overlay,
         '[data-role="overlay-title"]',
-        missionComplete ? 'ミッション達成' : 'ゲームオーバー'
+        missionComplete ? 'ミッション達成' : 'Game Over'
       );
       this.setText(
         overlay,
@@ -883,7 +883,7 @@ export class Renderer {
         overlay,
         '[data-role="overlay-footnote"]',
         missionComplete
-          ? 'ルールを選び直すか、同じ設定で再挑戦できます。'
+          ? 'ルールを選び直すか、同じ設定で再挑戦できます'
           : '視点を回して、次の配置を探せます。'
       );
       this.setText(overlay, '[data-role="overlay-score"]', this.formatNumber(this.hudState.score));
@@ -953,14 +953,14 @@ export class Renderer {
           <div class="brand-subtitle">3D POLYCUBE PUZZLE</div>
         </div>
       </div>
-      <section class="info-card layer-guide-card" aria-label="深さレイヤーカラー">
-        <div class="card-title">${icon('layers')}<span>深さ</span></div>
+      <section class="info-card layer-guide-card" aria-label="Depth layer colors">
+        <div class="card-title">${icon('layers')}<span>Depth</span></div>
         <div class="layer-guide-stack" data-role="layer-guide-list"></div>
       </section>
       <aside class="right-rail">
         <div class="telemetry-stack">
           <section class="panel metric-card">
-            <div class="panel-heading">${icon('snowflake')}<span>スコア</span></div>
+            <div class="panel-heading">${icon('snowflake')}<span>Score</span></div>
             <strong class="metric-value" data-role="score">0</strong>
           </section>
           <section class="panel metric-card">
@@ -968,15 +968,15 @@ export class Renderer {
             <div class="metric-inline"><strong class="metric-value" data-role="lines">000</strong><div class="meter meter-bars" data-role="layers-meter">${renderMeterSegments(8)}</div></div>
           </section>
           <section class="panel metric-card queue-card">
-            <div class="panel-heading">${icon('snowflake')}<span>ネクスト</span></div>
+            <div class="panel-heading">${icon('snowflake')}<span>Next</span></div>
             <div class="queue-list" data-role="queue-list"><span>--</span></div>
           </section>
           <section class="panel metric-card hold-card">
-            <div class="panel-heading">${icon('cube')}<span>ホールド</span></div>
+            <div class="panel-heading">${icon('cube')}<span>Hold</span></div>
             <div class="hold-slot" data-role="hold-piece"></div>
           </section>
           <section class="panel metric-card">
-            <div class="panel-heading">${icon('snowflake')}<span>難易度</span></div>
+            <div class="panel-heading">${icon('snowflake')}<span>LEVEL</span></div>
             <strong class="metric-value metric-value-small" data-role="block-set">易しい</strong>
           </section>
         </div>
@@ -1004,7 +1004,7 @@ export class Renderer {
         <h3>${icon('settings')}<span data-role="setup-title">ゲーム開始</span></h3>
         <form class="setup-form" data-role="setup-form">
           <div class="setup-section">
-            <span class="setup-section-heading">難易度</span>
+            <span class="setup-section-heading">LEVEL</span>
             <div class="setup-choice-grid setup-choice-grid-difficulty" data-role="block-set-control">${blockSetButtons}</div>
           </div>
           <div class="setup-section">
@@ -1016,10 +1016,10 @@ export class Renderer {
       </section>
       <section class="overlay-card" data-role="overlay" hidden>
         <div class="overlay-alert">${icon('alert')}</div>
-        <h2 data-role="overlay-title">ゲームオーバー</h2>
+        <h2 data-role="overlay-title">Game Over</h2>
         <p data-role="overlay-message">ピットが上限に到達しました。</p>
         <div class="overlay-scorebox">
-          <span>最終スコア</span>
+          <span>Final Score</span>
           <strong data-role="overlay-score">0</strong>
         </div>
         <div class="overlay-metrics">
@@ -2812,7 +2812,7 @@ export class Renderer {
       return 'ルール選択';
     }
     if (this.hudState.phase === 'game-over') {
-      return 'ゲームオーバー';
+      return 'Game Over';
     }
     if (this.hudState.settingsOpen) {
       return '設定中';

@@ -512,10 +512,21 @@ describe('Renderer BlockOut layer coloring', () => {
     const missionControl = hud.querySelector('[data-role="mission-mode-control"]');
 
     expect(hud.querySelector('[data-role="block-set-control"]')?.parentElement?.textContent).toContain(
-      '難易度'
+      'LEVEL'
     );
+    expect(
+      hud.querySelector('[data-role="block-set"]')?.parentElement?.textContent
+    ).toContain('LEVEL');
     expect(hud.querySelector('[data-role="block-set"]')?.textContent).toBe('易しい');
-    expect(hud.querySelector('.queue-card .panel-heading span')?.textContent).toBe('ネクスト');
+    expect(hud.querySelector('.queue-card .panel-heading span')?.textContent).toBe('Next');
+    const controlKeyLabels = Array.from(hud.querySelectorAll('.control-grid b')).map(
+      (key) => key.textContent
+    );
+    expect(controlKeyLabels).not.toContain('2/4/6/8');
+    expect(controlKeyLabels).not.toContain('1/3/7/9');
+    expect(controlKeyLabels).not.toContain('Home/PgUp/End/PgDn');
+    expect(controlKeyLabels).not.toContain('P');
+    expect(controlKeyLabels).not.toContain('R');
     expect(hud.querySelectorAll('[data-role="block-set-control"] .setup-choice')).toHaveLength(3);
     expect(missionControl?.querySelectorAll('.setup-choice')).toHaveLength(5);
     expect(hud.querySelector('[data-mission-mode="endless"]')).toBeNull();
@@ -626,13 +637,13 @@ describe('Renderer BlockOut layer coloring', () => {
     hud.querySelector<HTMLButtonElement>('[data-mission-mode="score-rush"]')?.click();
 
     expect(hud.querySelector<HTMLElement>('[data-role="footer-tip"]')?.textContent).toBe(
-      'スコアラッシュ: スコア2,000点に到達する。'
+      'Score Rush: Score 2,000点に到達する'
     );
 
     hud.querySelector<HTMLButtonElement>('[data-mission-mode="cube-trial"]')?.click();
 
     expect(hud.querySelector<HTMLElement>('[data-role="footer-tip"]')?.textContent).toBe(
-      'ブロックトライアル: ブロックを合計120個配置する。'
+      'ブロックトライアル: ブロックを合計120個配置する'
     );
   });
 

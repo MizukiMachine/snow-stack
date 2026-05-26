@@ -614,11 +614,11 @@ button {
 
 .control-grid {
   display: grid;
-  gap: 6px;
+  row-gap: 10px;
 }
 
 .right-rail .control-grid {
-  gap: 8px;
+  row-gap: 16px;
 }
 
 .control-row {
@@ -782,7 +782,7 @@ button {
   min-height: 96px;
   padding: 17px 26px;
   display: grid;
-  grid-template-columns: 244px minmax(530px, 580px) minmax(240px, 1fr) 142px;
+  grid-template-columns: 244px minmax(530px, 580px) minmax(220px, 1fr) 176px;
   align-items: center;
   gap: 22px;
   z-index: 4;
@@ -903,7 +903,13 @@ button {
 }
 
 .status-meta {
-  min-width: 0;
+  justify-self: end;
+  min-width: 176px;
+}
+
+.status-meta [data-role="timer"] {
+  font-size: 40px;
+  line-height: 0.95;
 }
 
 .settings-panel {
@@ -1279,7 +1285,7 @@ button {
   }
 
   .right-rail .control-grid {
-    gap: 6px;
+    row-gap: 14px;
   }
 
   .right-rail .control-row {
@@ -1315,12 +1321,16 @@ button {
   }
 
   .status-bar {
-    grid-template-columns: 230px minmax(490px, 510px) minmax(200px, 1fr) 126px;
+    grid-template-columns: 230px minmax(470px, 500px) minmax(180px, 1fr) 168px;
     gap: 16px;
   }
 
   .ui-layer[data-mission-active="false"] .status-bar {
-    grid-template-columns: 236px minmax(300px, 1fr) 134px;
+    grid-template-columns: 236px minmax(300px, 1fr) 168px;
+  }
+
+  .status-meta {
+    min-width: 168px;
   }
 
   .status-hint [data-role="footer-tip"] {
@@ -1458,7 +1468,7 @@ button {
   }
 
   .right-rail .control-grid {
-    gap: 4px;
+    row-gap: 11px;
   }
 
   .right-rail .control-row {
@@ -1501,8 +1511,16 @@ button {
     min-height: 88px;
     bottom: 8px;
     padding: 12px 22px;
-    grid-template-columns: 220px minmax(480px, 500px) minmax(260px, 1fr) 122px;
+    grid-template-columns: 220px minmax(440px, 480px) minmax(220px, 1fr) 158px;
     gap: 18px;
+  }
+
+  .status-meta {
+    min-width: 158px;
+  }
+
+  .status-meta [data-role="timer"] {
+    font-size: 36px;
   }
 
   .ui-layer[data-start-menu="true"] .settings-panel {
@@ -1689,7 +1707,7 @@ button {
   }
 
   .right-rail .control-grid {
-    gap: 6px;
+    row-gap: 14px;
   }
 
   .right-rail .control-row {
@@ -1793,6 +1811,15 @@ button {
   .status-hint [data-role="footer-tip"],
   .status-meta [data-role="timer"] {
     font-size: 21px;
+  }
+
+  .status-meta {
+    justify-self: start;
+    min-width: 0;
+  }
+
+  .status-meta [data-role="timer"] {
+    font-size: 28px;
   }
 
   .settings-panel {

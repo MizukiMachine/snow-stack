@@ -133,10 +133,10 @@ const MISSION_DEFINITIONS: Readonly<Record<MissionMode, MissionDefinition>> = Ob
     progressLabel: '面',
     targetValue: 0,
     active: false,
-    description: 'ゲームオーバーまでスコアを伸ばす。',
+    description: 'Game OverまでScoreを伸ばす',
     getProgress: (context) => context.clearedPlanes,
-    getHint: () => '奥まで埋まった面をそろえると消去できます。',
-    completionMessage: 'さらに高いスコアを狙えます。'
+    getHint: () => '奥まで埋まった面をそろえると消去できます',
+    completionMessage: 'さらに高いScoreを狙えます'
   },
   'plane-sprint': {
     label: '5面スプリント',
@@ -144,25 +144,25 @@ const MISSION_DEFINITIONS: Readonly<Record<MissionMode, MissionDefinition>> = Ob
     progressLabel: '面',
     targetValue: PLANE_SPRINT_TARGET_PLANES,
     active: true,
-    description: '消去面を合計5面に到達させる。',
+    description: '消去面を合計5面に到達させる',
     getProgress: (context) => context.clearedPlanes,
     getHint: (remainingValue) =>
       remainingValue === 1
-        ? 'あと1面消去で達成。'
-        : `あと${remainingValue}面消去で達成。`,
-    completionMessage: '5面スプリント達成。'
+        ? 'あと1面消去で達成'
+        : `あと${remainingValue}面消去で達成`,
+    completionMessage: '5面スプリント達成'
   },
   'score-rush': {
-    label: 'スコアラッシュ',
+    label: 'Score Rush',
     shortLabel: '2,000点',
     progressLabel: '点',
     targetValue: SCORE_RUSH_TARGET_SCORE,
     active: true,
-    description: 'スコア2,000点に到達する。',
+    description: 'Score 2,000点に到達する',
     getProgress: (context) => context.score,
     getHint: (remainingValue) =>
-      `あと${formatMissionValue(remainingValue)}点で達成。`,
-    completionMessage: 'スコアラッシュ達成。'
+      `あと${formatMissionValue(remainingValue)}点で達成`,
+    completionMessage: 'Score Rush達成'
   },
   'clean-pit': {
     label: 'クリーンピット',
@@ -170,10 +170,10 @@ const MISSION_DEFINITIONS: Readonly<Record<MissionMode, MissionDefinition>> = Ob
     progressLabel: '回',
     targetValue: CLEAN_PIT_TARGET_COUNT,
     active: true,
-    description: 'ピット内の固定ブロックを一度すべて消す。',
+    description: 'ピット内の固定ブロックを一度すべて消す',
     getProgress: (context) => context.emptyPitCount,
-    getHint: () => '固定ブロックを一度すべて消すと達成。',
-    completionMessage: 'ピットを空にしました。'
+    getHint: () => '固定ブロックを一度すべて消すと達成',
+    completionMessage: 'ピットを空にしました'
   },
   'double-cut': {
     label: 'ダブルカット',
@@ -181,10 +181,10 @@ const MISSION_DEFINITIONS: Readonly<Record<MissionMode, MissionDefinition>> = Ob
     progressLabel: '回',
     targetValue: DOUBLE_CUT_TARGET_COUNT,
     active: true,
-    description: '1回の固定で2面以上を同時に消す。',
+    description: '1回の固定で2面以上を同時に消す',
     getProgress: (context) => context.multiPlaneClearCount,
-    getHint: () => '1回の固定で2面以上を同時に消すと達成。',
-    completionMessage: 'ダブルカット達成。'
+    getHint: () => '1回の固定で2面以上を同時に消すと達成',
+    completionMessage: 'ダブルカット達成'
   },
   'cube-trial': {
     label: 'ブロックトライアル',
@@ -192,10 +192,10 @@ const MISSION_DEFINITIONS: Readonly<Record<MissionMode, MissionDefinition>> = Ob
     progressLabel: '個',
     targetValue: BLOCK_TRIAL_TARGET_BLOCKS,
     active: true,
-    description: 'ブロックを合計120個配置する。',
+    description: 'ブロックを合計120個配置する',
     getProgress: (context) => context.placedCubes,
-    getHint: (remainingValue) => `あと${formatMissionValue(remainingValue)}個配置で達成。`,
-    completionMessage: 'ブロックトライアル達成。'
+    getHint: (remainingValue) => `あと${formatMissionValue(remainingValue)}個配置で達成`,
+    completionMessage: 'ブロックトライアル達成'
   }
 });
 
