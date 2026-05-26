@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GameEngine } from '../GameEngine';
-import { GameState, type GameStateOptions } from '../GameState';
+import { GameState, type GameStateOptions, type SettledBlockSnapshot } from '../GameState';
 import type { Renderer } from '../Renderer';
 
 type RendererMock = {
@@ -9,6 +9,7 @@ type RendererMock = {
   updateActivePolyCube: ReturnType<typeof vi.fn>;
   updateHud: ReturnType<typeof vi.fn>;
   updateElapsedTime: ReturnType<typeof vi.fn>;
+  playPlaneClearEffect: ReturnType<typeof vi.fn>;
   renderFrame: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
 };
@@ -279,6 +280,28 @@ describe('GameEngine BlockOut controls', () => {
     expect(state.getSettledBlocks()).toHaveLength(1);
   });
 
+  it('plays a clear effect for the completed plane after a lock', () => {
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValue(1_000);
+    const state = new GameState({
+      dimensions: { width: 3, height: 3, depth: 6 },
+      missionMode: 'plane-sprint'
+    });
+    seedPlane(state, 5, { x: 2, y: 0 });
+    state.spawnPolyCube(0);
+    const { engine, renderer } = startEngine(state);
+
+    pressKey('Space');
+    advanceGame(engine, 1_210);
+
+    expect(renderer.playPlaneClearEffect).toHaveBeenCalledTimes(1);
+    const [clearedBlocks] = (renderer.playPlaneClearEffect.mock.calls[0] ?? []) as [
+      SettledBlockSnapshot[]
+    ];
+    expect(clearedBlocks).toHaveLength(9);
+    expect(clearedBlocks.map((block) => block.coordinate.z)).toEqual(Array(9).fill(5));
+  });
+
   it('syncs paused HUD state when KeyP toggles pause', () => {
     const { renderer } = startEngineWithPiece(0);
 
@@ -433,6 +456,7 @@ function createRendererMock(): RendererMock {
     updateActivePolyCube: vi.fn(),
     updateHud: vi.fn(),
     updateElapsedTime: vi.fn(),
+    playPlaneClearEffect: vi.fn(),
     renderFrame: vi.fn(),
     dispose: vi.fn()
   };

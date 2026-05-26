@@ -263,6 +263,17 @@ describe('GameState BlockOut rules', () => {
 
     expect(state.clearCompletedPlanes()).toBe(1);
     expect(state.getClearedPlaneCount()).toBe(1);
+    expect(coordinates(state.getLastClearedPlaneBlocks())).toEqual([
+      { x: 0, y: 0, z: 5 },
+      { x: 1, y: 0, z: 5 },
+      { x: 2, y: 0, z: 5 },
+      { x: 0, y: 1, z: 5 },
+      { x: 1, y: 1, z: 5 },
+      { x: 2, y: 1, z: 5 },
+      { x: 0, y: 2, z: 5 },
+      { x: 1, y: 2, z: 5 },
+      { x: 2, y: 2, z: 5 }
+    ]);
     expect(coordinates(state.getSettledBlocks())).toEqual([{ x: 0, y: 0, z: 5 }]);
     expect(state.getCell({ x: 0, y: 0, z: 0 })).toBe('empty');
   });

@@ -243,6 +243,7 @@ export class GameState {
   private placedCubeCount = 0;
   private emptyPitCount = 0;
   private clearedPlanesByCount = [0, 0, 0, 0, 0, 0];
+  private lastClearedPlaneBlocks: SettledBlockSnapshot[] = [];
 
   constructor();
   constructor(options: GameStateOptions);
@@ -344,6 +345,7 @@ export class GameState {
     this.placedCubeCount = 0;
     this.emptyPitCount = 0;
     this.clearedPlanesByCount = [0, 0, 0, 0, 0, 0];
+    this.lastClearedPlaneBlocks = [];
   }
 
   public getPhase(): GamePhase {
@@ -495,6 +497,15 @@ export class GameState {
       }
     }
     return blocks;
+  }
+
+  public getLastClearedPlaneBlocks(): SettledBlockSnapshot[] {
+    return this.lastClearedPlaneBlocks.map((block) => ({
+      id: block.id,
+      label: block.label,
+      color: block.color,
+      coordinate: { ...block.coordinate }
+    }));
   }
 
   public moveActivePolyCube(delta: FieldCoordinate): boolean {
@@ -684,6 +695,8 @@ export class GameState {
   }
 
   public lockActivePolyCube(): number {
+    this.lastClearedPlaneBlocks = [];
+
     if (!this.activePolyCube) {
       return 0;
     }
@@ -789,6 +802,7 @@ export class GameState {
   }
 
   public clearCompletedPlanes(): number {
+    this.lastClearedPlaneBlocks = this.collectCompletedPlaneBlocks();
     let clearedPlanes = 0;
     let z = this.dimensions.depth - 1;
 
@@ -811,6 +825,37 @@ export class GameState {
 
   private isPlaneFilled(z: number): boolean {
     return this.grid[z].every((row) => row.every((cell) => cell !== 'empty'));
+  }
+
+  private collectCompletedPlaneBlocks(): SettledBlockSnapshot[] {
+    const blocks: SettledBlockSnapshot[] = [];
+    for (let z = 0; z < this.dimensions.depth; z += 1) {
+      if (!this.isPlaneFilled(z)) {
+        continue;
+      }
+      blocks.push(...this.getPlaneBlocks(z));
+    }
+    return blocks;
+  }
+
+  private getPlaneBlocks(z: number): SettledBlockSnapshot[] {
+    const blocks: SettledBlockSnapshot[] = [];
+    for (let y = 0; y < this.dimensions.height; y += 1) {
+      for (let x = 0; x < this.dimensions.width; x += 1) {
+        const cell = this.grid[z][y][x];
+        if (cell === 'empty') {
+          continue;
+        }
+        const definition = getPolyCubeDefinition(cell);
+        blocks.push({
+          id: definition.id,
+          label: definition.label,
+          color: definition.color,
+          coordinate: { x, y, z }
+        });
+      }
+    }
+    return blocks;
   }
 
   private removePlane(index: number): void {
