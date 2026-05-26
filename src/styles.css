@@ -53,15 +53,13 @@ button {
 
 .game-shell {
   isolation: isolate;
-  background:
-    linear-gradient(180deg, rgba(236, 250, 255, 0.86), rgba(196, 224, 247, 0.68) 53%, rgba(223, 244, 255, 0.92)),
-    #d9edf9;
+  background-color: #dcefff;
+  background-image: var(--game-shell-background-image, url("./assets/backgrounds/snow-ground-soft-fresh-a-v2.png"));
+  background-position: center;
+  background-repeat: repeat;
+  background-size: 720px 720px;
 }
 
-.game-shell::before,
-.game-shell::after,
-.scene-layer::before,
-.scene-layer::after,
 .ui-layer::before {
   content: "";
   position: absolute;
@@ -69,45 +67,10 @@ button {
   pointer-events: none;
 }
 
-.game-shell::before {
-  z-index: 0;
-  background-image: url("./assets/backgrounds/arctic-scan-lab-backdrop.png");
-  background-position: center;
-  background-size: cover;
-  filter: blur(18px) saturate(55%) brightness(1.14);
-  opacity: 0.48;
-  transform: scale(1.08);
-}
-
-.game-shell::after {
-  z-index: 1;
-  background:
-    linear-gradient(90deg, rgba(242, 251, 255, 0.42), rgba(255, 255, 255, 0.08) 25%, rgba(195, 225, 248, 0.14) 72%, rgba(244, 252, 255, 0.55)),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(164, 210, 243, 0.12) 44%, rgba(229, 248, 255, 0.74)),
-    repeating-linear-gradient(90deg, transparent 0 156px, rgba(37, 144, 206, 0.09) 157px 159px);
-}
-
 .scene-layer {
   position: absolute;
   inset: 0 clamp(116px, 12vw, 224px) 102px 0;
   z-index: 2;
-}
-
-.scene-layer::before {
-  z-index: 0;
-  background:
-    linear-gradient(180deg, transparent 0 72%, rgba(174, 218, 247, 0.46) 72% 100%),
-    repeating-linear-gradient(0deg, transparent 0 48px, rgba(24, 139, 210, 0.05) 49px 50px),
-    repeating-linear-gradient(90deg, transparent 0 58px, rgba(24, 139, 210, 0.05) 59px 60px);
-  mask-image: linear-gradient(180deg, transparent, #000 20%, #000 92%, transparent);
-}
-
-.scene-layer::after {
-  z-index: 0;
-  background:
-    linear-gradient(112deg, transparent 0 16%, rgba(43, 161, 225, 0.18) 16.2% 16.7%, transparent 16.9% 100%),
-    linear-gradient(70deg, transparent 0 74%, rgba(30, 140, 210, 0.16) 74.2% 74.8%, transparent 75% 100%),
-    linear-gradient(0deg, rgba(18, 155, 230, 0.22), rgba(255, 255, 255, 0.08) 10%, transparent 22%);
 }
 
 .scene-canvas {
