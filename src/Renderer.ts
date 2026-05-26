@@ -1,5 +1,6 @@
 import {
   AmbientLight,
+  Box3,
   BufferGeometry,
   BoxGeometry,
   CanvasTexture,
@@ -25,6 +26,7 @@ import {
   WebGLRenderer
 } from 'three';
 import type { Material, Texture } from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {
   DEFAULT_MISSION_MODE,
@@ -101,8 +103,40 @@ type CubeWorldAssetKey =
   | 'blockCore'
   | 'settledIceBlock';
 
-type CubeWorldAssetDefinition = {
+type UltimateNatureAssetKey =
+  | 'snowPine1'
+  | 'snowPine2'
+  | 'snowPine4'
+  | 'snowPine5'
+  | 'snowCommon1'
+  | 'snowCommon3'
+  | 'snowCommon5'
+  | 'snowBirch1'
+  | 'snowBirch3'
+  | 'snowBirch5'
+  | 'deadSnowCommon1'
+  | 'deadSnowCommon3'
+  | 'deadSnowCommon5'
+  | 'deadSnowBirch1'
+  | 'deadSnowBirch3'
+  | 'deadSnowBirch5'
+  | 'deadSnowWillow2'
+  | 'deadSnowWillow4'
+  | 'deadSnowWillow5'
+  | 'snowBush1'
+  | 'snowBush2'
+  | 'snowRock1'
+  | 'snowRock3'
+  | 'snowRock5'
+  | 'snowLog'
+  | 'snowStump';
+
+type SceneAssetKey = CubeWorldAssetKey | UltimateNatureAssetKey;
+
+type SceneAssetDefinition = {
   readonly path: string;
+  readonly loader: 'gltf' | 'fbx';
+  readonly palette?: 'cubeWorld' | 'winterNature';
   readonly tint?: number;
   readonly opacity?: number;
   readonly depthWrite?: boolean;
@@ -116,6 +150,10 @@ type AssetPlacement = {
   readonly rotationX?: number;
   readonly rotationY?: number;
   readonly rotationZ?: number;
+};
+
+type UltimateNaturePlacement = AssetPlacement & {
+  readonly key: UltimateNatureAssetKey;
 };
 
 type ReflectionPatchPlacement = {
@@ -139,10 +177,11 @@ const CAMERA_SETTINGS = {
   targetHeightFactor: 0.5,
   initialTheta: -Math.PI / 2,
   initialPhi: Math.PI / 2,
-  initialRadiusMultiplier: 1.35
+  initialRadiusMultiplier: 1.55
 } as const;
 
-const CUBE_WORLD_ASSET_ROOT = '/assets/Cube%20World%20-%20Aug%202023';
+const CUBE_WORLD_ASSET_ROOT = '/assets/CubeWorld';
+const ULTIMATE_NATURE_ASSET_ROOT = '/assets/UltimateNaturePack/UltimateNaturePack/FBX';
 const SETTLED_BLOCK_ASSET_SCALE = CELL_SIZE * 0.5;
 const SETTLED_BLOCK_FALLBACK_CORE_SIZE = CELL_SIZE;
 const DEFAULT_BLOCK_FALLBACK_CORE_SIZE = CELL_SIZE * 0.84;
@@ -156,25 +195,63 @@ const LANDING_FOOTPRINT_WIRE_THICKNESS = CELL_SIZE * 0.064;
 const LANDING_FOOTPRINT_WIRE_DEPTH = CELL_SIZE * 0.018;
 const LANDING_FOOTPRINT_FILL_RENDER_ORDER = 37;
 const LANDING_FOOTPRINT_WIRE_RENDER_ORDER = 39;
-const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, CubeWorldAssetDefinition> = Object.freeze({
+const NATURE_GROUND_Z = -CELL_SIZE * 0.16;
+const NATURE_PROP_ROTATION_X = -Math.PI / 2;
+const NATURE_TEMPLATE_MAX_SPAN = CELL_SIZE * 2.35;
+const CUBE_WORLD_ASSETS: Record<CubeWorldAssetKey, SceneAssetDefinition> = Object.freeze({
   wallIce: {
+    loader: 'gltf',
     path: `${CUBE_WORLD_ASSET_ROOT}/Pixel%20Blocks/glTF/Ice.gltf`,
+    palette: 'cubeWorld',
     tint: 0xc3f3ff,
     opacity: 1,
     depthWrite: true
   },
   blockCore: {
+    loader: 'gltf',
     path: `${CUBE_WORLD_ASSET_ROOT}/Blocks/glTF/Block_Blank.gltf`,
+    palette: 'cubeWorld',
     tint: 0xffffff,
     opacity: 0.12,
     depthWrite: false
   },
   settledIceBlock: {
+    loader: 'gltf',
     path: `${CUBE_WORLD_ASSET_ROOT}/Blocks/glTF/Block_Ice.gltf`,
+    palette: 'cubeWorld',
     opacity: 0.96,
     depthWrite: true
   }
 });
+const ULTIMATE_NATURE_ASSETS: Record<UltimateNatureAssetKey, SceneAssetDefinition> =
+  Object.freeze({
+    snowPine1: winterNatureAsset('PineTree_Snow_1.fbx'),
+    snowPine2: winterNatureAsset('PineTree_Snow_2.fbx'),
+    snowPine4: winterNatureAsset('PineTree_Snow_4.fbx'),
+    snowPine5: winterNatureAsset('PineTree_Snow_5.fbx'),
+    snowCommon1: winterNatureAsset('CommonTree_Snow_1.fbx'),
+    snowCommon3: winterNatureAsset('CommonTree_Snow_3.fbx'),
+    snowCommon5: winterNatureAsset('CommonTree_Snow_5.fbx'),
+    snowBirch1: winterNatureAsset('BirchTree_Snow_1.fbx'),
+    snowBirch3: winterNatureAsset('BirchTree_Snow_3.fbx'),
+    snowBirch5: winterNatureAsset('BirchTree_Snow_5.fbx'),
+    deadSnowCommon1: winterNatureAsset('CommonTree_Dead_Snow_1.fbx'),
+    deadSnowCommon3: winterNatureAsset('CommonTree_Dead_Snow_3.fbx'),
+    deadSnowCommon5: winterNatureAsset('CommonTree_Dead_Snow_5.fbx'),
+    deadSnowBirch1: winterNatureAsset('BirchTree_Dead_Snow_1.fbx'),
+    deadSnowBirch3: winterNatureAsset('BirchTree_Dead_Snow_3.fbx'),
+    deadSnowBirch5: winterNatureAsset('BirchTree_Dead_Snow_5.fbx'),
+    deadSnowWillow2: winterNatureAsset('Willow_Dead_Snow_2.fbx'),
+    deadSnowWillow4: winterNatureAsset('Willow_Dead_Snow_4.fbx'),
+    deadSnowWillow5: winterNatureAsset('Willow_Dead_Snow_5.fbx'),
+    snowBush1: winterNatureAsset('Bush_Snow_1.fbx'),
+    snowBush2: winterNatureAsset('Bush_Snow_2.fbx'),
+    snowRock1: winterNatureAsset('Rock_Snow_1.fbx'),
+    snowRock3: winterNatureAsset('Rock_Snow_3.fbx'),
+    snowRock5: winterNatureAsset('Rock_Snow_5.fbx'),
+    snowLog: winterNatureAsset('WoodLog_Snow.fbx'),
+    snowStump: winterNatureAsset('TreeStump_Snow.fbx')
+  });
 const CUBE_WIREFRAME_BEAM_GEOMETRY = new BoxGeometry(1, 1, 1);
 const PIT_REFLECTION_PLANE_GEOMETRY = new PlaneGeometry(CELL_SIZE, CELL_SIZE);
 const PIT_REFLECTION_FRAME_GEOMETRY = new EdgesGeometry(PIT_REFLECTION_PLANE_GEOMETRY);
@@ -198,8 +275,9 @@ export class Renderer {
   private footprintGroup: Group | null = null;
   private settledBlocksGroup: Group | null = null;
   private glowGroup: Group | null = null;
+  private readonly fbxLoader = new FBXLoader();
   private readonly gltfLoader = new GLTFLoader();
-  private readonly assetTemplates = new Map<CubeWorldAssetKey, Group>();
+  private readonly assetTemplates = new Map<SceneAssetKey, Group>();
   private assetLoadPromise: Promise<void> | null = null;
   private assetLoadGeneration = 0;
   private assetsReady = false;
@@ -530,7 +608,6 @@ export class Renderer {
     root.dataset.missionActive = String(mission.active);
     root.dataset.missionComplete = String(mission.complete);
     this.setText(root, '[data-role="score"]', this.formatNumber(this.hudState.score));
-    this.setText(root, '[data-role="level"]', String(this.hudState.level).padStart(2, '0'));
     this.setText(
       root,
       '[data-role="lines"]',
@@ -544,13 +621,11 @@ export class Renderer {
     this.syncMission(root);
     this.syncHudTimer(root);
     this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? '再開' : '一時停止');
-    this.setText(root, '[data-role="pit-size"]', this.formatPitSize());
     this.setText(
       root,
       '[data-role="start-level"]',
       String(this.gameState.getSetup().startLevel).padStart(2, '0')
     );
-    this.setMeter(root, '[data-role="level-meter"]', Math.min(7, this.hudState.level));
     this.setMeter(
       root,
       '[data-role="layers-meter"]',
@@ -587,7 +662,6 @@ export class Renderer {
           : '視点を回して、次の配置を探せます。'
       );
       this.setText(overlay, '[data-role="overlay-score"]', this.formatNumber(this.hudState.score));
-      this.setText(overlay, '[data-role="overlay-level"]', String(this.hudState.level));
       this.setText(overlay, '[data-role="overlay-lines"]', String(this.hudState.clearedLayerCount));
       this.setText(overlay, '[data-role="overlay-time"]', this.formatElapsed(this.hudState.elapsedMs));
     }
@@ -665,28 +739,20 @@ export class Renderer {
             <strong class="metric-value" data-role="score">0</strong>
           </section>
           <section class="panel metric-card">
-            <div class="panel-heading">${icon('snowflake')}<span>レベル</span></div>
-            <div class="metric-inline"><strong class="metric-value" data-role="level">01</strong><div class="meter meter-dots" data-role="level-meter">${renderMeterSegments(7)}</div></div>
-          </section>
-          <section class="panel metric-card">
             <div class="panel-heading">${icon('snowflake')}<span>消去面</span></div>
             <div class="metric-inline"><strong class="metric-value" data-role="lines">000</strong><div class="meter meter-bars" data-role="layers-meter">${renderMeterSegments(8)}</div></div>
           </section>
           <section class="panel metric-card queue-card">
-            <div class="panel-heading">${icon('snowflake')}<span>次</span></div>
+            <div class="panel-heading">${icon('snowflake')}<span>ネクスト</span></div>
             <div class="queue-list" data-role="queue-list"><span>--</span></div>
           </section>
           <section class="panel metric-card hold-card">
             <div class="panel-heading">${icon('cube')}<span>ホールド</span></div>
-            <div class="hold-slot" data-role="hold-piece"><span>--</span></div>
+            <div class="hold-slot" data-role="hold-piece"></div>
           </section>
           <section class="panel metric-card">
             <div class="panel-heading">${icon('snowflake')}<span>難易度</span></div>
             <strong class="metric-value metric-value-small" data-role="block-set">易しい</strong>
-          </section>
-          <section class="panel metric-card">
-            <div class="panel-heading">${icon('snowflake')}<span>ピット</span></div>
-            <strong class="metric-value metric-value-small" data-role="pit-size">5x5x9</strong>
           </section>
         </div>
         <div class="command-stack">
@@ -732,7 +798,6 @@ export class Renderer {
           <strong data-role="overlay-score">0</strong>
         </div>
         <div class="overlay-metrics">
-          <div><span>到達レベル</span><strong data-role="overlay-level">0</strong></div>
           <div><span>消去面</span><strong data-role="overlay-lines">0</strong></div>
           <div><span>プレイ時間</span><strong data-role="overlay-time">00:00:00</strong></div>
         </div>
@@ -980,25 +1045,31 @@ export class Renderer {
   }
 
   private async loadCubeWorldAssetTemplates(generation: number): Promise<void> {
-    const entries = Object.entries(CUBE_WORLD_ASSETS) as [
-      CubeWorldAssetKey,
-      CubeWorldAssetDefinition
-    ][];
+    const entries = [
+      ...(Object.entries(CUBE_WORLD_ASSETS) as [CubeWorldAssetKey, SceneAssetDefinition][]),
+      ...(Object.entries(ULTIMATE_NATURE_ASSETS) as [
+        UltimateNatureAssetKey,
+        SceneAssetDefinition
+      ][])
+    ] satisfies [SceneAssetKey, SceneAssetDefinition][];
     const sourceTemplatePromises = new Map<string, Promise<Group>>();
-    const loadSourceTemplate = (path: string): Promise<Group> => {
-      const existing = sourceTemplatePromises.get(path);
+    const loadSourceTemplate = (definition: SceneAssetDefinition): Promise<Group> => {
+      const existing = sourceTemplatePromises.get(definition.path);
       if (existing) {
         return existing;
       }
 
-      const promise = this.gltfLoader.loadAsync(path).then((gltf) => gltf.scene);
-      sourceTemplatePromises.set(path, promise);
+      const promise =
+        definition.loader === 'gltf'
+          ? this.gltfLoader.loadAsync(definition.path).then((gltf) => gltf.scene)
+          : this.fbxLoader.loadAsync(definition.path).then((root) => root as Group);
+      sourceTemplatePromises.set(definition.path, promise);
       return promise;
     };
 
     const results = await Promise.allSettled(
       entries.map(async ([key, definition]) => {
-        const source = await loadSourceTemplate(definition.path);
+        const source = await loadSourceTemplate(definition);
         const template = source.clone(true) as Group;
         this.prepareCubeWorldTemplate(template, definition);
         return [key, template] as const;
@@ -1025,7 +1096,7 @@ export class Renderer {
     });
 
     if (failures.length > 0) {
-      console.warn(`Cube World assets failed to load: ${failures.join('; ')}`);
+      console.warn(`Scene assets failed to load: ${failures.join('; ')}`);
     }
 
     this.assetsReady = this.assetTemplates.size > 0;
@@ -1043,7 +1114,7 @@ export class Renderer {
     this.renderFrame();
   }
 
-  private prepareCubeWorldTemplate(root: Group, definition: CubeWorldAssetDefinition): void {
+  private prepareCubeWorldTemplate(root: Group, definition: SceneAssetDefinition): void {
     root.traverse((child) => {
       if (!(child instanceof Mesh)) {
         return;
@@ -1057,11 +1128,36 @@ export class Renderer {
       );
       child.material = Array.isArray(child.material) ? convertedMaterials : convertedMaterials[0];
     });
+
+    if (definition.palette === 'winterNature') {
+      this.normalizeWinterNatureTemplate(root);
+    }
+  }
+
+  private normalizeWinterNatureTemplate(root: Group): void {
+    root.updateMatrixWorld(true);
+    const bounds = new Box3().setFromObject(root);
+    const size = new Vector3();
+    bounds.getSize(size);
+    const maxSpan = Math.max(size.x, size.y, size.z);
+    if (!Number.isFinite(maxSpan) || maxSpan <= 0) {
+      return;
+    }
+
+    root.scale.multiplyScalar(NATURE_TEMPLATE_MAX_SPAN / maxSpan);
+    root.updateMatrixWorld(true);
+
+    const normalizedBounds = new Box3().setFromObject(root);
+    const center = new Vector3();
+    normalizedBounds.getCenter(center);
+    root.position.x -= center.x;
+    root.position.y -= normalizedBounds.min.y;
+    root.position.z -= center.z;
   }
 
   private createCubeWorldMaterial(
     sourceMaterial: Material,
-    definition: CubeWorldAssetDefinition
+    definition: SceneAssetDefinition
   ): MeshBasicMaterial {
     const source = sourceMaterial as Material & {
       map?: Texture | null;
@@ -1075,15 +1171,44 @@ export class Renderer {
     }
 
     const opacity = definition.opacity ?? 1;
+    const color = this.getSceneAssetMaterialColor(sourceMaterial, definition);
     const material = new MeshBasicMaterial({
       map,
-      color: definition.tint ?? source.color?.getHex() ?? 0xffffff,
+      color,
       transparent: opacity < 1,
       opacity,
       depthWrite: definition.depthWrite ?? opacity >= 1,
-      side: FrontSide
+      side: definition.palette === 'winterNature' ? DoubleSide : FrontSide
     });
     return material;
+  }
+
+  private getSceneAssetMaterialColor(
+    sourceMaterial: Material,
+    definition: SceneAssetDefinition
+  ): number {
+    const source = sourceMaterial as Material & {
+      color?: { getHex: () => number };
+    };
+    const materialName = sourceMaterial.name.toLowerCase();
+    let color = definition.tint ?? source.color?.getHex() ?? 0xffffff;
+
+    if (definition.palette !== 'winterNature') {
+      return color;
+    }
+
+    if (materialName.includes('snow') || materialName.includes('white')) {
+      return mixColorNumber(color, 0xffffff, 0.72);
+    }
+    if (materialName.includes('green')) {
+      color = mixColorNumber(color, 0x74a863, 0.46);
+    } else if (materialName.includes('wood')) {
+      color = mixColorNumber(color, 0x8a6047, 0.2);
+    } else if (materialName.includes('black')) {
+      color = mixColorNumber(color, 0xffffff, 0.12);
+    }
+
+    return color;
   }
 
   private rebuildCubeWorldFieldLayer(): void {
@@ -1106,7 +1231,92 @@ export class Renderer {
     const { width, height, depth } = this.gameState.getDimensions();
 
     this.addCubeWorldIceWell(group, width, height, depth);
+    this.addUltimateNatureDecorations(group, width, height);
     return group;
+  }
+
+  private addUltimateNatureDecorations(group: Group, width: number, height: number): void {
+    const natureGroup = new Group();
+    natureGroup.name = 'ultimate-nature-snow-decorations';
+
+    this.getUltimateNaturePlacements(width, height).forEach((placement) => {
+      this.addUltimateNatureAsset(natureGroup, placement);
+    });
+
+    group.add(natureGroup);
+  }
+
+  private getUltimateNaturePlacements(
+    width: number,
+    height: number
+  ): readonly UltimateNaturePlacement[] {
+    const w = width * CELL_SIZE;
+    const h = height * CELL_SIZE;
+    const s = CELL_SIZE;
+    const z = NATURE_GROUND_Z - CELL_SIZE * 0.02;
+
+    return Object.freeze([
+      { key: 'deadSnowCommon1', x: -2.65 * s, y: (h + 1.95 * s), z, scale: 0.72 * s, rotationZ: -0.28 },
+      { key: 'snowBirch3', x: -1.8 * s, y: (h + 0.72 * s), z, scale: 0.58 * s, rotationZ: 0.18 },
+      { key: 'deadSnowBirch3', x: -3.9 * s, y: (h + 0.95 * s), z, scale: 0.66 * s, rotationZ: 0.42 },
+      { key: 'snowPine1', x: 0.24 * s, y: (h + 1.42 * s), z, scale: 0.56 * s, rotationZ: -0.08 },
+      { key: 'snowCommon5', x: 1.55 * s, y: (h + 2.36 * s), z, scale: 0.7 * s, rotationZ: 0.24 },
+      { key: 'deadSnowCommon5', x: 2.95 * s, y: (h + 1.63 * s), z, scale: 0.61 * s, rotationZ: -0.34 },
+      { key: 'snowPine4', x: 4.3 * s, y: (h + 2.16 * s), z, scale: 0.62 * s, rotationZ: 0.38 },
+      { key: 'deadSnowWillow5', x: (w + 0.94 * s), y: (h + 1.58 * s), z, scale: 0.7 * s, rotationZ: -0.2 },
+      { key: 'snowBirch5', x: (w + 2.22 * s), y: (h + 0.72 * s), z, scale: 0.58 * s, rotationZ: 0.28 },
+      { key: 'deadSnowWillow4', x: (w + 3.18 * s), y: (h + 2.1 * s), z, scale: 0.74 * s, rotationZ: 0.1 },
+
+      { key: 'snowCommon1', x: -2.08 * s, y: 4.15 * s, z, scale: 0.66 * s, rotationZ: 0.12 },
+      { key: 'deadSnowBirch1', x: -3.58 * s, y: 3.1 * s, z, scale: 0.7 * s, rotationZ: -0.46 },
+      { key: 'snowPine5', x: -1.74 * s, y: 2.46 * s, z, scale: 0.54 * s, rotationZ: -0.22 },
+      { key: 'deadSnowWillow2', x: -3.02 * s, y: 1.22 * s, z, scale: 0.68 * s, rotationZ: 0.34 },
+      { key: 'snowBirch1', x: -1.65 * s, y: -0.56 * s, z, scale: 0.55 * s, rotationZ: 0.2 },
+      { key: 'deadSnowCommon3', x: -3.94 * s, y: -1.2 * s, z, scale: 0.62 * s, rotationZ: -0.1 },
+
+      { key: 'deadSnowCommon1', x: (w + 2.35 * s), y: 3.55 * s, z, scale: 0.66 * s, rotationZ: -0.32 },
+      { key: 'snowPine2', x: (w + 2.38 * s), y: 3.02 * s, z, scale: 0.55 * s, rotationZ: 0.28 },
+      { key: 'deadSnowBirch5', x: (w + 3.55 * s), y: 1.9 * s, z, scale: 0.72 * s, rotationZ: 0.44 },
+      { key: 'snowCommon3', x: (w + 1.32 * s), y: 0.76 * s, z, scale: 0.62 * s, rotationZ: -0.12 },
+      { key: 'deadSnowWillow4', x: (w + 2.88 * s), y: -0.72 * s, z, scale: 0.7 * s, rotationZ: -0.4 },
+
+      { key: 'snowPine1', x: -0.28 * s, y: -2.05 * s, z, scale: 0.55 * s, rotationZ: 0.28 },
+      { key: 'deadSnowBirch3', x: 1.1 * s, y: -2.64 * s, z, scale: 0.64 * s, rotationZ: -0.18 },
+      { key: 'snowCommon5', x: 2.46 * s, y: -1.72 * s, z, scale: 0.62 * s, rotationZ: 0.06 },
+      { key: 'deadSnowCommon5', x: 3.8 * s, y: -2.42 * s, z, scale: 0.64 * s, rotationZ: 0.36 },
+      { key: 'snowBirch3', x: (w + 0.82 * s), y: -1.56 * s, z, scale: 0.56 * s, rotationZ: -0.22 },
+
+      { key: 'snowBush1', x: -1.04 * s, y: (h + 2.42 * s), z, scale: 0.46 * s, rotationZ: -0.4 },
+      { key: 'snowBush2', x: (w + 1.18 * s), y: (h + 2.74 * s), z, scale: 0.44 * s, rotationZ: 0.28 },
+      { key: 'snowBush1', x: (w + 2.58 * s), y: 4.72 * s, z, scale: 0.42 * s, rotationZ: -0.16 },
+      { key: 'snowRock1', x: -0.9 * s, y: -1.24 * s, z, scale: 0.43 * s, rotationZ: 0.2 },
+      { key: 'snowRock3', x: (w + 1.54 * s), y: -2.58 * s, z, scale: 0.42 * s, rotationZ: -0.28 },
+      { key: 'snowRock5', x: -3.24 * s, y: 4.82 * s, z, scale: 0.38 * s, rotationZ: 0.44 },
+      { key: 'snowLog', x: 0.2 * s, y: (h + 2.82 * s), z, scale: 0.42 * s, rotationZ: -0.2 },
+      { key: 'snowStump', x: (w + 3.24 * s), y: 0.46 * s, z, scale: 0.4 * s, rotationZ: 0.18 }
+    ]);
+  }
+
+  private addUltimateNatureAsset(group: Group, placement: UltimateNaturePlacement): void {
+    const asset = this.createCubeWorldAssetInstance(placement.key, { preserveResources: true });
+    if (!asset) {
+      return;
+    }
+
+    asset.name = `ultimate-nature-${placement.key}`;
+    asset.position.set(placement.x, placement.y, placement.z);
+    asset.rotation.set(
+      placement.rotationX ?? NATURE_PROP_ROTATION_X,
+      placement.rotationY ?? 0,
+      placement.rotationZ ?? 0
+    );
+    asset.scale.multiplyScalar(placement.scale ?? CELL_SIZE * 0.62);
+    asset.traverse((child) => {
+      if (child instanceof Mesh) {
+        child.renderOrder = 3;
+      }
+    });
+    group.add(asset);
   }
 
   private addCubeWorldIceWell(group: Group, width: number, height: number, depth: number): void {
@@ -1186,7 +1396,7 @@ export class Renderer {
   }
 
   private createCubeWorldAssetInstance(
-    key: CubeWorldAssetKey,
+    key: SceneAssetKey,
     options: { preserveResources?: boolean; preserveGeometry?: boolean } = {}
   ): Group | null {
     const template = this.assetTemplates.get(key);
@@ -2374,7 +2584,7 @@ export class Renderer {
     const heldPiece = this.gameState.getHeldPiece();
     hold.innerHTML =
       heldPiece === null
-        ? '<span class="is-empty">--</span>'
+        ? ''
         : this.renderPolyCubePreview(heldPiece, 'hold');
   }
 
@@ -2491,11 +2701,6 @@ export class Renderer {
     return new Intl.NumberFormat('ja-JP').format(value);
   }
 
-  private formatPitSize(): string {
-    const { width, height, depth } = this.gameState.getDimensions();
-    return `${width}x${height}x${depth}`;
-  }
-
   private formatElapsed(elapsedMs: number): string {
     const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
     const hours = Math.floor(totalSeconds / 3600)
@@ -2511,6 +2716,15 @@ export class Renderer {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function winterNatureAsset(fileName: string): SceneAssetDefinition {
+  return {
+    loader: 'fbx',
+    path: `${ULTIMATE_NATURE_ASSET_ROOT}/${fileName}`,
+    palette: 'winterNature',
+    depthWrite: true
+  };
 }
 
 function isBlockSet(value: string | undefined): value is BlockSet {
