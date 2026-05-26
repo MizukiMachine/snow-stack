@@ -19,6 +19,7 @@ type RendererAccess = {
     queue: readonly number[];
   };
   scene: Scene | null;
+  canvasHost: HTMLDivElement | null;
   assetsReady: boolean;
   assetTemplates: Map<string, Group>;
   createBlockMesh: (
@@ -37,8 +38,36 @@ type RendererAccess = {
   syncMission: (root: ParentNode) => void;
   collectSetupValues: (root: ParentNode) => unknown;
   createHudElement: () => HTMLDivElement;
+  applySceneLayerComposition: (renderSize: { width: number; height: number }) => void;
   renderPolyCubePreview: (id: number, variant: 'queue' | 'hold') => string;
 };
+
+describe('Renderer scene composition', () => {
+  it('shifts the wide-layout WebGL layer 10 percent left without changing layout dimensions', () => {
+    const renderer = new Renderer(new GameState());
+    const access = renderer as unknown as RendererAccess;
+    const canvasHost = document.createElement('div');
+    access.canvasHost = canvasHost;
+
+    access.applySceneLayerComposition({ width: 1600, height: 900 });
+
+    expect(canvasHost.style.transform).toBe('translateX(-160px)');
+    expect(canvasHost.style.transformOrigin).toBe('top left');
+  });
+
+  it('keeps compact layouts centered by clearing the WebGL layer shift', () => {
+    const renderer = new Renderer(new GameState());
+    const access = renderer as unknown as RendererAccess;
+    const canvasHost = document.createElement('div');
+    access.canvasHost = canvasHost;
+
+    access.applySceneLayerComposition({ width: 1600, height: 900 });
+    access.applySceneLayerComposition({ width: 980, height: 470 });
+
+    expect(canvasHost.style.transform).toBe('');
+    expect(canvasHost.style.transformOrigin).toBe('');
+  });
+});
 
 describe('Renderer BlockOut layer coloring', () => {
   it('renders the active falling block with a white wireframe and black backing edge', () => {

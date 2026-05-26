@@ -162,6 +162,11 @@ const CAMERA_SETTINGS = {
   initialPhi: Math.PI / 2,
   initialRadiusMultiplier: 1.55
 } as const;
+const CAMERA_COMPOSITION_SETTINGS = {
+  wideLayoutMinWidth: 981,
+  fieldLeftShiftRatio: 0.1,
+  maxFieldLeftShiftPx: 240
+} as const;
 const BACKGROUND_CAMERA_SETTINGS = {
   fov: 34,
   far: 2000,
@@ -332,6 +337,7 @@ export class Renderer {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
     const renderSize = this.getRenderSize();
+    this.applySceneLayerComposition(renderSize);
     renderer.setSize(renderSize.width, renderSize.height, false);
     renderer.domElement.className = 'scene-canvas';
     canvasHost.appendChild(renderer.domElement);
@@ -2359,6 +2365,32 @@ export class Renderer {
       halfDepth + entranceFitDistance * CAMERA_SETTINGS.initialRadiusMultiplier;
   }
 
+  private applySceneLayerComposition(renderSize: { width: number; height: number }): void {
+    if (!this.canvasHost) {
+      return;
+    }
+
+    const leftShiftPx = this.getFieldScreenLeftShiftPx(renderSize.width);
+    if (leftShiftPx <= 0) {
+      this.canvasHost.style.transform = '';
+      this.canvasHost.style.transformOrigin = '';
+      return;
+    }
+
+    this.canvasHost.style.transform = `translateX(-${leftShiftPx}px)`;
+    this.canvasHost.style.transformOrigin = 'top left';
+  }
+
+  private getFieldScreenLeftShiftPx(renderWidth: number): number {
+    if (renderWidth < CAMERA_COMPOSITION_SETTINGS.wideLayoutMinWidth) {
+      return 0;
+    }
+    return Math.min(
+      CAMERA_COMPOSITION_SETTINGS.maxFieldLeftShiftPx,
+      Math.round(renderWidth * CAMERA_COMPOSITION_SETTINGS.fieldLeftShiftRatio)
+    );
+  }
+
   private onResize(): void {
     if (!this.camera || !this.renderer) {
       return;
@@ -2373,6 +2405,7 @@ export class Renderer {
       this.applyBackgroundCameraOrbit(this.backgroundCamera);
     }
     const renderSize = this.getRenderSize();
+    this.applySceneLayerComposition(renderSize);
     this.renderer.setSize(renderSize.width, renderSize.height, false);
     this.renderFrame();
   }
