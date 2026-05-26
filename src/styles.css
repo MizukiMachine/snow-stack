@@ -1351,7 +1351,7 @@ button {
   .app-viewport,
   .game-shell {
     height: auto;
-    min-height: 1840px;
+    min-height: 2280px;
   }
 
   .ui-layer {
@@ -1530,7 +1530,7 @@ button {
 @media (max-width: 520px) {
   .app-viewport,
   .game-shell {
-    min-height: 1960px;
+    min-height: 2260px;
   }
 
   .ui-layer {
