@@ -68,9 +68,9 @@ export const ONE_SHOT_CODES: ReadonlySet<string> = new Set([
 export const KEY_ASSIGNMENT_ROWS: readonly KeyAssignmentRow[] = [
   { keys: ['←→↑↓', '2/4/6/8'], label: '面内移動' },
   { keys: ['1/3/7/9', 'Home/PgUp/End/PgDn'], label: '斜め移動' },
-  { keys: ['Q/A'], label: 'X軸回転' },
-  { keys: ['W/S'], label: 'Y軸回転' },
-  { keys: ['E/D'], label: 'Z軸回転' },
+  { keys: ['Q/A'], label: '左右軸まわり (X)' },
+  { keys: ['W/S'], label: '上下軸まわり (Y)' },
+  { keys: ['E/D'], label: '前後軸まわり (Z)' },
   { keys: ['Shift', '5'], label: 'ソフトドロップ' },
   { keys: ['C/H'], label: 'ホールド' },
   { keys: ['Space'], label: 'ハードドロップ' },
