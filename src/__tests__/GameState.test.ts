@@ -40,7 +40,7 @@ describe('GameState BlockOut rules', () => {
       blockSet: 'basic',
       startLevel: 4,
       randomSeed: 99,
-      missionMode: 'plane-sprint'
+      missionMode: 'double-cut'
     });
     expect(state.getLevel()).toBe(4);
     expect(state.getScore()).toBe(0);
@@ -298,7 +298,7 @@ describe('GameState BlockOut rules', () => {
     expect(state.clearCompletedPlanes()).toBe(1);
     expect(state.getMissionSnapshot()).toMatchObject({
       mode: 'plane-sprint',
-      label: '5面スプリント',
+      label: '5面消去タイム',
       targetValue: 5,
       progressValue: 1,
       remainingValue: 4,
