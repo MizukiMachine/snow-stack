@@ -175,10 +175,16 @@ export class GameEngine {
     }
 
     if (this.state.isGameOver()) {
+      if (this.renderer.handleCameraInspectionKey(event.code)) {
+        event.preventDefault();
+      }
       return;
     }
 
     if (this.paused) {
+      if (this.renderer.handleCameraInspectionKey(event.code)) {
+        event.preventDefault();
+      }
       return;
     }
 

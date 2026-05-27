@@ -6,6 +6,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   PlaneGeometry,
+  PerspectiveCamera,
   Points,
   Scene
 } from 'three';
@@ -19,6 +20,7 @@ type RendererAccess = {
     queue: readonly number[];
   };
   scene: Scene | null;
+  camera: PerspectiveCamera | null;
   canvasHost: HTMLDivElement | null;
   assetsReady: boolean;
   assetTemplates: Map<string, Group>;
@@ -38,9 +40,35 @@ type RendererAccess = {
   syncMission: (root: ParentNode) => void;
   collectSetupValues: (root: ParentNode) => unknown;
   createHudElement: () => HTMLDivElement;
+  configureInitialCameraOrbit: (camera: PerspectiveCamera) => void;
+  applyCameraOrbit: (camera: PerspectiveCamera) => void;
+  handleCameraInspectionPointerDown: (event: PointerEvent) => void;
+  handleCameraInspectionPointerMove: (event: PointerEvent) => void;
+  handleCameraInspectionPointerEnd: (event: PointerEvent) => void;
   applySceneLayerComposition: (renderSize: { width: number; height: number }) => void;
   renderPolyCubePreview: (id: number, variant: 'queue' | 'hold') => string;
 };
+
+function createPointerEventStub(
+  type: string,
+  target: EventTarget | null,
+  options: {
+    readonly clientX: number;
+    readonly clientY: number;
+    readonly pointerId: number;
+    readonly button?: number;
+  }
+): PointerEvent {
+  return {
+    type,
+    target,
+    clientX: options.clientX,
+    clientY: options.clientY,
+    pointerId: options.pointerId,
+    button: options.button ?? 0,
+    preventDefault: vi.fn()
+  } as unknown as PointerEvent;
+}
 
 describe('Renderer scene composition', () => {
   it('shifts the wide-layout WebGL layer 10 percent left without changing layout dimensions', () => {
@@ -66,6 +94,181 @@ describe('Renderer scene composition', () => {
 
     expect(canvasHost.style.transform).toBe('');
     expect(canvasHost.style.transformOrigin).toBe('');
+  });
+
+  it('allows only axis camera inspection while paused and resets when play resumes', () => {
+    const state = new GameState();
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const hud = access.createHudElement();
+    const camera = new PerspectiveCamera(78, 1, 0.1, 1000);
+    access.camera = camera;
+    access.configureInitialCameraOrbit(camera);
+    access.applyCameraOrbit(camera);
+    const homePosition = camera.position.clone();
+
+    expect(renderer.handleCameraInspectionKey('ArrowLeft')).toBe(false);
+
+    renderer.updateHud(
+      [],
+      'running',
+      0,
+      0,
+      state.getLevel(),
+      state.getDropIntervalMs(),
+      0,
+      true,
+      false,
+      false
+    );
+
+    expect(
+      hud.querySelector<HTMLButtonElement>('[data-role="pause-overlay"] [data-camera-view="left"]')
+        ?.disabled
+    ).toBe(false);
+    expect(renderer.handleCameraInspectionKey('ArrowLeft')).toBe(true);
+    expect(camera.position.distanceTo(homePosition)).toBeGreaterThan(0.01);
+    expect(camera.position.y).toBeCloseTo(homePosition.y);
+
+    expect(renderer.handleCameraInspectionKey('ArrowUp')).toBe(true);
+    expect(camera.position.x).toBeCloseTo(homePosition.x);
+    expect(camera.position.y).toBeGreaterThan(homePosition.y);
+
+    renderer.updateHud(
+      [],
+      'running',
+      0,
+      0,
+      state.getLevel(),
+      state.getDropIntervalMs(),
+      0,
+      false,
+      false,
+      false
+    );
+
+    expect(camera.position.distanceTo(homePosition)).toBeLessThan(0.000001);
+    expect(
+      hud.querySelector<HTMLButtonElement>('[data-role="pause-overlay"] [data-camera-view="left"]')
+        ?.disabled
+    ).toBe(true);
+  });
+
+  it('keeps camera inspection available on the game-over overlay', () => {
+    const state = new GameState();
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const hud = access.createHudElement();
+
+    renderer.updateHud(
+      [],
+      'game-over',
+      0,
+      0,
+      state.getLevel(),
+      state.getDropIntervalMs(),
+      0,
+      false,
+      false,
+      false
+    );
+
+    expect(hud.querySelector<HTMLElement>('[data-role="overlay"]')?.hidden).toBe(false);
+    expect(
+      hud.querySelector<HTMLButtonElement>('[data-role="overlay"] [data-camera-view="up"]')
+        ?.disabled
+    ).toBe(false);
+  });
+
+  it('locks camera inspection drags to one axis and resets when play resumes', () => {
+    const state = new GameState();
+    const renderer = new Renderer(state);
+    const access = renderer as unknown as RendererAccess;
+    const hud = access.createHudElement();
+    const camera = new PerspectiveCamera(78, 1, 0.1, 1000);
+    access.camera = camera;
+    access.configureInitialCameraOrbit(camera);
+    access.applyCameraOrbit(camera);
+    const homePosition = camera.position.clone();
+
+    renderer.updateHud(
+      [],
+      'running',
+      0,
+      0,
+      state.getLevel(),
+      state.getDropIntervalMs(),
+      0,
+      true,
+      false,
+      false
+    );
+
+    const pauseOverlay = hud.querySelector<HTMLElement>('[data-role="pause-overlay"]');
+    expect(pauseOverlay).not.toBeNull();
+
+    access.handleCameraInspectionPointerDown(
+      createPointerEventStub('pointerdown', pauseOverlay, {
+        clientX: 100,
+        clientY: 100,
+        pointerId: 1
+      })
+    );
+    access.handleCameraInspectionPointerMove(
+      createPointerEventStub('pointermove', pauseOverlay, {
+        clientX: 240,
+        clientY: 130,
+        pointerId: 1
+      })
+    );
+
+    const horizontalDragPosition = camera.position.clone();
+    expect(horizontalDragPosition.distanceTo(homePosition)).toBeGreaterThan(0.01);
+    expect(horizontalDragPosition.y).toBeCloseTo(homePosition.y);
+    expect(
+      hud.querySelector<HTMLButtonElement>('[data-role="pause-overlay"] [data-camera-view="right"]')
+        ?.getAttribute('aria-pressed')
+    ).toBe('true');
+
+    access.handleCameraInspectionPointerEnd(
+      createPointerEventStub('pointerup', pauseOverlay, {
+        clientX: 240,
+        clientY: 130,
+        pointerId: 1
+      })
+    );
+    access.handleCameraInspectionPointerDown(
+      createPointerEventStub('pointerdown', pauseOverlay, {
+        clientX: 100,
+        clientY: 100,
+        pointerId: 2
+      })
+    );
+    access.handleCameraInspectionPointerMove(
+      createPointerEventStub('pointermove', pauseOverlay, {
+        clientX: 130,
+        clientY: 0,
+        pointerId: 2
+      })
+    );
+
+    expect(camera.position.x).toBeCloseTo(homePosition.x);
+    expect(camera.position.y).toBeGreaterThan(homePosition.y);
+
+    renderer.updateHud(
+      [],
+      'running',
+      0,
+      0,
+      state.getLevel(),
+      state.getDropIntervalMs(),
+      0,
+      false,
+      false,
+      false
+    );
+
+    expect(camera.position.distanceTo(homePosition)).toBeLessThan(0.000001);
   });
 });
 
@@ -494,7 +697,7 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(root.textContent).not.toContain('02');
   });
 
-  it('marks the depth guide as empty when no layers are occupied', () => {
+  it('keeps depth guide rows empty when no layers are occupied', () => {
     const state = new GameState({ dimensions: { width: 5, height: 5, depth: 12 } });
     const renderer = new Renderer(state);
     const root = document.createElement('div');
@@ -503,7 +706,11 @@ describe('Renderer BlockOut layer coloring', () => {
     (renderer as unknown as RendererAccess).syncDepthLayerGuide(root);
 
     expect(root.dataset.depthLayers).toBe('0');
-    expect(root.querySelector<HTMLElement>('[data-role="layer-guide-list"]')?.style.getPropertyValue('--layer-count')).toBe('12');
+    expect(
+      root
+        .querySelector<HTMLElement>('[data-role="layer-guide-list"]')
+        ?.style.getPropertyValue('--layer-count')
+    ).toBe('12');
     expect(root.querySelectorAll('.layer-guide-row')).toHaveLength(0);
   });
 
