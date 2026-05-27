@@ -204,11 +204,6 @@ const BACKGROUND_CAMERA_SETTINGS = {
   radiusMultiplier: 1.05
 } as const;
 
-const MODEL_ASSET_URLS = import.meta.glob<string>('./assets/models/**/*.gltf', {
-  eager: true,
-  query: '?url',
-  import: 'default'
-});
 const SETTLED_BLOCK_ASSET_SCALE = CELL_SIZE * 0.5;
 const SETTLED_BLOCK_FALLBACK_CORE_SIZE = CELL_SIZE;
 const DEFAULT_BLOCK_FALLBACK_CORE_SIZE = CELL_SIZE * 0.84;
@@ -1226,7 +1221,9 @@ export class Renderer {
     hud.className = 'ui-layer';
     hud.innerHTML = `
       <div class="brand-panel">
-        <div class="brand-emblem">${icon('snowflake')}</div>
+        <div class="brand-emblem">
+          <img class="brand-logo" src="/assets/logo/frost-voxel-crest.png" alt="" aria-hidden="true" />
+        </div>
         <div class="brand-copy">
           <div class="brand-title">Boxel<br />Tris</div>
           <div class="brand-subtitle">3D POLYCUBE PUZZLE</div>
@@ -3148,11 +3145,7 @@ function easeOutCubic(value: number): number {
 }
 
 function sceneModelAsset(path: string): string {
-  const url = MODEL_ASSET_URLS[`./assets/models/${path}`];
-  if (!url) {
-    throw new Error(`Scene model asset not found: ${path}`);
-  }
-  return url;
+  return `/assets/models/${path}`;
 }
 
 function isBlockSet(value: string | undefined): value is BlockSet {
