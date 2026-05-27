@@ -11,6 +11,7 @@ type RendererMock = {
   updateElapsedTime: ReturnType<typeof vi.fn>;
   playPlaneClearEffect: ReturnType<typeof vi.fn>;
   renderFrame: ReturnType<typeof vi.fn>;
+  handleCameraInspectionKey: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
 };
 
@@ -341,6 +342,30 @@ describe('GameEngine BlockOut controls', () => {
     expect(lastHudCall(renderer)[7]).toBe(false);
   });
 
+  it('routes arrow keys to camera inspection while paused without moving the active piece', () => {
+    const { engine, state, renderer } = startEngineWithPiece(0);
+    const blocksBeforeCameraKey = state.getActivePolyCube()?.blocks;
+    renderer.handleCameraInspectionKey.mockReturnValue(true);
+
+    togglePause(engine);
+    renderer.handleCameraInspectionKey.mockClear();
+    pressKey('ArrowLeft');
+
+    expect(renderer.handleCameraInspectionKey).toHaveBeenCalledWith('ArrowLeft');
+    expect(state.getActivePolyCube()?.blocks).toEqual(blocksBeforeCameraKey);
+  });
+
+  it('routes arrow keys to camera inspection after game over', () => {
+    const { renderer } = startEngineWithPiece(0);
+    renderer.handleCameraInspectionKey.mockReturnValue(true);
+
+    pressKey('Escape');
+    renderer.handleCameraInspectionKey.mockClear();
+    pressKey('ArrowUp');
+
+    expect(renderer.handleCameraInspectionKey).toHaveBeenCalledWith('ArrowUp');
+  });
+
   it('ignores the removed KeyR restart shortcut', () => {
     const { state } = startEngineWithPiece(0);
     pressKey('ArrowRight');
@@ -464,6 +489,7 @@ function createRendererMock(): RendererMock {
     updateElapsedTime: vi.fn(),
     playPlaneClearEffect: vi.fn(),
     renderFrame: vi.fn(),
+    handleCameraInspectionKey: vi.fn(() => false),
     dispose: vi.fn()
   };
 }

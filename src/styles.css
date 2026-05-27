@@ -73,6 +73,13 @@ button {
   z-index: 2;
 }
 
+.scene-layer[data-camera-inspection="true"],
+.ui-layer[data-camera-inspection="true"] .overlay-card:not([hidden]),
+.ui-layer[data-camera-inspection="true"] .pause-card:not([hidden]) {
+  cursor: grab;
+  touch-action: none;
+}
+
 .scene-canvas {
   width: 100%;
   height: 100%;
@@ -299,10 +306,6 @@ button {
 .layer-guide-card .card-title .hud-icon {
   width: 34px;
   height: 34px;
-}
-
-.ui-layer[data-depth-layers="0"] .layer-guide-card {
-  display: none;
 }
 
 .layer-guide-stack {
@@ -1146,6 +1149,83 @@ button {
   color: #082a78;
 }
 
+.camera-view-pad {
+  width: max-content;
+  margin: 18px auto 0;
+  display: grid;
+  grid-template-columns: repeat(3, 54px);
+  grid-template-rows: repeat(3, 54px);
+  gap: 8px;
+}
+
+.camera-view-button {
+  width: 54px;
+  height: 54px;
+  border: 1px solid rgba(79, 156, 218, 0.72);
+  color: #0b4c9f;
+  background:
+    linear-gradient(180deg, rgba(248, 253, 255, 0.86), rgba(199, 230, 251, 0.72)),
+    radial-gradient(circle at 28% 0%, rgba(255, 255, 255, 0.62), transparent 48%);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px);
+  box-shadow:
+    0 8px 18px rgba(49, 123, 192, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.64);
+  transition: transform 120ms ease, filter 120ms ease, border-color 120ms ease;
+}
+
+.camera-view-button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+
+.camera-view-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+  transform: none;
+  filter: grayscale(0.18);
+}
+
+.camera-view-button.is-active {
+  color: #ffffff;
+  background:
+    linear-gradient(180deg, rgba(83, 176, 241, 0.98), rgba(26, 107, 205, 0.9)),
+    radial-gradient(circle at 28% 0%, rgba(255, 255, 255, 0.4), transparent 46%);
+  border-color: rgba(24, 121, 216, 0.9);
+  box-shadow:
+    0 10px 22px rgba(42, 116, 203, 0.24),
+    0 0 18px rgba(45, 183, 255, 0.24),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.68);
+}
+
+.camera-view-button .hud-icon {
+  width: 27px;
+  height: 27px;
+  stroke-width: 2.2;
+}
+
+.camera-view-button-up {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.camera-view-button-left {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.camera-view-button-right {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.camera-view-button-down {
+  grid-column: 2;
+  grid-row: 3;
+}
+
 .overlay-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1678,10 +1758,6 @@ button {
     height: 20px;
   }
 
-  .ui-layer[data-depth-layers="0"] .right-rail {
-    top: calc(var(--mobile-depth-guide-top) + var(--mobile-status-reserved-height) + 22px);
-  }
-
   .right-rail {
     top: calc(
       var(--mobile-depth-guide-top) + var(--mobile-depth-guide-reserved-height) + var(--mobile-status-reserved-height) + 50px
@@ -1824,10 +1900,6 @@ button {
     font-size: 21px;
   }
 
-  .ui-layer[data-depth-layers="0"] .status-bar {
-    top: var(--mobile-depth-guide-top);
-  }
-
   .ui-layer[data-start-menu="true"] .status-bar {
     display: none;
   }
@@ -1937,10 +2009,6 @@ button {
 
   .layer-guide-card {
     top: var(--mobile-depth-guide-top);
-  }
-
-  .ui-layer[data-depth-layers="0"] .right-rail {
-    top: calc(var(--mobile-depth-guide-top) + var(--mobile-status-reserved-height) + 22px);
   }
 
   .telemetry-stack {

@@ -83,8 +83,24 @@ type CameraOrbitState = {
   target: Vector3;
 };
 
+type CameraInspectionDirection = 'left' | 'right' | 'up' | 'down';
+type CameraInspectionDragAxis = 'horizontal' | 'vertical';
+
+type CameraInspectionDragState = {
+  readonly pointerId: number;
+  readonly startX: number;
+  readonly startY: number;
+  readonly startHorizontalOffset: number;
+  readonly startVerticalOffset: number;
+  axis: CameraInspectionDragAxis | null;
+};
+
 type HudIconName =
   | 'alert'
+  | 'arrowDown'
+  | 'arrowLeft'
+  | 'arrowRight'
+  | 'arrowUp'
   | 'chart'
   | 'cube'
   | 'home'
@@ -166,6 +182,21 @@ const CAMERA_COMPOSITION_SETTINGS = {
   wideLayoutMinWidth: 981,
   fieldLeftShiftRatio: 0.1,
   maxFieldLeftShiftPx: 240
+} as const;
+const CAMERA_INSPECTION_SETTINGS = {
+  buttonHorizontalAngle: Math.PI * 0.34,
+  buttonVerticalAngle: Math.PI * 0.24,
+  maxHorizontalAngle: Math.PI * 0.42,
+  maxVerticalAngle: Math.PI * 0.28,
+  dragSensitivity: 0.004,
+  dragAxisLockThresholdPx: 8,
+  directionDeadZone: 0.001
+} as const;
+const CAMERA_INSPECTION_KEY_MAP: Readonly<Partial<Record<string, CameraInspectionDirection>>> = {
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  ArrowUp: 'up',
+  ArrowDown: 'down'
 } as const;
 const BACKGROUND_CAMERA_SETTINGS = {
   fov: 34,
@@ -257,6 +288,12 @@ export class Renderer {
   private disposed = false;
   private resizeHandler: (() => void) | null = null;
   private readonly cameraOrbit: CameraOrbitState;
+  private readonly cameraInspectionOffset = { horizontal: 0, vertical: 0 };
+  private cameraInspectionDirection: CameraInspectionDirection | null = null;
+  private cameraInspectionDrag: CameraInspectionDragState | null = null;
+  private cameraInspectionPointerDownHandler: ((event: PointerEvent) => void) | null = null;
+  private cameraInspectionPointerMoveHandler: ((event: PointerEvent) => void) | null = null;
+  private cameraInspectionPointerEndHandler: ((event: PointerEvent) => void) | null = null;
   private readonly hudState: HudState;
   private lastSettingsOpen = false;
   private depthLayerGuideSignature = '';
@@ -316,6 +353,12 @@ export class Renderer {
     backgroundScene.fog = null;
 
     const camera = new PerspectiveCamera(CAMERA_SETTINGS.fov, this.getAspectRatio(), 0.1, 1000);
+    this.cameraInspectionDirection = null;
+    this.cameraInspectionOffset.horizontal = 0;
+    this.cameraInspectionOffset.vertical = 0;
+    this.cameraInspectionDrag = null;
+    this.cameraOrbit.theta = CAMERA_SETTINGS.initialTheta;
+    this.cameraOrbit.phi = CAMERA_SETTINGS.initialPhi;
     this.configureInitialCameraOrbit(camera);
     this.applyCameraOrbit(camera);
 
@@ -358,6 +401,7 @@ export class Renderer {
     this.renderer = renderer;
     this.resizeHandler = () => this.onResize();
     window.addEventListener('resize', this.resizeHandler);
+    this.attachCameraInspectionDrag(container);
 
     this.updateActivePolyCube(this.gameState.getActivePolyCube());
     this.updateSettledBlocks(this.gameState.getSettledBlocks());
@@ -389,11 +433,22 @@ export class Renderer {
     this.renderer.render(this.scene, this.camera);
   }
 
+  public handleCameraInspectionKey(code: string): boolean {
+    const direction = CAMERA_INSPECTION_KEY_MAP[code];
+    if (!direction || !this.isCameraInspectionAllowed()) {
+      return false;
+    }
+
+    this.setCameraInspectionDirection(direction);
+    return true;
+  }
+
   public dispose(options: RendererDisposeOptions = {}): void {
     const shouldPreserveLoadedAssets = options.preserveAssets === true && this.assetsReady;
     this.disposed = true;
     this.assetLoadGeneration += 1;
     this.disposePlaneClearEffect();
+    this.detachCameraInspectionDrag();
     if (this.resizeHandler) {
       window.removeEventListener('resize', this.resizeHandler);
       this.resizeHandler = null;
@@ -935,7 +990,226 @@ export class Renderer {
         this.syncSetupControls(root);
       }
     }
+    const cameraInspectionAllowed = this.isCameraInspectionAllowed();
+    root.dataset.cameraInspection = String(cameraInspectionAllowed);
+    if (this.canvasHost) {
+      this.canvasHost.dataset.cameraInspection = String(cameraInspectionAllowed);
+    }
+    if (!cameraInspectionAllowed) {
+      this.resetCameraInspection(false);
+    }
+    this.syncCameraInspectionControls(root);
     this.lastSettingsOpen = settingsOpen;
+  }
+
+  private isCameraInspectionAllowed(): boolean {
+    if (this.hudState.settingsOpen || this.hudState.startMenuOpen) {
+      return false;
+    }
+    return this.hudState.phase === 'game-over' || this.hudState.isPaused;
+  }
+
+  private setCameraInspectionDirection(direction: CameraInspectionDirection): void {
+    if (!this.isCameraInspectionAllowed()) {
+      return;
+    }
+
+    this.cameraInspectionDirection = direction;
+    this.cameraInspectionOffset.horizontal = 0;
+    this.cameraInspectionOffset.vertical = 0;
+    switch (direction) {
+      case 'left':
+        this.cameraInspectionOffset.horizontal = -CAMERA_INSPECTION_SETTINGS.buttonHorizontalAngle;
+        break;
+      case 'right':
+        this.cameraInspectionOffset.horizontal = CAMERA_INSPECTION_SETTINGS.buttonHorizontalAngle;
+        break;
+      case 'up':
+        this.cameraInspectionOffset.vertical = -CAMERA_INSPECTION_SETTINGS.buttonVerticalAngle;
+        break;
+      case 'down':
+        this.cameraInspectionOffset.vertical = CAMERA_INSPECTION_SETTINGS.buttonVerticalAngle;
+        break;
+      default:
+        break;
+    }
+    this.applyCameraInspectionOrbit();
+    this.syncCameraInspectionControls();
+    this.renderFrame();
+  }
+
+  private resetCameraInspection(shouldRender = true): void {
+    const wasInspecting =
+      this.cameraInspectionDirection !== null ||
+      this.cameraInspectionOffset.horizontal !== 0 ||
+      this.cameraInspectionOffset.vertical !== 0;
+    this.cameraInspectionDirection = null;
+    this.cameraInspectionOffset.horizontal = 0;
+    this.cameraInspectionOffset.vertical = 0;
+    this.cameraInspectionDrag = null;
+    this.applyCameraInspectionOrbit();
+    this.syncCameraInspectionControls();
+    if (shouldRender && wasInspecting) {
+      this.renderFrame();
+    }
+  }
+
+  private applyCameraInspectionOrbit(): void {
+    this.cameraOrbit.theta = CAMERA_SETTINGS.initialTheta + this.cameraInspectionOffset.horizontal;
+    this.cameraOrbit.phi = CAMERA_SETTINGS.initialPhi + this.cameraInspectionOffset.vertical;
+
+    this.applyCameraOrbitToCameras();
+  }
+
+  private applyCameraOrbitToCameras(): void {
+    if (this.camera) {
+      this.applyCameraOrbit(this.camera);
+    }
+    if (this.backgroundCamera) {
+      this.applyBackgroundCameraOrbit(this.backgroundCamera);
+    }
+  }
+
+  private syncCameraInspectionControls(root: ParentNode | null = this.hudElement): void {
+    if (!root) {
+      return;
+    }
+
+    const enabled = this.isCameraInspectionAllowed();
+    root.querySelectorAll<HTMLButtonElement>('[data-camera-view]').forEach((button) => {
+      const direction = button.dataset.cameraView;
+      const buttonEnabled = enabled && !button.closest('[hidden]');
+      const isActive = buttonEnabled && direction === this.cameraInspectionDirection;
+      button.disabled = !buttonEnabled;
+      button.classList.toggle('is-active', isActive);
+      button.setAttribute('aria-pressed', String(isActive));
+    });
+  }
+
+  private attachCameraInspectionDrag(container: HTMLElement): void {
+    this.detachCameraInspectionDrag();
+    this.cameraInspectionPointerDownHandler = (event) =>
+      this.handleCameraInspectionPointerDown(event);
+    this.cameraInspectionPointerMoveHandler = (event) =>
+      this.handleCameraInspectionPointerMove(event);
+    this.cameraInspectionPointerEndHandler = (event) => this.handleCameraInspectionPointerEnd(event);
+
+    container.addEventListener('pointerdown', this.cameraInspectionPointerDownHandler);
+    window.addEventListener('pointermove', this.cameraInspectionPointerMoveHandler);
+    window.addEventListener('pointerup', this.cameraInspectionPointerEndHandler);
+    window.addEventListener('pointercancel', this.cameraInspectionPointerEndHandler);
+  }
+
+  private detachCameraInspectionDrag(): void {
+    if (this.container && this.cameraInspectionPointerDownHandler) {
+      this.container.removeEventListener('pointerdown', this.cameraInspectionPointerDownHandler);
+    }
+    if (this.cameraInspectionPointerMoveHandler) {
+      window.removeEventListener('pointermove', this.cameraInspectionPointerMoveHandler);
+    }
+    if (this.cameraInspectionPointerEndHandler) {
+      window.removeEventListener('pointerup', this.cameraInspectionPointerEndHandler);
+      window.removeEventListener('pointercancel', this.cameraInspectionPointerEndHandler);
+    }
+
+    this.cameraInspectionPointerDownHandler = null;
+    this.cameraInspectionPointerMoveHandler = null;
+    this.cameraInspectionPointerEndHandler = null;
+    this.cameraInspectionDrag = null;
+  }
+
+  private handleCameraInspectionPointerDown(event: PointerEvent): void {
+    if (
+      !this.isCameraInspectionAllowed() ||
+      event.button !== 0 ||
+      !this.isCameraInspectionDragSurface(event.target)
+    ) {
+      return;
+    }
+
+    this.cameraInspectionDrag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startHorizontalOffset: this.cameraInspectionOffset.horizontal,
+      startVerticalOffset: this.cameraInspectionOffset.vertical,
+      axis: null
+    };
+    event.preventDefault();
+  }
+
+  private handleCameraInspectionPointerMove(event: PointerEvent): void {
+    const drag = this.cameraInspectionDrag;
+    if (!drag || drag.pointerId !== event.pointerId || !this.isCameraInspectionAllowed()) {
+      return;
+    }
+
+    const deltaX = event.clientX - drag.startX;
+    const deltaY = event.clientY - drag.startY;
+    if (!drag.axis) {
+      if (
+        Math.max(Math.abs(deltaX), Math.abs(deltaY)) <
+        CAMERA_INSPECTION_SETTINGS.dragAxisLockThresholdPx
+      ) {
+        return;
+      }
+      drag.axis = Math.abs(deltaX) >= Math.abs(deltaY) ? 'horizontal' : 'vertical';
+    }
+
+    if (drag.axis === 'horizontal') {
+      this.cameraInspectionOffset.horizontal = clamp(
+        drag.startHorizontalOffset + deltaX * CAMERA_INSPECTION_SETTINGS.dragSensitivity,
+        -CAMERA_INSPECTION_SETTINGS.maxHorizontalAngle,
+        CAMERA_INSPECTION_SETTINGS.maxHorizontalAngle
+      );
+      this.cameraInspectionOffset.vertical = 0;
+    } else {
+      this.cameraInspectionOffset.horizontal = 0;
+      this.cameraInspectionOffset.vertical = clamp(
+        drag.startVerticalOffset + deltaY * CAMERA_INSPECTION_SETTINGS.dragSensitivity,
+        -CAMERA_INSPECTION_SETTINGS.maxVerticalAngle,
+        CAMERA_INSPECTION_SETTINGS.maxVerticalAngle
+      );
+    }
+
+    this.cameraInspectionDirection = this.getCameraInspectionDirectionFromOffset();
+    this.applyCameraInspectionOrbit();
+    this.syncCameraInspectionControls();
+    this.renderFrame();
+    event.preventDefault();
+  }
+
+  private handleCameraInspectionPointerEnd(event: PointerEvent): void {
+    if (this.cameraInspectionDrag?.pointerId === event.pointerId) {
+      this.cameraInspectionDrag = null;
+    }
+  }
+
+  private getCameraInspectionDirectionFromOffset(): CameraInspectionDirection | null {
+    if (
+      Math.abs(this.cameraInspectionOffset.horizontal) >
+      CAMERA_INSPECTION_SETTINGS.directionDeadZone
+    ) {
+      return this.cameraInspectionOffset.horizontal < 0 ? 'left' : 'right';
+    }
+    if (
+      Math.abs(this.cameraInspectionOffset.vertical) > CAMERA_INSPECTION_SETTINGS.directionDeadZone
+    ) {
+      return this.cameraInspectionOffset.vertical < 0 ? 'up' : 'down';
+    }
+    return null;
+  }
+
+  private isCameraInspectionDragSurface(target: EventTarget | null): boolean {
+    if (!(target instanceof Element)) {
+      return false;
+    }
+    if (target.closest('button, input, select, textarea, a, [role="button"]')) {
+      return false;
+    }
+    return Boolean(
+      target.closest('.scene-layer, .scene-canvas, [data-role="pause-overlay"], [data-role="overlay"]')
+    );
   }
 
   private createHudElement(): HTMLDivElement {
@@ -1030,6 +1304,7 @@ export class Renderer {
           <div><span>消去面</span><strong data-role="overlay-lines">0</strong></div>
           <div><span>プレイ時間</span><strong data-role="overlay-time">00:00:00</strong></div>
         </div>
+        ${renderCameraInspectionPad(icon)}
         <div class="overlay-actions">
           <button class="overlay-button overlay-button-danger" data-action="restart" type="button">${icon('restart')}<span>リトライ</span></button>
           <button class="overlay-button overlay-button-primary" data-action="settings" type="button">${icon('home')}<span>ルール選択</span></button>
@@ -1039,7 +1314,8 @@ export class Renderer {
       <section class="pause-card" data-role="pause-overlay" hidden>
         <div class="overlay-alert">${icon('pause')}</div>
         <h2>一時停止中</h2>
-        <p>現在のランは停止中です。</p>
+        <p>マウスドラッグでカメラを移動して落下ブロックの状況を確認できます</p>
+        ${renderCameraInspectionPad(icon)}
         <div class="overlay-actions">
           <button class="overlay-button overlay-button-primary" data-action="pause" type="button">${icon('pause')}<span>再開</span></button>
           <button class="overlay-button" data-action="settings" type="button">${icon('settings')}<span>設定</span></button>
@@ -1061,6 +1337,16 @@ export class Renderer {
         if (action === 'settings') {
           this.callbacks.onToggleSettings?.();
         }
+      });
+    });
+
+    hud.querySelectorAll<HTMLButtonElement>('[data-camera-view]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const direction = button.dataset.cameraView;
+        if (button.disabled || !isCameraInspectionDirection(direction)) {
+          return;
+        }
+        this.setCameraInspectionDirection(direction);
       });
     });
 
@@ -2702,9 +2988,9 @@ export class Renderer {
     this.depthLayerGuideSignature = signature;
     guide.style.setProperty('--layer-count', String(depth));
     guide.style.setProperty('--layer-stack-height', `${depth * 36 - 6}px`);
-    guide.innerHTML = occupiedLayerIndexes.map((z) =>
-      this.renderDepthLayerGuideRow(depth, z)
-    ).join('');
+    guide.innerHTML = occupiedLayerIndexes
+      .map((z) => this.renderDepthLayerGuideRow(depth, z))
+      .join('');
   }
 
   private renderDepthLayerGuideRow(depth: number, z: number): string {
@@ -2962,12 +3248,33 @@ function formatRgbaColor(color: number, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+function renderCameraInspectionPad(icon: (name: HudIconName) => string): string {
+  return `
+    <div class="camera-view-pad" data-role="camera-view-controls" aria-label="視点変更">
+      <button class="camera-view-button camera-view-button-up" data-camera-view="up" type="button" aria-label="視点を上へ" aria-pressed="false" title="上">${icon('arrowUp')}</button>
+      <button class="camera-view-button camera-view-button-left" data-camera-view="left" type="button" aria-label="視点を左へ" aria-pressed="false" title="左">${icon('arrowLeft')}</button>
+      <button class="camera-view-button camera-view-button-right" data-camera-view="right" type="button" aria-label="視点を右へ" aria-pressed="false" title="右">${icon('arrowRight')}</button>
+      <button class="camera-view-button camera-view-button-down" data-camera-view="down" type="button" aria-label="視点を下へ" aria-pressed="false" title="下">${icon('arrowDown')}</button>
+    </div>
+  `;
+}
+
+function isCameraInspectionDirection(
+  value: string | undefined
+): value is CameraInspectionDirection {
+  return value === 'left' || value === 'right' || value === 'up' || value === 'down';
+}
+
 function renderHudIcon(name: HudIconName): string {
   const common =
     'class="hud-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"';
   const paths: Record<HudIconName, string> = {
     alert:
       '<path d="M12 3 22 20H2L12 3Z"/><path d="M12 9v5"/><path d="M12 17h.01"/>',
+    arrowDown: '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+    arrowLeft: '<path d="M19 12H5"/><path d="m12 5-7 7 7 7"/>',
+    arrowRight: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+    arrowUp: '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
     chart:
       '<path d="M4 20V9"/><path d="M10 20V4"/><path d="M16 20v-8"/><path d="M22 20H2"/>',
     cube:

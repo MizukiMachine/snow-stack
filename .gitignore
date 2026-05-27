@@ -17,3 +17,6 @@ src/assets/backgrounds/snow-ground-*.png
 
 # Browser verification output.
 .mcpheadlessbrowser/
+
+# Local generated design and visual check output.
+output/

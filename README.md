@@ -39,6 +39,7 @@ npm run dev
 - `C` / `H`: Hold
 - `Space`: ハードドロップ
 - `Escape`: 現在のランを終了
+- 一時停止 / ゲームオーバー中のドラッグ、`ArrowLeft` / `ArrowRight` / `ArrowUp` / `ArrowDown`: 注視点固定の視点確認
 `Space` / `C` / `H` / `Escape` はキーを押しっぱなしにしても連続入力しないようにしています。
 
 ## 現状の仕様メモ
