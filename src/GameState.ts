@@ -117,13 +117,13 @@ const SCORE_RUSH_TARGET_SCORE = 2_000;
 const CLEAN_PIT_TARGET_COUNT = 1;
 const DOUBLE_CUT_TARGET_COUNT = 1;
 const BLOCK_TRIAL_TARGET_BLOCKS = 120;
-export const DEFAULT_MISSION_MODE: MissionMode = 'plane-sprint';
+export const DEFAULT_MISSION_MODE: MissionMode = 'double-cut';
 export const MISSION_MODES: readonly MissionMode[] = Object.freeze([
+  'double-cut',
   'plane-sprint',
   'score-rush',
-  'clean-pit',
-  'double-cut',
-  'cube-trial'
+  'cube-trial',
+  'clean-pit'
 ]);
 
 const MISSION_DEFINITIONS: Readonly<Record<MissionMode, MissionDefinition>> = Object.freeze({
@@ -139,8 +139,8 @@ const MISSION_DEFINITIONS: Readonly<Record<MissionMode, MissionDefinition>> = Ob
     completionMessage: 'さらに高いScoreを狙えます'
   },
   'plane-sprint': {
-    label: '5面スプリント',
-    shortLabel: '5面消去',
+    label: '5面消去タイム',
+    shortLabel: '5面消去タイム',
     progressLabel: '面',
     targetValue: PLANE_SPRINT_TARGET_PLANES,
     active: true,
@@ -150,23 +150,23 @@ const MISSION_DEFINITIONS: Readonly<Record<MissionMode, MissionDefinition>> = Ob
       remainingValue === 1
         ? 'あと1面消去で達成'
         : `あと${remainingValue}面消去で達成`,
-    completionMessage: '5面スプリント達成'
+    completionMessage: '5面消去タイム達成'
   },
   'score-rush': {
-    label: 'Score Rush',
-    shortLabel: '2,000点',
+    label: '2000点到達タイム',
+    shortLabel: '2000点到達タイム',
     progressLabel: '点',
     targetValue: SCORE_RUSH_TARGET_SCORE,
     active: true,
-    description: 'Score 2,000点に到達する',
+    description: 'Score 2000点に到達する',
     getProgress: (context) => context.score,
     getHint: (remainingValue) =>
       `あと${formatMissionValue(remainingValue)}点で達成`,
-    completionMessage: 'Score Rush達成'
+    completionMessage: '2000点到達タイム達成'
   },
   'clean-pit': {
-    label: 'クリーンピット',
-    shortLabel: '全消し',
+    label: '落下ブロック全消し',
+    shortLabel: '落下ブロック全消し',
     progressLabel: '回',
     targetValue: CLEAN_PIT_TARGET_COUNT,
     active: true,
@@ -176,26 +176,26 @@ const MISSION_DEFINITIONS: Readonly<Record<MissionMode, MissionDefinition>> = Ob
     completionMessage: 'ピットを空にしました'
   },
   'double-cut': {
-    label: 'ダブルカット',
-    shortLabel: '2面同時',
+    label: '2面同時消去タイム',
+    shortLabel: '2面同時消去タイム',
     progressLabel: '回',
     targetValue: DOUBLE_CUT_TARGET_COUNT,
     active: true,
     description: '1回の固定で2面以上を同時に消す',
     getProgress: (context) => context.multiPlaneClearCount,
     getHint: () => '1回の固定で2面以上を同時に消すと達成',
-    completionMessage: 'ダブルカット達成'
+    completionMessage: '2面同時消去タイム達成'
   },
   'cube-trial': {
-    label: 'ブロックトライアル',
-    shortLabel: '120ブロック',
+    label: '120ブロック落下タイム',
+    shortLabel: '120ブロック落下タイム',
     progressLabel: '個',
     targetValue: BLOCK_TRIAL_TARGET_BLOCKS,
     active: true,
     description: 'ブロックを合計120個配置する',
     getProgress: (context) => context.placedCubes,
     getHint: (remainingValue) => `あと${formatMissionValue(remainingValue)}個配置で達成`,
-    completionMessage: 'ブロックトライアル達成'
+    completionMessage: '120ブロック落下タイム達成'
   }
 });
 

@@ -844,7 +844,6 @@ export class Renderer {
       '[data-role="lines"]',
       String(this.hudState.clearedLayerCount).padStart(3, '0')
     );
-    this.setText(root, '[data-role="status-label"]', this.getStatusLabel());
     this.setText(root, '[data-role="block-set"]', this.gameState.getBlockSetLabel());
     this.syncDepthLayerGuide(root);
     this.syncQueue(root);
@@ -885,13 +884,13 @@ export class Renderer {
         '[data-role="overlay-message"]',
         missionComplete ? mission.completionMessage : 'ピットが上限に到達しました。'
       );
-      this.setText(
-        overlay,
-        '[data-role="overlay-footnote"]',
-        missionComplete
+      const overlayFootnote = overlay.querySelector<HTMLElement>('[data-role="overlay-footnote"]');
+      if (overlayFootnote) {
+        this.setHidden(overlayFootnote, !missionComplete);
+        overlayFootnote.textContent = missionComplete
           ? 'ルールを選び直すか、同じ設定で再挑戦できます'
-          : '視点を回して、次の配置を探せます。'
-      );
+          : '';
+      }
       this.setText(overlay, '[data-role="overlay-score"]', this.formatNumber(this.hudState.score));
       this.setText(overlay, '[data-role="overlay-lines"]', String(this.hudState.clearedLayerCount));
       this.setText(overlay, '[data-role="overlay-time"]', this.formatElapsed(this.hudState.elapsedMs));
@@ -1001,7 +1000,6 @@ export class Renderer {
         </div>
       </aside>
       <section class="status-bar">
-        <div class="status-pill">${icon('snowflake')}<div><span class="status-label">状態</span><span class="status-state"><span class="status-dot"></span><span data-role="status-label">プレイ中</span></span></div></div>
         <div class="status-mission" data-role="mission-pill" hidden>${icon('trophy')}<div><span class="status-label" data-role="mission-label">エンドレス</span><div class="mission-progress" data-role="mission-progress"><span></span></div></div></div>
         <div class="status-hint">${icon('snowflake')}<div><span class="status-label">ミッション</span><span data-role="footer-tip"></span></div></div>
         <div class="status-meta"><span class="status-label">時間</span><span data-role="timer">00:00:00</span></div>
@@ -1036,7 +1034,7 @@ export class Renderer {
           <button class="overlay-button overlay-button-danger" data-action="restart" type="button">${icon('restart')}<span>リトライ</span></button>
           <button class="overlay-button overlay-button-primary" data-action="settings" type="button">${icon('home')}<span>ルール選択</span></button>
         </div>
-        <p class="overlay-footnote" data-role="overlay-footnote">視点を回して、次の配置を探せます。</p>
+        <p class="overlay-footnote" data-role="overlay-footnote" hidden></p>
       </section>
       <section class="pause-card" data-role="pause-overlay" hidden>
         <div class="overlay-alert">${icon('pause')}</div>
@@ -2835,25 +2833,6 @@ export class Renderer {
     const elapsed = this.formatElapsed(this.hudState.elapsedMs);
     this.setText(root, '[data-role="timer"]', elapsed);
     this.setText(root, '[data-role="overlay-time"]', elapsed);
-  }
-
-  private getStatusLabel(): string {
-    if (this.gameState.getMissionSnapshot().complete) {
-      return 'ミッション達成';
-    }
-    if (this.hudState.startMenuOpen) {
-      return 'ルール選択';
-    }
-    if (this.hudState.phase === 'game-over') {
-      return 'Game Over';
-    }
-    if (this.hudState.settingsOpen) {
-      return '設定中';
-    }
-    if (this.hudState.isPaused) {
-      return '一時停止';
-    }
-    return 'プレイ中';
   }
 
   private formatNumber(value: number): string {

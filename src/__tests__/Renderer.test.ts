@@ -559,7 +559,17 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(hud.querySelectorAll('[data-role="block-set-control"] .setup-choice')).toHaveLength(3);
     expect(missionControl?.querySelectorAll('.setup-choice')).toHaveLength(5);
     expect(hud.querySelector('[data-mission-mode="endless"]')).toBeNull();
-    expect(hud.querySelector('[data-mission-mode="cube-trial"]')?.textContent).toBe('120ブロック');
+    expect(
+      Array.from(missionControl?.querySelectorAll<HTMLElement>('.setup-choice') ?? []).map(
+        (button) => button.textContent
+      )
+    ).toEqual([
+      '2面同時消去タイム',
+      '5面消去タイム',
+      '2000点到達タイム',
+      '120ブロック落下タイム',
+      '落下ブロック全消し'
+    ]);
     expect(hud.querySelector('[data-block-set="flat"]')?.textContent).toBe('易しい');
     expect(hud.querySelector('[data-block-set="basic"]')?.textContent).toBe('普通');
     expect(hud.querySelector('[data-block-set="extended"]')?.textContent).toBe('難しい');
@@ -617,7 +627,9 @@ describe('Renderer BlockOut layer coloring', () => {
     (renderer as unknown as RendererAccess).syncMission(root);
 
     expect(root.querySelector<HTMLElement>('[data-role="mission-pill"]')?.hidden).toBe(false);
-    expect(root.querySelector<HTMLElement>('[data-role="mission-label"]')?.textContent).toBe('5面スプリント');
+    expect(root.querySelector<HTMLElement>('[data-role="mission-label"]')?.textContent).toBe(
+      '5面消去タイム'
+    );
     expect(root.querySelector<HTMLElement>('[data-role="mission-progress"] span')?.textContent).toBe('0/5面');
   });
 
@@ -641,9 +653,33 @@ describe('Renderer BlockOut layer coloring', () => {
     );
 
     expect(hud.querySelector<HTMLElement>('[data-role="overlay"]')?.hidden).toBe(true);
-    expect(hud.querySelector<HTMLElement>('[data-role="status-label"]')?.textContent).toBe(
-      'ルール選択'
+    expect(hud.querySelector<HTMLElement>('[data-role="status-label"]')).toBeNull();
+  });
+
+  it('does not show the camera hint footnote on the game-over overlay', () => {
+    const state = new GameState();
+    state.endGame();
+    const renderer = new Renderer(state);
+    const hud = (renderer as unknown as RendererAccess).createHudElement();
+
+    renderer.updateHud(
+      [],
+      'game-over',
+      0,
+      0,
+      state.getLevel(),
+      state.getDropIntervalMs(),
+      0,
+      false,
+      false,
+      false
     );
+
+    const overlay = hud.querySelector<HTMLElement>('[data-role="overlay"]');
+    const footnote = hud.querySelector<HTMLElement>('[data-role="overlay-footnote"]');
+    expect(overlay?.hidden).toBe(false);
+    expect(overlay?.textContent).not.toContain('視点を回して、次の配置を探せます。');
+    expect(footnote?.hidden).toBe(true);
   });
 
   it('updates the footer mission description from the rule selection buttons', () => {
@@ -666,13 +702,13 @@ describe('Renderer BlockOut layer coloring', () => {
     hud.querySelector<HTMLButtonElement>('[data-mission-mode="score-rush"]')?.click();
 
     expect(hud.querySelector<HTMLElement>('[data-role="footer-tip"]')?.textContent).toBe(
-      'Score Rush: Score 2,000点に到達する'
+      '2000点到達タイム: Score 2000点に到達する'
     );
 
     hud.querySelector<HTMLButtonElement>('[data-mission-mode="cube-trial"]')?.click();
 
     expect(hud.querySelector<HTMLElement>('[data-role="footer-tip"]')?.textContent).toBe(
-      'ブロックトライアル: ブロックを合計120個配置する'
+      '120ブロック落下タイム: ブロックを合計120個配置する'
     );
   });
 
