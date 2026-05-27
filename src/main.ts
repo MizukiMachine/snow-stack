@@ -1,6 +1,8 @@
 import './styles.css';
-import softFreshWidescreenBackgroundUrl from './assets/backgrounds/snow-ground-soft-fresh-a-widescreen-topdown.png';
 import { GameEngine } from './GameEngine';
+
+const SOFT_FRESH_WIDESCREEN_BACKGROUND_URL =
+  '/assets/backgrounds/snow-ground-soft-fresh-a-widescreen-topdown.png';
 
 type AppLogEntry = {
   level: 'error' | 'warn';
@@ -51,7 +53,7 @@ const viewport = document.createElement('div');
 viewport.className = 'app-viewport';
 viewport.style.setProperty(
   '--game-shell-background-image',
-  `url("${softFreshWidescreenBackgroundUrl}")`
+  `url("${SOFT_FRESH_WIDESCREEN_BACKGROUND_URL}")`
 );
 root.appendChild(viewport);
 

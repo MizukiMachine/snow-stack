@@ -54,7 +54,7 @@ button {
 .game-shell {
   isolation: isolate;
   background-color: #dcefff;
-  background-image: var(--game-shell-background-image, url("./assets/backgrounds/snow-ground-soft-fresh-a-widescreen-topdown.png"));
+  background-image: var(--game-shell-background-image, url("/assets/backgrounds/snow-ground-soft-fresh-a-widescreen-topdown.png"));
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
@@ -176,6 +176,14 @@ button {
   width: 70px;
   height: 70px;
   stroke-width: 1.45;
+}
+
+.brand-logo {
+  width: 84px;
+  height: 84px;
+  display: block;
+  object-fit: contain;
+  transform: translateY(-20px);
 }
 
 .brand-title {
@@ -1259,15 +1267,16 @@ button {
   .brand-panel {
     width: 286px;
     min-height: 154px;
-    grid-template-columns: 60px 1fr;
-    gap: 14px;
+    grid-template-columns: 68px 1fr;
+    gap: 12px;
     padding: 22px;
   }
 
   .brand-emblem,
-  .brand-emblem .hud-icon {
-    width: 58px;
-    height: 58px;
+  .brand-emblem .hud-icon,
+  .brand-logo {
+    width: 68px;
+    height: 68px;
   }
 
   .brand-title {
@@ -1987,15 +1996,16 @@ button {
   }
 
   .brand-panel {
-    grid-template-columns: 52px 1fr;
+    grid-template-columns: 58px 1fr;
     min-height: 132px;
     padding: 18px;
   }
 
   .brand-emblem,
-  .brand-emblem .hud-icon {
-    width: 50px;
-    height: 50px;
+  .brand-emblem .hud-icon,
+  .brand-logo {
+    width: 56px;
+    height: 56px;
   }
 
   .brand-title {
