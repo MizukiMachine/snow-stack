@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Boxel Tris">
+  <defs>
+    <linearGradient id="bg" x1="36" y1="18" x2="222" y2="238" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f4fdff" />
+      <stop offset="0.52" stop-color="#dff6ff" />
+      <stop offset="1" stop-color="#ccefff" />
+    </linearGradient>
+    <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#0b6fac" flood-opacity="0.22" />
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="30" fill="url(#bg)" />
+  <g
+    fill="none"
+    stroke="#129ce5"
+    stroke-width="11"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    filter="url(#soft-shadow)"
+  >
+    <path d="M128 31v194" />
+    <path d="M128 63 91 100" />
+    <path d="M128 63 165 100" />
+    <path d="M128 193 91 156" />
+    <path d="M128 193 165 156" />
+    <path d="m63 72 56 56-56 56" />
+    <path d="m193 72-56 56 56 56" />
+    <path d="m42 96 32 32-32 32" />
+    <path d="m214 96-32 32 32 32" />
+  </g>
+</svg>

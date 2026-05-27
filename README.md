@@ -1,52 +1,43 @@
-# voxel-blockout
+# Boxel Tris
 
-Three.js と TypeScript で作る BlockOut II 風の 3D ポリキューブパズルです。
+## ゲーム概要
 
-現状は以下まで実装済みです。
+- Three.js と TypeScript で作る 3D ポリキューブパズル
+- テトリス由来のブロックやルールを使用せず BlockOut II 風のルールを採用
+- `5x5x9` のピットへブロックを奥行き方向に落として、埋まった一面の `Z` プレーンを消す
+- 雪と氷のボクセル空間、ブランドロゴ、Depth パネル、NEXT / HOLD を備えたブラウザゲーム
 
-- 通常プレイ用の固定 `5x5x9` ピット
-- `FLAT` / `BASIC` / `EXTENDED` ブロックセット定義
-- 41 種の BlockOut II ポリキューブ定義
-- `Z` 奥行き方向への自動落下
-- `x/y` 平面上の 8 方向移動
-- 3 軸 6 方向回転
-- 固定済みブロックとの衝突判定
-- `x/y` 平面が全面埋まったときの `Z` プレーン消去
-- BlockOut II 由来の Score / レベル / 落下速度計算
-- BlockOut II 由来のバッグ式ピース生成
-- `Space` によるハードドロップ
-- 着地点ゴースト / 着地面フットプリント
-- `C` / `H` による Hold
-- `Shift` / `5` によるソフトドロップ
-- NEXT / HOLD のポリキューブプレビュー
-- `ENDLESS` / `PLANE SPRINT` / `SCORE RUSH` / `CLEAN PIT` / `DOUBLE CUT` / `CUBE TRIAL` ミッション設定
+## ゲームの仕様と挙動
 
-## セットアップ
+- `x/y` 平面でブロックを動かし、`z` 軸の奥へ自動落下
+- `Q/A`、`W/S`、`E/D` で 3 軸 6 方向回転
+- `Shift` / `5` でソフトドロップ、`Space` でハードドロップ
+- `C` / `H` で Hold、右側 UI に NEXT と HOLD を表示
+- 着地点ゴースト、着地面フットプリント、Depth レイヤー表示を描画
+- ブロックの形が複雑になるレベル分けとして `易しい` / `普通` / `難しい` を選択
+- `2面同時消去タイム`、`5面消去タイム`、`2000点到達タイム`、`120ブロック落下タイム`、`落下ブロック全消し` のミッションを選択
+- 一時停止中とゲームオーバー中はドラッグまたは矢印キーで視点確認
 
-```bash
-npm install
-npm run dev
+## 構成
+
+- `src/main.ts` アプリ起動と `GameEngine` のマウント
+- `src/GameEngine.ts` ゲームループ、入力、ポーズ、設定、HUD 同期
+- `src/GameState.ts` ピット状態、衝突、回転、消去、スコア、ミッション
+- `src/Renderer.ts` Three.js シーン、HUD、プレビュー、カメラ確認
+- `src/constants/` ポリキューブ定義、BlockOut 由来係数、フィールド定数
+- `src/config/` 操作キーとプレイフィールド設定
+- `src/styles.css` HUD とゲーム画面のスタイル
+- `public/assets/` Vite から配信するロゴ、背景、3D モデル
+- `raw-assets/` 変換前素材や候補素材の置き場
+
+```text
+Keyboard / Pointer
+  -> GameEngine
+  -> GameState
+  -> Renderer
+  -> Three.js canvas + DOM HUD
 ```
 
-## 操作
+## 関連ドキュメント
 
-- `ArrowLeft` / `ArrowRight`: 入口面を左右に移動
-- `ArrowUp` / `ArrowDown`: 入口面を上下に移動
-- `Q` / `A`: 左右軸まわり (X)
-- `W` / `S`: 上下軸まわり (Y)
-- `E` / `D`: 前後軸まわり (Z)
-- `Shift` / `5`: ソフトドロップ
-- `C` / `H`: Hold
-- `Space`: ハードドロップ
-- `Escape`: 現在のランを終了
-- 一時停止 / ゲームオーバー中のドラッグ、`ArrowLeft` / `ArrowRight` / `ArrowUp` / `ArrowDown`: 注視点固定の視点確認
-`Space` / `C` / `H` / `Escape` はキーを押しっぱなしにしても連続入力しないようにしています。
-
-## 現状の仕様メモ
-
-- 座標系は `x/y` がカメラ正面の入口面、`z` が井戸の奥行きです。カメラ手前の `z=0` 側が空・入口、奥の `z=depth` 側が地面・着地点です。
-- 消去判定は `Z` プレーン単位です。
-- 回転時は BlockOut II の回転中心に近い補正を行います。
-- Score とレベルは `/home/mizuki2/dev/BlockOut` の係数を移植しています。
-- プレイヤー向け設定ではピット寸法を固定しています。内部設定値は `width/height: 3-7`, `depth: 6-18` にクランプします。
-- 効果音は未実装です。
+- 実行、検証、ビルド用コマンドは `package.json` の `scripts` を参照
