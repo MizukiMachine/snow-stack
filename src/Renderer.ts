@@ -56,7 +56,9 @@ type RendererCallbacks = {
   onRestart?: () => void;
   onTogglePause?: () => void;
   onToggleSettings?: () => void;
+  onToggleMute?: () => void;
   onApplySetup?: (setup: GameStateOptions) => void;
+  onUiSelect?: () => void;
 };
 
 type RendererDisposeOptions = {
@@ -74,6 +76,7 @@ type HudState = {
   isPaused: boolean;
   settingsOpen: boolean;
   startMenuOpen: boolean;
+  isMuted: boolean;
 };
 
 type CameraOrbitState = {
@@ -110,7 +113,9 @@ type HudIconName =
   | 'restart'
   | 'settings'
   | 'snowflake'
-  | 'trophy';
+  | 'trophy'
+  | 'volume'
+  | 'volumeOff';
 
 type CubeWorldAssetKey =
   | 'wallIce'
@@ -322,7 +327,8 @@ export class Renderer {
       elapsedMs: 0,
       isPaused: false,
       settingsOpen: false,
-      startMenuOpen: false
+      startMenuOpen: false,
+      isMuted: false
     };
   }
 
@@ -856,7 +862,8 @@ export class Renderer {
     elapsedMs: number,
     isPaused: boolean,
     settingsOpen: boolean,
-    startMenuOpen = false
+    startMenuOpen = false,
+    isMuted = this.hudState.isMuted
   ): void {
     if (!this.hudElement) {
       return;
@@ -872,6 +879,7 @@ export class Renderer {
     this.hudState.isPaused = isPaused;
     this.hudState.settingsOpen = settingsOpen;
     this.hudState.startMenuOpen = startMenuOpen;
+    this.hudState.isMuted = isMuted;
 
     this.syncHud();
   }
@@ -886,6 +894,7 @@ export class Renderer {
     root.dataset.phase = this.hudState.phase;
     root.dataset.paused = String(this.hudState.isPaused);
     root.dataset.startMenu = String(this.hudState.startMenuOpen);
+    root.dataset.muted = String(this.hudState.isMuted);
     root.dataset.missionActive = String(mission.active);
     root.dataset.missionComplete = String(mission.complete);
     this.setText(root, '[data-role="score"]', this.formatNumber(this.hudState.score));
@@ -900,6 +909,7 @@ export class Renderer {
     this.syncHeldPiece(root);
     this.syncMission(root);
     this.syncHudTimer(root);
+    this.syncMuteControl(root);
     this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? '再開' : '一時停止');
     this.setText(
       root,
@@ -1229,10 +1239,18 @@ export class Renderer {
           <div class="brand-subtitle">3D POLYCUBE PUZZLE</div>
         </div>
       </div>
-      <section class="info-card layer-guide-card" aria-label="Depth layer colors">
-        <div class="card-title">${icon('layers')}<span>Depth</span></div>
-        <div class="layer-guide-stack" data-role="layer-guide-list"></div>
-      </section>
+      <div class="left-system-stack">
+        <section class="info-card layer-guide-card" aria-label="Depth layer colors">
+          <div class="card-title">${icon('layers')}<span>Depth</span></div>
+          <div class="layer-guide-stack" data-role="layer-guide-list"></div>
+        </section>
+        <section class="info-card audio-toggle-card" aria-label="Audio mute">
+          <button class="audio-toggle-button" data-action="mute" type="button" aria-pressed="false">
+            <span class="button-icon" data-role="mute-icon">${icon('volume')}</span>
+            <span data-role="mute-label">サウンド ON</span>
+          </button>
+        </section>
+      </div>
       <aside class="right-rail">
         <div class="telemetry-stack">
           <section class="panel metric-card">
@@ -1333,6 +1351,10 @@ export class Renderer {
         }
         if (action === 'settings') {
           this.callbacks.onToggleSettings?.();
+          return;
+        }
+        if (action === 'mute') {
+          this.callbacks.onToggleMute?.();
         }
       });
     });
@@ -1349,6 +1371,7 @@ export class Renderer {
 
     hud.querySelectorAll<HTMLButtonElement>('[data-block-set]').forEach((button) => {
       button.addEventListener('click', () => {
+        this.callbacks.onUiSelect?.();
         hud.querySelectorAll<HTMLButtonElement>('[data-block-set]').forEach((item) => {
           const isActive = item === button;
           item.classList.toggle('is-active', isActive);
@@ -1364,6 +1387,7 @@ export class Renderer {
         if (button.disabled) {
           return;
         }
+        this.callbacks.onUiSelect?.();
         hud.querySelectorAll<HTMLButtonElement>('[data-mission-mode]').forEach((item) => {
           const isActive = item === button;
           item.classList.toggle('is-active', isActive);
@@ -2835,6 +2859,21 @@ export class Renderer {
     this.syncFooterMissionText(root);
   }
 
+  private syncMuteControl(root: ParentNode): void {
+    const button = root.querySelector<HTMLButtonElement>('[data-action="mute"]');
+    if (!button) {
+      return;
+    }
+
+    button.classList.toggle('is-muted', this.hudState.isMuted);
+    button.setAttribute('aria-pressed', String(this.hudState.isMuted));
+    this.setText(button, '[data-role="mute-label"]', this.hudState.isMuted ? 'サウンド OFF' : 'サウンド ON');
+    const iconHost = button.querySelector<HTMLElement>('[data-role="mute-icon"]');
+    if (iconHost) {
+      iconHost.innerHTML = renderHudIcon(this.hudState.isMuted ? 'volumeOff' : 'volume');
+    }
+  }
+
   private collectSetupValues(root: ParentNode): GameStateOptions {
     const setup = this.gameState.getSetup();
     const activeBlockSet = root.querySelector<HTMLButtonElement>('[data-block-set].is-active')
@@ -3287,7 +3326,11 @@ function renderHudIcon(name: HudIconName): string {
     snowflake:
       '<path d="M12 2v20"/><path d="m4.9 4.9 14.2 14.2"/><path d="m19.1 4.9-14.2 14.2"/><path d="m8 4 4 4 4-4"/><path d="m8 20 4-4 4 4"/><path d="m4 8 4 4-4 4"/><path d="m20 8-4 4 4 4"/>',
     trophy:
-      '<path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5a3 3 0 0 0 3 3"/><path d="M16 6h3a3 3 0 0 1-3 3"/><path d="M12 12v5"/><path d="M8 21h8"/><path d="M10 17h4"/>'
+      '<path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5a3 3 0 0 0 3 3"/><path d="M16 6h3a3 3 0 0 1-3 3"/><path d="M12 12v5"/><path d="M8 21h8"/><path d="M10 17h4"/>',
+    volume:
+      '<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M16 8.5a5 5 0 0 1 0 7"/><path d="M19 5a9 9 0 0 1 0 14"/>',
+    volumeOff:
+      '<path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>'
   };
 
   return `<svg ${common}>${paths[name]}</svg>`;

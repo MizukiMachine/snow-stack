@@ -1,6 +1,13 @@
 node_modules/
 dist/
 .DS_Store
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.template
+!.env.schema
+!.env.sample
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GameEngine } from '../GameEngine';
 import { GameState, type GameStateOptions, type SettledBlockSnapshot } from '../GameState';
 import type { Renderer } from '../Renderer';
+import type { GameAudio } from '../audio/AudioManager';
 
 type RendererMock = {
   initialize: ReturnType<typeof vi.fn>;
@@ -12,6 +13,19 @@ type RendererMock = {
   playPlaneClearEffect: ReturnType<typeof vi.fn>;
   renderFrame: ReturnType<typeof vi.fn>;
   handleCameraInspectionKey: ReturnType<typeof vi.fn>;
+  dispose: ReturnType<typeof vi.fn>;
+};
+
+type AudioMock = {
+  getSelectedBgmId: ReturnType<typeof vi.fn>;
+  isMuted: ReturnType<typeof vi.fn>;
+  selectBgm: ReturnType<typeof vi.fn>;
+  toggleMute: ReturnType<typeof vi.fn>;
+  startBgm: ReturnType<typeof vi.fn>;
+  stopBgm: ReturnType<typeof vi.fn>;
+  pauseBgm: ReturnType<typeof vi.fn>;
+  resumeBgm: ReturnType<typeof vi.fn>;
+  playSfx: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
 };
 
@@ -306,6 +320,103 @@ describe('GameEngine BlockOut controls', () => {
     expect(clearedBlocks.map((block) => block.coordinate.z)).toEqual(Array(9).fill(5));
   });
 
+  it('routes successful gameplay actions to sound effects', () => {
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValue(1_000);
+    const { engine, audio } = startEngineWithPiece(0);
+
+    pressKey('ArrowRight');
+    pressKey('KeyC');
+    pressKey('Space');
+    advanceGame(engine, 1_210);
+
+    expect(audio.playSfx).toHaveBeenCalledWith('move');
+    expect(audio.playSfx).toHaveBeenCalledWith('hold');
+    expect(audio.playSfx).toHaveBeenCalledWith('hardDrop');
+    expect(audio.playSfx).toHaveBeenCalledWith('lock');
+  });
+
+  it('alternates the adopted BGM tracks every time a run starts', () => {
+    const renderer = createRendererMock();
+    const audio = createAudioMock();
+    const state = new GameState();
+    const engine = new GameEngine(state, renderer as unknown as Renderer, {
+      audio: audio as unknown as GameAudio
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    engine.start(container);
+    startedEngines.push(engine);
+    audio.selectBgm.mockClear();
+    audio.startBgm.mockClear();
+    audio.playSfx.mockClear();
+
+    applySetup(engine, { missionMode: 'plane-sprint' });
+    restart(engine);
+    applySetup(engine, { missionMode: 'score-rush' });
+
+    expect(audio.selectBgm.mock.calls.map(([id]) => id)).toEqual([
+      'crystal-drift',
+      'neon-snow-stack',
+      'crystal-drift'
+    ]);
+    expect(audio.startBgm).toHaveBeenCalledTimes(3);
+    expect(audio.playSfx.mock.calls.filter(([id]) => id === 'start')).toHaveLength(3);
+  });
+
+  it('starts BGM while the opening settings screen is shown', () => {
+    const renderer = createRendererMock();
+    const audio = createAudioMock();
+    const state = new GameState();
+    const engine = new GameEngine(state, renderer as unknown as Renderer, {
+      audio: audio as unknown as GameAudio
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+
+    engine.start(container);
+    startedEngines.push(engine);
+
+    expect(lastHudCall(renderer)[9]).toBe(true);
+    expect(audio.selectBgm).toHaveBeenCalledWith('crystal-drift');
+    expect(audio.startBgm).toHaveBeenCalledTimes(1);
+  });
+
+  it('plays UI select and retries BGM playback for settings panel choices', () => {
+    const renderer = createRendererMock();
+    const audio = createAudioMock();
+    const state = new GameState();
+    const engine = new GameEngine(state, renderer as unknown as Renderer, {
+      showStartScreen: false,
+      audio: audio as unknown as GameAudio
+    });
+
+    applyUiSelection(engine);
+
+    expect(audio.startBgm).toHaveBeenCalledTimes(1);
+    expect(audio.playSfx).toHaveBeenCalledWith('uiSelect');
+  });
+
+  it('starts BGM when the in-game settings panel opens', () => {
+    const { engine, audio } = startEngineWithPiece(0);
+    audio.startBgm.mockClear();
+
+    toggleSettings(engine);
+
+    expect(audio.startBgm).toHaveBeenCalledTimes(1);
+    expect(audio.playSfx).toHaveBeenCalledWith('uiSelect');
+  });
+
+  it('toggles audio mute state and publishes it to the HUD', () => {
+    const { engine, audio, renderer } = startEngineWithPiece(0);
+
+    toggleMute(engine);
+
+    expect(audio.toggleMute).toHaveBeenCalledTimes(1);
+    expect(lastHudCall(renderer)[10]).toBe(true);
+  });
+
   it('ignores the removed KeyP pause shortcut', () => {
     const { state, renderer } = startEngineWithPiece(0);
 
@@ -380,8 +491,11 @@ describe('GameEngine BlockOut controls', () => {
 
   it('opens the rule selection screen by default and holds the run', () => {
     const renderer = createRendererMock();
+    const audio = createAudioMock();
     const state = new GameState();
-    const engine = new GameEngine(state, renderer as unknown as Renderer);
+    const engine = new GameEngine(state, renderer as unknown as Renderer, {
+      audio: audio as unknown as GameAudio
+    });
     const container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -457,6 +571,7 @@ function startEngineWithPiece(id: number): {
   engine: GameEngine;
   state: GameState;
   renderer: RendererMock;
+  audio: AudioMock;
 } {
   const state = new GameState();
   state.spawnPolyCube(id);
@@ -467,17 +582,20 @@ function startEngine(state: GameState): {
   engine: GameEngine;
   state: GameState;
   renderer: RendererMock;
+  audio: AudioMock;
 } {
   const renderer = createRendererMock();
+  const audio = createAudioMock();
   const engine = new GameEngine(state, renderer as unknown as Renderer, {
-    showStartScreen: false
+    showStartScreen: false,
+    audio: audio as unknown as GameAudio
   });
   const container = document.createElement('div');
   document.body.appendChild(container);
 
   engine.start(container);
   startedEngines.push(engine);
-  return { engine, state, renderer };
+  return { engine, state, renderer, audio };
 }
 
 function createRendererMock(): RendererMock {
@@ -490,6 +608,25 @@ function createRendererMock(): RendererMock {
     playPlaneClearEffect: vi.fn(),
     renderFrame: vi.fn(),
     handleCameraInspectionKey: vi.fn(() => false),
+    dispose: vi.fn()
+  };
+}
+
+function createAudioMock(): AudioMock {
+  let muted = false;
+  return {
+    getSelectedBgmId: vi.fn(() => 'crystal-drift'),
+    isMuted: vi.fn(() => muted),
+    selectBgm: vi.fn(),
+    toggleMute: vi.fn(() => {
+      muted = !muted;
+      return muted;
+    }),
+    startBgm: vi.fn(),
+    stopBgm: vi.fn(),
+    pauseBgm: vi.fn(),
+    resumeBgm: vi.fn(),
+    playSfx: vi.fn(),
     dispose: vi.fn()
   };
 }
@@ -528,8 +665,20 @@ function togglePause(engine: GameEngine): void {
   (engine as unknown as { togglePause: () => void }).togglePause();
 }
 
+function toggleMute(engine: GameEngine): void {
+  (engine as unknown as { toggleMute: () => void }).toggleMute();
+}
+
 function applySetup(engine: GameEngine, setup: GameStateOptions): void {
   (engine as unknown as { applySetup: (setup: GameStateOptions) => void }).applySetup(setup);
+}
+
+function restart(engine: GameEngine): void {
+  (engine as unknown as { restart: () => void }).restart();
+}
+
+function applyUiSelection(engine: GameEngine): void {
+  (engine as unknown as { applyUiSelection: () => void }).applyUiSelection();
 }
 
 function seedPlane(

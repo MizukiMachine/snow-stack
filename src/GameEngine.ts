@@ -10,9 +10,12 @@ import {
 } from './config/controls';
 import { GameState } from './GameState';
 import { Renderer } from './Renderer';
+import { BGM_ASSETS, DEFAULT_BGM_ID } from './audio/AudioAssets';
+import { AudioManager, type GameAudio } from './audio/AudioManager';
 
 type GameEngineOptions = {
   readonly showStartScreen?: boolean;
+  readonly audio?: GameAudio;
 };
 
 /**
@@ -21,6 +24,7 @@ type GameEngineOptions = {
 export class GameEngine {
   private readonly state: GameState;
   private readonly renderer: Renderer;
+  private readonly audio: GameAudio;
   private readonly showStartScreen: boolean;
   private animationFrameId: number | null = null;
   private keydownHandler: ((event: KeyboardEvent) => void) | null = null;
@@ -39,6 +43,7 @@ export class GameEngine {
   private pendingLockAt = 0;
   private pendingLockAllowsAdjustment = false;
   private repeatActionAllowedAt = 0;
+  private nextGameplayBgmIndex = 0;
 
   constructor(
     state: GameState = new GameState(),
@@ -46,6 +51,7 @@ export class GameEngine {
     options: GameEngineOptions = {}
   ) {
     this.state = state;
+    this.audio = options.audio ?? new AudioManager();
     this.showStartScreen = options.showStartScreen ?? true;
     this.renderer =
       renderer ??
@@ -53,7 +59,9 @@ export class GameEngine {
         onRestart: () => this.restart(),
         onTogglePause: () => this.togglePause(),
         onToggleSettings: () => this.toggleSettings(),
-        onApplySetup: (setup) => this.applySetup(setup)
+        onToggleMute: () => this.toggleMute(),
+        onApplySetup: (setup) => this.applySetup(setup),
+        onUiSelect: () => this.applyUiSelection()
       });
   }
 
@@ -78,6 +86,9 @@ export class GameEngine {
     this.pendingLockAllowsAdjustment = false;
     this.repeatActionAllowedAt = 0;
     this.renderer.initialize(container);
+    if (this.startMenuOpen) {
+      this.previewNextGameplayBgm();
+    }
     this.syncScene();
     this.attachInputHandlers();
     this.beginRenderLoop();
@@ -93,6 +104,7 @@ export class GameEngine {
     }
 
     this.detachInputHandlers();
+    this.audio.dispose();
     this.renderer.dispose();
     this.container = null;
   }
@@ -202,6 +214,7 @@ export class GameEngine {
     if (HOLD_CODES.has(event.code)) {
       event.preventDefault();
       if (this.pendingLockAt === 0 && this.state.swapHeldPiece()) {
+        this.audio.playSfx('hold');
         this.lastDropAt = performance.now();
         this.syncScene({ settledBlocks: false });
       }
@@ -215,6 +228,7 @@ export class GameEngine {
       }
       this.state.hardDropActivePolyCube();
       if (this.state.getActivePolyCube()) {
+        this.audio.playSfx('hardDrop');
         this.scheduleActiveLock(HARD_DROP_LOCK_DELAY_MS, performance.now(), false);
       }
       this.lastDropAt = performance.now();
@@ -227,6 +241,7 @@ export class GameEngine {
       const now = performance.now();
       const stepResult = this.state.softDropActivePolyCube();
       if (stepResult === 'moved') {
+        this.audio.playSfx('softDrop');
         this.pendingLockAt = 0;
         this.pendingLockAllowsAdjustment = false;
         this.markRepeatActionCooldown(now);
@@ -247,6 +262,7 @@ export class GameEngine {
     if (move) {
       event.preventDefault();
       if (this.moveActivePolyCube(move)) {
+        this.audio.playSfx('move');
         this.markRepeatActionCooldown();
         this.refreshPendingLockAfterAdjustment();
         this.syncScene({ settledBlocks: false });
@@ -258,6 +274,7 @@ export class GameEngine {
     if (rotation) {
       event.preventDefault();
       if (this.state.rotateActivePolyCube(rotation.axis, rotation.direction)) {
+        this.audio.playSfx('rotate');
         this.markRepeatActionCooldown();
         this.refreshPendingLockAfterAdjustment();
         this.syncScene({ settledBlocks: false });
@@ -299,6 +316,8 @@ export class GameEngine {
     this.state.ensureActivePolyCube();
     this.resetRunClock();
     this.settingsOpen = false;
+    this.audio.playSfx('start');
+    this.startNextGameplayBgm();
     this.syncScene();
   }
 
@@ -314,6 +333,8 @@ export class GameEngine {
     this.pendingLockAllowsAdjustment = false;
     this.repeatActionAllowedAt = 0;
     this.lastDropAt = performance.now();
+    this.audio.playSfx('start');
+    this.startNextGameplayBgm();
 
     if (this.container) {
       this.renderer.dispose({ preserveAssets: true });
@@ -358,7 +379,8 @@ export class GameEngine {
       elapsedMs,
       this.paused,
       this.settingsOpen,
-      this.startMenuOpen
+      this.startMenuOpen,
+      this.audio.isMuted()
     );
     this.lastHudElapsedSecond = Math.floor(elapsedMs / 1000);
     this.renderer.renderFrame();
@@ -388,9 +410,13 @@ export class GameEngine {
       this.paused = false;
       this.pausedDuration += performance.now() - this.pausedAt;
       this.lastDropAt = performance.now();
+      this.audio.playSfx('resume');
+      this.audio.resumeBgm();
     } else {
       this.paused = true;
       this.pausedAt = performance.now();
+      this.audio.playSfx('pause');
+      this.audio.pauseBgm();
     }
 
     this.syncScene({ settledBlocks: false });
@@ -403,6 +429,8 @@ export class GameEngine {
 
     if (this.state.isGameOver() && !this.settingsOpen) {
       this.startMenuOpen = true;
+      this.previewNextGameplayBgm();
+      this.audio.playSfx('uiSelect');
       this.syncScene({ settledBlocks: false });
       return;
     }
@@ -422,7 +450,9 @@ export class GameEngine {
     } else {
       this.settingsOpen = true;
       this.settingsOpenedAt = now;
+      this.audio.startBgm();
     }
+    this.audio.playSfx('uiSelect');
     this.syncScene({ settledBlocks: false });
   }
 
@@ -446,6 +476,8 @@ export class GameEngine {
     this.pendingLockAt = 0;
     this.pendingLockAllowsAdjustment = false;
     this.repeatActionAllowedAt = 0;
+    this.audio.stopBgm();
+    this.audio.playSfx('gameOver');
     this.syncScene();
   }
 
@@ -455,11 +487,16 @@ export class GameEngine {
     this.repeatActionAllowedAt = 0;
     const clearedPlanes = this.state.lockActivePolyCube();
     if (clearedPlanes > 0) {
+      this.audio.playSfx('planeClear');
       this.renderer.playPlaneClearEffect(this.state.getLastClearedPlaneBlocks());
+    } else {
+      this.audio.playSfx('lock');
     }
     if (this.state.getMissionSnapshot().complete) {
       this.state.endGame();
       this.markGameEnded();
+      this.audio.stopBgm();
+      this.audio.playSfx('missionComplete');
       return;
     }
     if (this.state.getActivePolyCube()) {
@@ -468,7 +505,36 @@ export class GameEngine {
     this.state.spawnPolyCube();
     if (this.state.isGameOver()) {
       this.markGameEnded();
+      this.audio.stopBgm();
+      this.audio.playSfx('gameOver');
     }
+  }
+
+  private previewNextGameplayBgm(): void {
+    this.audio.selectBgm(this.getNextGameplayBgmId());
+    this.audio.startBgm();
+  }
+
+  private startNextGameplayBgm(): void {
+    this.previewNextGameplayBgm();
+    this.nextGameplayBgmIndex = (this.nextGameplayBgmIndex + 1) % BGM_ASSETS.length;
+  }
+
+  private applyUiSelection(): void {
+    this.audio.startBgm();
+    this.audio.playSfx('uiSelect');
+  }
+
+  private toggleMute(): void {
+    this.audio.toggleMute();
+    if (this.settingsOpen || this.startMenuOpen) {
+      this.previewNextGameplayBgm();
+    }
+    this.syncScene({ settledBlocks: false });
+  }
+
+  private getNextGameplayBgmId(): (typeof BGM_ASSETS)[number]['id'] {
+    return BGM_ASSETS[this.nextGameplayBgmIndex]?.id ?? DEFAULT_BGM_ID;
   }
 
   private scheduleActiveLock(

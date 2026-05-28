@@ -786,6 +786,62 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(hud.textContent).not.toContain('開始レベル');
   });
 
+  it('does not render the removed debug audio panel', () => {
+    const renderer = new Renderer(new GameState());
+    const hud = (renderer as unknown as RendererAccess).createHudElement();
+
+    expect(hud.querySelector('[data-role="debug-audio-control"]')).toBeNull();
+    expect(hud.querySelector('[data-bgm-id]')).toBeNull();
+    expect(hud.textContent).not.toContain('DEBUG AUDIO');
+  });
+
+  it('places the mute toggle in a separate panel under the depth panel and reflects muted state', () => {
+    const onToggleMute = vi.fn();
+    const state = new GameState();
+    const renderer = new Renderer(state, { onToggleMute });
+    const hud = (renderer as unknown as RendererAccess).createHudElement();
+    const muteButton = hud.querySelector<HTMLButtonElement>(
+      '.left-system-stack > .audio-toggle-card [data-action="mute"]'
+    );
+
+    expect(muteButton).not.toBeNull();
+    expect(muteButton?.closest('.layer-guide-card')).toBeNull();
+    expect(hud.querySelector('.left-system-stack > .layer-guide-card')).not.toBeNull();
+    expect(muteButton?.textContent).toContain('サウンド ON');
+
+    renderer.updateHud(
+      [],
+      'running',
+      0,
+      0,
+      state.getLevel(),
+      state.getDropIntervalMs(),
+      0,
+      false,
+      false,
+      false,
+      true
+    );
+
+    expect(muteButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(muteButton?.classList.contains('is-muted')).toBe(true);
+    expect(muteButton?.textContent).toContain('サウンド OFF');
+
+    muteButton?.click();
+    expect(onToggleMute).toHaveBeenCalledTimes(1);
+  });
+
+  it('notifies the engine when setup buttons are selected', () => {
+    const onUiSelect = vi.fn();
+    const renderer = new Renderer(new GameState(), { onUiSelect });
+    const hud = (renderer as unknown as RendererAccess).createHudElement();
+
+    hud.querySelector<HTMLButtonElement>('[data-block-set="basic"]')?.click();
+    hud.querySelector<HTMLButtonElement>('[data-mission-mode="score-rush"]')?.click();
+
+    expect(onUiSelect).toHaveBeenCalledTimes(2);
+  });
+
   it('renders a held piece preview into the HUD slot', () => {
     const state = new GameState({ randomSeed: 1 });
     state.spawnPolyCube(0);
