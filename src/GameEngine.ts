@@ -86,9 +86,6 @@ export class GameEngine {
     this.pendingLockAllowsAdjustment = false;
     this.repeatActionAllowedAt = 0;
     this.renderer.initialize(container);
-    if (this.startMenuOpen) {
-      this.previewNextGameplayBgm();
-    }
     this.syncScene();
     this.attachInputHandlers();
     this.beginRenderLoop();
@@ -521,13 +518,12 @@ export class GameEngine {
   }
 
   private applyUiSelection(): void {
-    this.audio.startBgm();
     this.audio.playSfx('uiSelect');
   }
 
   private toggleMute(): void {
     this.audio.toggleMute();
-    if (this.settingsOpen || this.startMenuOpen) {
+    if (this.settingsOpen) {
       this.previewNextGameplayBgm();
     }
     this.syncScene({ settledBlocks: false });
