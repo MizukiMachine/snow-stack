@@ -2865,12 +2865,12 @@ export class Renderer {
       return;
     }
 
-    button.classList.toggle('is-muted', this.hudState.isMuted);
+    button.classList.toggle('is-muted', !this.hudState.isMuted);
     button.setAttribute('aria-pressed', String(this.hudState.isMuted));
-    this.setText(button, '[data-role="mute-label"]', this.hudState.isMuted ? 'サウンド OFF' : 'サウンド ON');
+    this.setText(button, '[data-role="mute-label"]', this.hudState.isMuted ? 'サウンド ON' : 'サウンド OFF');
     const iconHost = button.querySelector<HTMLElement>('[data-role="mute-icon"]');
     if (iconHost) {
-      iconHost.innerHTML = renderHudIcon(this.hudState.isMuted ? 'volumeOff' : 'volume');
+      iconHost.innerHTML = renderHudIcon(this.hudState.isMuted ? 'volume' : 'volumeOff');
     }
   }
 
