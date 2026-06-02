@@ -8,8 +8,8 @@ import type {
  * Logical dimensions of the play field measured in whole grid cells.
  */
 export const FIELD_DIMENSIONS = Object.freeze({
-  width: 5,
-  height: 5,
+  width: 6,
+  height: 6,
   depth: 9,
 });
 

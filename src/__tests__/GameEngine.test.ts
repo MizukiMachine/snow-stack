@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GameEngine } from '../GameEngine';
 import { GameState, type GameStateOptions, type SettledBlockSnapshot } from '../GameState';
+import { POLYCUBE_DEFINITIONS } from '../constants/blockout';
 import type { Renderer } from '../Renderer';
 import type { GameAudio } from '../audio/AudioManager';
 
@@ -50,13 +51,13 @@ describe('GameEngine BlockOut controls', () => {
     const { state } = startEngineWithPiece(0);
 
     pressKey('ArrowRight');
-    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 0, z: 0 }]);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 0 }]);
 
     pressKey('ArrowUp');
-    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 1, z: 0 }]);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 1, z: 0 }]);
 
     pressKey('ArrowDown');
-    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 0, z: 0 }]);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 0 }]);
   });
 
   it('ignores removed numeric and diagonal movement keys', () => {
@@ -77,7 +78,7 @@ describe('GameEngine BlockOut controls', () => {
 
     pressKey('ShiftLeft');
 
-    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 1 }]);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 5, y: 0, z: 1 }]);
     expect(state.getSettledBlocks()).toHaveLength(0);
   });
 
@@ -90,7 +91,7 @@ describe('GameEngine BlockOut controls', () => {
       pressKey('ShiftLeft');
     }
 
-    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 8 }]);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 5, y: 0, z: 8 }]);
 
     nowSpy.mockReturnValue(1_200);
     pressKey('ShiftLeft', { repeat: true });
@@ -202,12 +203,13 @@ describe('GameEngine BlockOut controls', () => {
       blockSet: 'extended',
       missionMode: 'cube-trial'
     });
-    for (const x of [0, 1]) {
+    const trialPieceSpawnX = 7 - POLYCUBE_DEFINITIONS[4].width;
+    for (const x of [0, 4]) {
       for (let i = 0; i < 12; i += 1) {
         state.spawnPolyCube(4);
-        expect(state.moveActivePolyCube({ x: x - 6, y: 0, z: 0 })).toBe(true);
+        expect(state.moveActivePolyCube({ x: x - trialPieceSpawnX, y: 0, z: 0 })).toBe(true);
         state.hardDropActivePolyCube();
-        if (x === 1 && i === 11) {
+        if (x === 4 && i === 11) {
           break;
         }
         expect(state.lockActivePolyCube()).toBe(0);
@@ -233,18 +235,18 @@ describe('GameEngine BlockOut controls', () => {
     const { state } = startEngineWithPiece(0);
 
     pressKey('ArrowRight');
-    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 0, z: 0 }]);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 0 }]);
 
     nowSpy.mockReturnValue(1_020);
     pressKey('ArrowRight', { repeat: true });
-    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 0, z: 0 }]);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 0 }]);
 
     nowSpy.mockReturnValue(1_080);
     pressKey('ArrowRight', { repeat: true });
-    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 2, y: 0, z: 0 }]);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 0, z: 0 }]);
 
     pressKey('ArrowUp');
-    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 2, y: 1, z: 0 }]);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 1, z: 0 }]);
   });
 
   it.each([
@@ -273,7 +275,7 @@ describe('GameEngine BlockOut controls', () => {
     pressKey('Space');
 
     expect(state.getSettledBlocks()).toHaveLength(0);
-    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 8 }]);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 5, y: 0, z: 8 }]);
 
     advanceGame(engine, 1_209);
     expect(state.getSettledBlocks()).toHaveLength(0);
@@ -423,7 +425,7 @@ describe('GameEngine BlockOut controls', () => {
     pressKey('KeyP');
     pressKey('ArrowRight');
 
-    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 3, y: 0, z: 0 }]);
+    expect(state.getActivePolyCube()?.blocks).toEqual([{ x: 4, y: 0, z: 0 }]);
     expect(lastHudCall(renderer)[7]).toBe(false);
   });
 

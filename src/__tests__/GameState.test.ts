@@ -6,7 +6,7 @@ describe('GameState BlockOut rules', () => {
   it('uses fixed default pit dimensions, block set, level, and speed', () => {
     const state = new GameState();
 
-    expect(state.getDimensions()).toEqual({ width: 5, height: 5, depth: 9 });
+    expect(state.getDimensions()).toEqual({ width: 6, height: 6, depth: 9 });
     expect(state.getBlockSet()).toBe('flat');
     expect(state.getLevel()).toBe(0);
     expect(state.getDropIntervalMs()).toBe(5510);
@@ -47,7 +47,7 @@ describe('GameState BlockOut rules', () => {
     expect(state.getSettledBlocks()).toHaveLength(0);
     expect(state.getActivePolyCube()).toBeNull();
     expect([...state.getUpcomingQueue(7)].sort((a, b) => a - b)).toEqual([
-      5, 7, 8, 9, 32, 33, 34
+      2, 5, 6, 7, 8, 9, 10
     ]);
   });
 
@@ -78,7 +78,7 @@ describe('GameState BlockOut rules', () => {
     const state = new GameState();
 
     expect([...state.getUpcomingQueue(8)].sort((a, b) => a - b)).toEqual([
-      0, 1, 2, 5, 6, 7, 8, 9
+      0, 1, 2, 3, 4, 8, 9, 10
     ]);
   });
 
@@ -90,10 +90,10 @@ describe('GameState BlockOut rules', () => {
 
     expect(firstQueue).toEqual(secondQueue);
     expect([...firstQueue.slice(0, 8)].sort((a, b) => a - b)).toEqual([
-      0, 1, 2, 5, 6, 7, 8, 9
+      0, 1, 2, 3, 4, 8, 9, 10
     ]);
     expect([...firstQueue.slice(8, 16)].sort((a, b) => a - b)).toEqual([
-      0, 1, 2, 5, 6, 7, 8, 9
+      0, 1, 2, 3, 4, 8, 9, 10
     ]);
 
     first.reset();
@@ -105,9 +105,9 @@ describe('GameState BlockOut rules', () => {
     state.spawnPolyCube(2);
 
     expect(state.getActivePolyCube()?.blocks).toEqual([
+      { x: 3, y: 0, z: 0 },
       { x: 4, y: 0, z: 0 },
-      { x: 4, y: 1, z: 0 },
-      { x: 4, y: 2, z: 0 }
+      { x: 3, y: 1, z: 0 }
     ]);
     expect(state.moveActivePolyCube({ x: 1, y: 0, z: 0 })).toBe(false);
     expect(state.moveActivePolyCube({ x: -1, y: 0, z: 0 })).toBe(true);
@@ -137,19 +137,18 @@ describe('GameState BlockOut rules', () => {
     state.spawnPolyCube(5);
 
     expect(state.getProjectedActivePolyCube()?.blocks).toEqual([
-      { x: 3, y: 0, z: 5 },
-      { x: 4, y: 0, z: 5 },
-      { x: 4, y: 1, z: 5 }
+      { x: 3, y: 0, z: 4 },
+      { x: 4, y: 0, z: 4 },
+      { x: 4, y: 0, z: 5 }
     ]);
     expect(state.getActiveFootprintCells()).toEqual([
-      { x: 3, y: 0, contactZ: 6 },
-      { x: 4, y: 0, contactZ: 6 },
-      { x: 4, y: 1, contactZ: 6 }
+      { x: 3, y: 0, contactZ: 5 },
+      { x: 4, y: 0, contactZ: 6 }
     ]);
     expect(state.getActivePolyCube()?.blocks).toEqual([
       { x: 3, y: 0, z: 0 },
       { x: 4, y: 0, z: 0 },
-      { x: 4, y: 1, z: 0 }
+      { x: 4, y: 0, z: 1 }
     ]);
   });
 
@@ -389,10 +388,11 @@ describe('GameState BlockOut rules', () => {
       blockSet: 'extended',
       missionMode: 'cube-trial'
     });
-    for (const x of [0, 1]) {
+    const trialPieceSpawnX = 7 - POLYCUBE_DEFINITIONS[4].width;
+    for (const x of [0, 4]) {
       for (let i = 0; i < 12; i += 1) {
         cubeTrial.spawnPolyCube(4);
-        expect(cubeTrial.moveActivePolyCube({ x: x - 6, y: 0, z: 0 })).toBe(true);
+        expect(cubeTrial.moveActivePolyCube({ x: x - trialPieceSpawnX, y: 0, z: 0 })).toBe(true);
         cubeTrial.hardDropActivePolyCube();
         expect(cubeTrial.lockActivePolyCube()).toBe(0);
       }
@@ -417,7 +417,7 @@ describe('GameState BlockOut rules', () => {
     expect(state.isGameOver()).toBe(true);
   });
 
-  it('rotates every BlockOut polycube back to its original cells after four turns per axis', () => {
+  it('rotates every custom polycube back to its original cells after four turns per axis', () => {
     for (const definition of POLYCUBE_DEFINITIONS) {
       for (const axis of ['x', 'y', 'z'] as const) {
         const state = new GameState({
@@ -427,7 +427,7 @@ describe('GameState BlockOut rules', () => {
         state.spawnPolyCube(definition.id);
         const spawnX = 7 - definition.width;
         const centeredX = Math.floor((7 - definition.width) / 2);
-        expect(state.moveActivePolyCube({ x: centeredX - spawnX, y: 2, z: 4 })).toBe(true);
+        expect(state.moveActivePolyCube({ x: centeredX - spawnX, y: 3, z: 6 })).toBe(true);
         const original = sortedBlocks(state.getActivePolyCube()?.blocks ?? []);
 
         for (let i = 0; i < 4; i += 1) {
