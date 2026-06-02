@@ -10,12 +10,22 @@
     "build": "npm run typecheck && vite build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cap": "npx -y node@22 node_modules/@capacitor/cli/bin/capacitor",
+    "android:doctor": "npm run cap -- doctor",
+    "android:sync": "npm run build && npm run cap -- sync android",
+    "android:run": "npm run build && npm run cap -- run android",
+    "android:open": "npm run build && npm run cap -- open android",
+    "android:build": "npm run android:sync && cd android && ./gradlew :app:assembleDebug"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.0",
+    "@capacitor/core": "^8.3.4",
     "three": "^0.160.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/cli": "^8.3.4",
     "@eslint/js": "^10.0.1",
     "@types/node": "^20.19.41",
     "@types/three": "^0.160.0",
