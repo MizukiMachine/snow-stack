@@ -1,5 +1,6 @@
 import type { FieldCoordinate } from './constants/field';
-import type { GameStateOptions } from './GameState';
+import type { GameStateOptions, RotationDirection } from './GameState';
+import type { Axis } from './types/coordinates';
 import {
   HOLD_CODES,
   MOVEMENT_OFFSETS,
@@ -44,6 +45,8 @@ export class GameEngine {
   private pendingLockAllowsAdjustment = false;
   private repeatActionAllowedAt = 0;
   private nextGameplayBgmIndex = 0;
+  private appSuspended = false;
+  private appSuspendedAt = 0;
 
   constructor(
     state: GameState = new GameState(),
@@ -61,6 +64,11 @@ export class GameEngine {
         onToggleSettings: () => this.toggleSettings(),
         onToggleMute: () => this.toggleMute(),
         onApplySetup: (setup) => this.applySetup(setup),
+        onMove: (move) => this.applyMoveInput(move),
+        onRotate: (axis, direction) => this.applyRotateInput(axis, direction),
+        onSoftDrop: () => this.applySoftDropInput(),
+        onHardDrop: () => this.applyHardDropInput(),
+        onHold: () => this.applyHoldInput(),
         onUiSelect: () => this.applyUiSelection()
       });
   }
@@ -87,6 +95,9 @@ export class GameEngine {
     this.repeatActionAllowedAt = 0;
     this.renderer.initialize(container);
     this.syncScene();
+    if (this.startMenuOpen) {
+      this.previewNextGameplayBgm();
+    }
     this.attachInputHandlers();
     this.beginRenderLoop();
   }
@@ -104,6 +115,8 @@ export class GameEngine {
     this.audio.dispose();
     this.renderer.dispose();
     this.container = null;
+    this.appSuspended = false;
+    this.appSuspendedAt = 0;
   }
 
   /**
@@ -118,6 +131,54 @@ export class GameEngine {
    */
   public getRenderer(): Renderer {
     return this.renderer;
+  }
+
+  public suspendForAppPause(): void {
+    if (this.appSuspended || !this.container) {
+      return;
+    }
+
+    this.appSuspended = true;
+    this.appSuspendedAt = performance.now();
+    if (this.animationFrameId !== null) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+    this.audio.pauseBgm();
+  }
+
+  public resumeFromAppPause(): void {
+    if (!this.appSuspended || !this.container) {
+      return;
+    }
+
+    const now = performance.now();
+    const suspendedDuration = now - this.appSuspendedAt;
+    this.appSuspended = false;
+    this.appSuspendedAt = 0;
+    if (!this.paused && !this.settingsOpen && !this.startMenuOpen && !this.state.isGameOver()) {
+      this.pausedDuration += suspendedDuration;
+    }
+    this.lastDropAt = now;
+    this.lastHudElapsedSecond = -1;
+    if (this.animationFrameId === null) {
+      this.beginRenderLoop();
+    }
+    if (!this.paused && !this.state.isGameOver()) {
+      this.audio.resumeBgm();
+    }
+  }
+
+  public handleBackButton(): boolean {
+    if (this.settingsOpen) {
+      this.toggleSettings();
+      return true;
+    }
+    if (this.paused) {
+      this.togglePause();
+      return true;
+    }
+    return false;
   }
 
   private beginRenderLoop(): void {
@@ -197,10 +258,6 @@ export class GameEngine {
       return;
     }
 
-    if (this.pendingLockAt !== 0 && !this.pendingLockAllowsAdjustment) {
-      return;
-    }
-
     if (event.repeat && isRepeatableGameplayCode(event.code)) {
       event.preventDefault();
       if (performance.now() < this.repeatActionAllowedAt) {
@@ -210,72 +267,119 @@ export class GameEngine {
 
     if (HOLD_CODES.has(event.code)) {
       event.preventDefault();
-      if (this.pendingLockAt === 0 && this.state.swapHeldPiece()) {
-        this.audio.playSfx('hold');
-        this.lastDropAt = performance.now();
-        this.syncScene({ settledBlocks: false });
-      }
+      this.applyHoldInput();
       return;
     }
 
     if (event.code === 'Space') {
       event.preventDefault();
-      if (this.pendingLockAt !== 0) {
-        return;
-      }
-      this.state.hardDropActivePolyCube();
-      if (this.state.getActivePolyCube()) {
-        this.audio.playSfx('hardDrop');
-        this.scheduleActiveLock(HARD_DROP_LOCK_DELAY_MS, performance.now(), false);
-      }
-      this.lastDropAt = performance.now();
-      this.syncScene();
+      this.applyHardDropInput();
       return;
     }
 
     if (SOFT_DROP_CODES.has(event.code)) {
       event.preventDefault();
-      const now = performance.now();
-      const stepResult = this.state.softDropActivePolyCube();
-      if (stepResult === 'moved') {
-        this.audio.playSfx('softDrop');
-        this.pendingLockAt = 0;
-        this.pendingLockAllowsAdjustment = false;
-        this.markRepeatActionCooldown(now);
-        this.lastDropAt = now;
-        if (!this.state.canActivePolyCubeFall() && this.state.getActivePolyCube()) {
-          this.scheduleActiveLock(NATURAL_LOCK_DELAY_MS, now, true);
-        }
-        this.syncScene({ settledBlocks: false });
-      } else if (stepResult === 'blocked' && this.state.getActivePolyCube()) {
-        if (this.pendingLockAt === 0) {
-          this.scheduleActiveLock(NATURAL_LOCK_DELAY_MS, now, true);
-        }
-      }
+      this.applySoftDropInput();
       return;
     }
 
     const move = MOVEMENT_OFFSETS[event.code];
     if (move) {
       event.preventDefault();
-      if (this.moveActivePolyCube(move)) {
-        this.audio.playSfx('move');
-        this.markRepeatActionCooldown();
-        this.refreshPendingLockAfterAdjustment();
-        this.syncScene({ settledBlocks: false });
-      }
+      this.applyMoveInput(move);
       return;
     }
 
     const rotation = ROTATION_COMMANDS[event.code];
     if (rotation) {
       event.preventDefault();
-      if (this.state.rotateActivePolyCube(rotation.axis, rotation.direction)) {
-        this.audio.playSfx('rotate');
-        this.markRepeatActionCooldown();
-        this.refreshPendingLockAfterAdjustment();
-        this.syncScene({ settledBlocks: false });
+      this.applyRotateInput(rotation.axis, rotation.direction);
+    }
+  }
+
+  private canApplyGameplayInput(): boolean {
+    return (
+      !this.settingsOpen &&
+      !this.startMenuOpen &&
+      !this.paused &&
+      !this.state.isGameOver() &&
+      (this.pendingLockAt === 0 || this.pendingLockAllowsAdjustment)
+    );
+  }
+
+  private applyMoveInput(move: FieldCoordinate): void {
+    if (!this.canApplyGameplayInput()) {
+      return;
+    }
+
+    if (this.moveActivePolyCube(move)) {
+      this.audio.playSfx('move');
+      this.markRepeatActionCooldown();
+      this.refreshPendingLockAfterAdjustment();
+      this.syncScene({ settledBlocks: false });
+    }
+  }
+
+  private applyRotateInput(axis: Axis, direction: RotationDirection): void {
+    if (!this.canApplyGameplayInput()) {
+      return;
+    }
+
+    if (this.state.rotateActivePolyCube(axis, direction)) {
+      this.audio.playSfx('rotate');
+      this.markRepeatActionCooldown();
+      this.refreshPendingLockAfterAdjustment();
+      this.syncScene({ settledBlocks: false });
+    }
+  }
+
+  private applySoftDropInput(): void {
+    if (!this.canApplyGameplayInput()) {
+      return;
+    }
+
+    const now = performance.now();
+    const stepResult = this.state.softDropActivePolyCube();
+    if (stepResult === 'moved') {
+      this.audio.playSfx('softDrop');
+      this.pendingLockAt = 0;
+      this.pendingLockAllowsAdjustment = false;
+      this.markRepeatActionCooldown(now);
+      this.lastDropAt = now;
+      if (!this.state.canActivePolyCubeFall() && this.state.getActivePolyCube()) {
+        this.scheduleActiveLock(NATURAL_LOCK_DELAY_MS, now, true);
       }
+      this.syncScene({ settledBlocks: false });
+    } else if (stepResult === 'blocked' && this.state.getActivePolyCube()) {
+      if (this.pendingLockAt === 0) {
+        this.scheduleActiveLock(NATURAL_LOCK_DELAY_MS, now, true);
+      }
+    }
+  }
+
+  private applyHardDropInput(): void {
+    if (!this.canApplyGameplayInput() || this.pendingLockAt !== 0) {
+      return;
+    }
+
+    this.state.hardDropActivePolyCube();
+    if (this.state.getActivePolyCube()) {
+      this.audio.playSfx('hardDrop');
+      this.scheduleActiveLock(HARD_DROP_LOCK_DELAY_MS, performance.now(), false);
+    }
+    this.lastDropAt = performance.now();
+    this.syncScene();
+  }
+
+  private applyHoldInput(): void {
+    if (!this.canApplyGameplayInput() || this.pendingLockAt !== 0) {
+      return;
+    }
+
+    if (this.state.swapHeldPiece()) {
+      this.audio.playSfx('hold');
+      this.lastDropAt = performance.now();
+      this.syncScene({ settledBlocks: false });
     }
   }
 
@@ -518,6 +622,7 @@ export class GameEngine {
   }
 
   private applyUiSelection(): void {
+    this.previewNextGameplayBgm();
     this.audio.playSfx('uiSelect');
   }
 

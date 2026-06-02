@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Voxel Tris</string>
+    <string name="title_activity_main">Voxel Tris</string>
+    <string name="package_name">com.voxeltris.app</string>
+    <string name="custom_url_scheme">com.voxeltris.app</string>
+</resources>

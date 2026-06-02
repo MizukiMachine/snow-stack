@@ -86,6 +86,7 @@ button {
   display: block;
   position: relative;
   z-index: 1;
+  touch-action: none;
 }
 
 .ui-layer {
@@ -847,6 +848,156 @@ button {
   height: 36px;
 }
 
+.touch-controls {
+  display: none;
+}
+
+.touch-controls,
+.touch-controls * {
+  touch-action: none;
+  user-select: none;
+}
+
+.touch-control-button,
+.touch-control-center {
+  border: 1px solid rgba(104, 184, 242, 0.76);
+  border-radius: 0;
+  min-width: 46px;
+  min-height: 46px;
+  color: #f8fdff;
+  background:
+    linear-gradient(180deg, rgba(126, 202, 255, 0.88), rgba(42, 128, 210, 0.78)),
+    linear-gradient(120deg, rgba(255, 255, 255, 0.56), transparent 42%);
+  box-shadow:
+    0 8px 18px rgba(33, 105, 178, 0.24),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.58);
+  clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-shadow: 0 1px 3px rgba(8, 55, 121, 0.58);
+  cursor: pointer;
+  transition: transform 80ms ease, filter 80ms ease;
+}
+
+.touch-control-button:active,
+.touch-control-button.is-active {
+  transform: translateY(1px) scale(0.98);
+  filter: brightness(1.12);
+}
+
+.touch-control-button:disabled {
+  cursor: default;
+  opacity: 0.42;
+  filter: saturate(0.72);
+}
+
+.touch-control-button .hud-icon {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2.2;
+}
+
+.touch-control-center {
+  opacity: 0.32;
+  pointer-events: none;
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.72), rgba(99, 181, 238, 0.22) 44%, rgba(21, 97, 184, 0.28));
+}
+
+.touch-pad,
+.touch-rotate-panel {
+  pointer-events: auto;
+}
+
+.touch-move-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 50px);
+  grid-template-rows: repeat(3, 50px);
+  gap: 5px;
+}
+
+.touch-control-up {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.touch-control-left {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.touch-control-center {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.touch-control-right {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.touch-control-down {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.touch-rotate-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(54px, 1fr));
+  grid-template-rows: repeat(2, 48px);
+  gap: 6px;
+  width: min(280px, 36vw);
+}
+
+.touch-rotate-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 48px;
+}
+
+.touch-rotate-button b {
+  font-size: 19px;
+}
+
+.touch-action-pad {
+  display: grid;
+  grid-template-columns: 68px 86px 68px;
+  grid-template-rows: 48px 48px;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.touch-primary-button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-height: 102px;
+  gap: 4px;
+  color: #ffffff;
+  background:
+    linear-gradient(180deg, rgba(113, 222, 255, 0.94), rgba(17, 126, 214, 0.88)),
+    linear-gradient(120deg, rgba(255, 255, 255, 0.6), transparent 38%);
+}
+
+.touch-primary-button .hud-icon {
+  width: 27px;
+  height: 27px;
+}
+
+.touch-primary-button span {
+  font-size: 17px;
+}
+
+.touch-secondary-button {
+  min-height: 48px;
+  font-size: 14px;
+}
+
 .status-bar {
   left: 50px;
   right: 50px;
@@ -998,6 +1149,33 @@ button {
 
 .ui-layer[data-start-menu="true"] .settings-panel h3 {
   font-size: 20px;
+}
+
+.settings-panel-header {
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.settings-panel-header h3 {
+  min-width: 0;
+  margin: 0;
+}
+
+.menu-bgm-toggle {
+  width: auto;
+  min-width: 142px;
+  min-height: 44px;
+  padding: 0 14px;
+  flex: 0 0 auto;
+  font-size: 14px;
+}
+
+.menu-bgm-toggle .button-icon .hud-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .setup-form {
@@ -2151,4 +2329,342 @@ button {
     grid-template-columns: 1fr;
   }
 
+}
+
+@media (max-width: 980px) and (orientation: landscape) {
+  body {
+    overflow: hidden;
+  }
+
+  .app-viewport,
+  .game-shell {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: clip;
+  }
+
+  .ui-layer {
+    color: #082d80;
+  }
+
+  .scene-layer {
+    inset:
+      calc(56px + env(safe-area-inset-top))
+      calc(128px + env(safe-area-inset-right))
+      calc(112px + env(safe-area-inset-bottom))
+      calc(128px + env(safe-area-inset-left));
+    height: auto;
+  }
+
+  .brand-panel {
+    top: calc(8px + env(safe-area-inset-top));
+    left: calc(8px + env(safe-area-inset-left));
+    width: 174px;
+    min-height: 52px;
+    padding: 8px 10px;
+    grid-template-columns: 38px 1fr;
+    gap: 8px;
+  }
+
+  .brand-emblem,
+  .brand-emblem .hud-icon,
+  .brand-logo {
+    width: 38px;
+    height: 38px;
+  }
+
+  .brand-logo {
+    transform: none;
+  }
+
+  .brand-title {
+    font-size: 25px;
+    line-height: 0.82;
+  }
+
+  .brand-subtitle {
+    display: none;
+  }
+
+  .left-system-stack,
+  .layer-guide-card {
+    display: none;
+  }
+
+  .right-rail {
+    top: calc(8px + env(safe-area-inset-top));
+    left: auto;
+    right: calc(8px + env(safe-area-inset-right));
+    bottom: auto;
+    width: min(560px, calc(100vw - 206px));
+    display: block;
+  }
+
+  .telemetry-stack {
+    display: grid;
+    grid-template-columns: 1.2fr 0.9fr 1fr 1fr;
+    gap: 6px;
+  }
+
+  .right-rail .panel {
+    min-height: 48px;
+    padding: 7px 9px;
+  }
+
+  .right-rail .telemetry-stack .metric-card:nth-child(5),
+  .right-rail .command-stack,
+  .right-rail .panel-heading .hud-icon,
+  .right-rail .meter {
+    display: none;
+  }
+
+  .right-rail .panel-heading {
+    margin-bottom: 1px;
+    font-size: 10px;
+  }
+
+  .right-rail .metric-value,
+  .right-rail .metric-value-small {
+    font-size: 21px;
+    line-height: 0.95;
+  }
+
+  .right-rail .queue-card,
+  .right-rail .hold-card {
+    min-height: 48px;
+  }
+
+  .right-rail .queue-list,
+  .right-rail .hold-slot {
+    min-height: 22px;
+    height: 22px;
+  }
+
+  .right-rail .poly-preview {
+    width: 48px;
+    height: 28px;
+  }
+
+  .status-bar {
+    top: calc(64px + env(safe-area-inset-top));
+    left: calc(8px + env(safe-area-inset-left));
+    right: calc(8px + env(safe-area-inset-right));
+    bottom: auto;
+    min-height: 38px;
+    padding: 6px 10px;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    gap: 8px;
+  }
+
+  .ui-layer[data-mission-active="false"] .status-bar,
+  .ui-layer[data-mission-active="true"] .status-bar {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+
+  .status-hint {
+    display: none;
+  }
+
+  .status-mission {
+    gap: 7px;
+  }
+
+  .status-mission > .hud-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .status-mission > div {
+    grid-template-columns: max-content minmax(120px, 1fr);
+    gap: 8px;
+  }
+
+  .status-mission .status-label,
+  .status-meta .status-label {
+    font-size: 10px;
+  }
+
+  .status-mission .mission-progress {
+    height: 20px;
+  }
+
+  .status-mission .mission-progress span,
+  .status-meta [data-role="timer"] {
+    font-size: 18px;
+  }
+
+  .status-meta {
+    min-width: 96px;
+    justify-self: end;
+  }
+
+  .touch-controls {
+    position: absolute;
+    left: calc(10px + env(safe-area-inset-left));
+    right: calc(10px + env(safe-area-inset-right));
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    z-index: 5;
+    pointer-events: none;
+    display: grid;
+    grid-template-columns: max-content minmax(184px, 1fr) max-content;
+    align-items: end;
+    justify-items: center;
+    gap: 10px;
+  }
+
+  .touch-move-pad {
+    grid-template-columns: repeat(3, 48px);
+    grid-template-rows: repeat(3, 48px);
+    gap: 4px;
+  }
+
+  .touch-rotate-panel {
+    width: min(302px, 38vw);
+    grid-template-columns: repeat(3, minmax(52px, 1fr));
+    grid-template-rows: repeat(2, 47px);
+    gap: 5px;
+  }
+
+  .touch-action-pad {
+    grid-template-columns: 65px 82px 65px;
+    grid-template-rows: 47px 47px;
+    gap: 5px;
+  }
+
+  .touch-primary-button {
+    min-height: 99px;
+  }
+
+  .settings-panel {
+    top: calc(62px + env(safe-area-inset-top));
+    left: 50%;
+    right: auto;
+    width: min(620px, calc(100vw - 34px));
+    max-height: calc(100vh - 78px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    padding: 16px;
+    overflow: auto;
+    transform: translateX(-50%);
+  }
+
+  .ui-layer[data-start-menu="true"] .settings-panel {
+    top: calc(62px + env(safe-area-inset-top));
+    width: min(680px, calc(100vw - 34px));
+    padding: 16px;
+  }
+
+  .setup-form {
+    gap: 10px;
+  }
+
+  .setup-section {
+    gap: 7px;
+  }
+
+  .setup-choice-grid,
+  .ui-layer[data-start-menu="true"] [data-role="mission-mode-control"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .setup-choice,
+  .ui-layer[data-start-menu="true"] .setup-choice,
+  .ui-layer[data-start-menu="true"] .setup-choice-rule {
+    min-height: 48px;
+    padding: 8px;
+    font-size: 13px;
+  }
+
+  .setup-submit {
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  .overlay-card,
+  .pause-card {
+    top: 50%;
+    left: 50%;
+    width: min(520px, calc(100vw - 36px));
+    max-height: calc(100vh - 36px);
+    overflow: auto;
+    transform: translate(-50%, -50%);
+  }
+
+  .pause-card > p {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) and (orientation: landscape) {
+  .scene-layer {
+    inset:
+      calc(52px + env(safe-area-inset-top))
+      calc(112px + env(safe-area-inset-right))
+      calc(106px + env(safe-area-inset-bottom))
+      calc(112px + env(safe-area-inset-left));
+  }
+
+  .brand-panel {
+    width: 142px;
+    grid-template-columns: 30px 1fr;
+    min-height: 44px;
+    padding: 7px 8px;
+  }
+
+  .brand-emblem,
+  .brand-emblem .hud-icon,
+  .brand-logo {
+    width: 30px;
+    height: 30px;
+  }
+
+  .brand-title {
+    font-size: 20px;
+  }
+
+  .right-rail {
+    width: min(420px, calc(100vw - 160px));
+  }
+
+  .telemetry-stack {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .right-rail .telemetry-stack .queue-card {
+    display: none;
+  }
+
+  .status-bar {
+    display: none;
+  }
+
+  .touch-controls {
+    grid-template-columns: max-content minmax(150px, 1fr) max-content;
+    gap: 7px;
+  }
+
+  .touch-move-pad {
+    grid-template-columns: repeat(3, 43px);
+    grid-template-rows: repeat(3, 43px);
+  }
+
+  .touch-rotate-panel {
+    width: min(246px, 35vw);
+    grid-template-rows: repeat(2, 42px);
+  }
+
+  .touch-action-pad {
+    grid-template-columns: 56px 72px 56px;
+    grid-template-rows: 42px 42px;
+  }
+
+  .touch-primary-button {
+    min-height: 89px;
+  }
+
+  .touch-control-button,
+  .touch-control-center {
+    min-width: 42px;
+    min-height: 42px;
+  }
 }

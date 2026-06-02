@@ -795,7 +795,7 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(hud.textContent).not.toContain('DEBUG AUDIO');
   });
 
-  it('places the mute toggle in a separate panel under the depth panel and reflects muted state', () => {
+  it('places the mute toggle in a separate panel under the depth panel and reflects BGM state', () => {
     const onToggleMute = vi.fn();
     const state = new GameState();
     const renderer = new Renderer(state, { onToggleMute });
@@ -807,7 +807,7 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(muteButton).not.toBeNull();
     expect(muteButton?.closest('.layer-guide-card')).toBeNull();
     expect(hud.querySelector('.left-system-stack > .layer-guide-card')).not.toBeNull();
-    expect(muteButton?.textContent).toContain('サウンド ON');
+    expect(muteButton?.textContent).toContain('BGM ON');
 
     renderer.updateHud(
       [],
@@ -825,10 +825,85 @@ describe('Renderer BlockOut layer coloring', () => {
 
     expect(muteButton?.getAttribute('aria-pressed')).toBe('true');
     expect(muteButton?.classList.contains('is-muted')).toBe(true);
-    expect(muteButton?.textContent).toContain('サウンド OFF');
+    expect(muteButton?.textContent).toContain('BGM OFF');
 
     muteButton?.click();
     expect(onToggleMute).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the menu BGM button only while the start menu is open and syncs its state', () => {
+    const onToggleMute = vi.fn();
+    const state = new GameState();
+    const renderer = new Renderer(state, { onToggleMute });
+    const hud = (renderer as unknown as RendererAccess).createHudElement();
+    const menuBgmButton = hud.querySelector<HTMLButtonElement>(
+      '[data-role="settings-panel"] .menu-bgm-toggle[data-action="mute"]'
+    );
+    const hudBgmButton = hud.querySelector<HTMLButtonElement>(
+      '.left-system-stack > .audio-toggle-card [data-action="mute"]'
+    );
+
+    expect(menuBgmButton).not.toBeNull();
+    expect(menuBgmButton?.hidden).toBe(true);
+
+    renderer.updateHud(
+      [],
+      'running',
+      0,
+      0,
+      state.getLevel(),
+      state.getDropIntervalMs(),
+      0,
+      false,
+      false,
+      true,
+      false
+    );
+
+    expect(menuBgmButton?.hidden).toBe(false);
+    expect(menuBgmButton?.disabled).toBe(false);
+    expect(hudBgmButton?.disabled).toBe(true);
+    expect(menuBgmButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(menuBgmButton?.textContent).toContain('BGM ON');
+
+    renderer.updateHud(
+      [],
+      'running',
+      0,
+      0,
+      state.getLevel(),
+      state.getDropIntervalMs(),
+      0,
+      false,
+      false,
+      true,
+      true
+    );
+
+    expect(menuBgmButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(menuBgmButton?.classList.contains('is-muted')).toBe(true);
+    expect(menuBgmButton?.textContent).toContain('BGM OFF');
+
+    menuBgmButton?.click();
+    expect(onToggleMute).toHaveBeenCalledTimes(1);
+
+    renderer.updateHud(
+      [],
+      'running',
+      0,
+      0,
+      state.getLevel(),
+      state.getDropIntervalMs(),
+      0,
+      false,
+      false,
+      false,
+      true
+    );
+
+    expect(menuBgmButton?.hidden).toBe(true);
+    expect(menuBgmButton?.disabled).toBe(true);
+    expect(hudBgmButton?.disabled).toBe(false);
   });
 
   it('notifies the engine when setup buttons are selected', () => {

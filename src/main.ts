@@ -1,4 +1,5 @@
 import './styles.css';
+import { App } from '@capacitor/app';
 import { GameEngine } from './GameEngine';
 
 const SOFT_FRESH_WIDESCREEN_BACKGROUND_URL =
@@ -61,8 +62,32 @@ const engine = new GameEngine();
 window.__engine = engine;
 engine.start(viewport);
 
+const capacitorListenerPromises = [
+  App.addListener('pause', () => {
+    engine.suspendForAppPause();
+  }),
+  App.addListener('resume', () => {
+    engine.resumeFromAppPause();
+  }),
+  App.addListener('backButton', ({ canGoBack }) => {
+    if (engine.handleBackButton()) {
+      return;
+    }
+    if (canGoBack) {
+      window.history.back();
+      return;
+    }
+    void App.exitApp();
+  })
+];
+
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     engine.stop();
+    void Promise.all(capacitorListenerPromises).then((handles) => {
+      for (const handle of handles) {
+        void handle.remove();
+      }
+    });
   });
 }
