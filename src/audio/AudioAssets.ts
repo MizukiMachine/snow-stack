@@ -128,7 +128,7 @@ export const SFX_ASSETS: Readonly<Record<SfxAssetId, SfxAsset>> = Object.freeze(
     id: 'uiSelect',
     label: 'UI Select',
     src: '/assets/sfx/ui-select.mp3',
-    volume: 0.25
+    volume: 0.1
   }
 });
 

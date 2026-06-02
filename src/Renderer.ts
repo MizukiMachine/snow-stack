@@ -39,6 +39,7 @@ import {
   type GamePhase,
   type GameStateOptions,
   type MissionMode,
+  type RotationDirection,
   type SettledBlockSnapshot
 } from './GameState';
 import {
@@ -49,8 +50,14 @@ import {
   getPolyCubeDefinition,
   type BlockSet
 } from './constants/blockout';
-import { CELL_SIZE } from './constants/field';
-import { KEY_ASSIGNMENT_ROWS, type KeyAssignmentRow } from './config/controls';
+import { CELL_SIZE, type FieldCoordinate } from './constants/field';
+import {
+  KEY_ASSIGNMENT_ROWS,
+  MOVEMENT_OFFSETS,
+  ROTATION_COMMANDS,
+  type KeyAssignmentRow
+} from './config/controls';
+import type { Axis } from './types/coordinates';
 
 type RendererCallbacks = {
   onRestart?: () => void;
@@ -58,6 +65,11 @@ type RendererCallbacks = {
   onToggleSettings?: () => void;
   onToggleMute?: () => void;
   onApplySetup?: (setup: GameStateOptions) => void;
+  onMove?: (move: FieldCoordinate) => void;
+  onRotate?: (axis: Axis, direction: RotationDirection) => void;
+  onSoftDrop?: () => void;
+  onHardDrop?: () => void;
+  onHold?: () => void;
   onUiSelect?: () => void;
 };
 
@@ -116,6 +128,21 @@ type HudIconName =
   | 'trophy'
   | 'volume'
   | 'volumeOff';
+
+type TouchControlAction =
+  | 'move-left'
+  | 'move-right'
+  | 'move-up'
+  | 'move-down'
+  | 'rotate-x-negative'
+  | 'rotate-x-positive'
+  | 'rotate-y-negative'
+  | 'rotate-y-positive'
+  | 'rotate-z-negative'
+  | 'rotate-z-positive'
+  | 'soft-drop'
+  | 'hard-drop'
+  | 'hold';
 
 type CubeWorldAssetKey =
   | 'wallIce'
@@ -208,6 +235,8 @@ const BACKGROUND_CAMERA_SETTINGS = {
   far: 2000,
   radiusMultiplier: 1.05
 } as const;
+const TOUCH_CONTROL_REPEAT_DELAY_MS = 240;
+const TOUCH_CONTROL_REPEAT_INTERVAL_MS = 90;
 
 const SETTLED_BLOCK_ASSET_SCALE = CELL_SIZE * 0.5;
 const SETTLED_BLOCK_FALLBACK_CORE_SIZE = CELL_SIZE;
@@ -287,6 +316,9 @@ export class Renderer {
   private assetsReady = false;
   private disposed = false;
   private resizeHandler: (() => void) | null = null;
+  private webglContextLostHandler: ((event: Event) => void) | null = null;
+  private webglContextRestoredHandler: (() => void) | null = null;
+  private webglContextLost = false;
   private readonly cameraOrbit: CameraOrbitState;
   private readonly cameraInspectionOffset = { horizontal: 0, vertical: 0 };
   private cameraInspectionDirection: CameraInspectionDirection | null = null;
@@ -294,6 +326,9 @@ export class Renderer {
   private cameraInspectionPointerDownHandler: ((event: PointerEvent) => void) | null = null;
   private cameraInspectionPointerMoveHandler: ((event: PointerEvent) => void) | null = null;
   private cameraInspectionPointerEndHandler: ((event: PointerEvent) => void) | null = null;
+  private touchControlRepeatDelayId: number | null = null;
+  private touchControlRepeatIntervalId: number | null = null;
+  private touchControlPointerId: number | null = null;
   private readonly hudState: HudState;
   private lastSettingsOpen = false;
   private depthLayerGuideSignature = '';
@@ -384,6 +419,23 @@ export class Renderer {
     this.applySceneLayerComposition(renderSize);
     renderer.setSize(renderSize.width, renderSize.height, false);
     renderer.domElement.className = 'scene-canvas';
+    renderer.domElement.style.touchAction = 'none';
+    this.webglContextLost = false;
+    this.webglContextLostHandler = (event: Event) => {
+      event.preventDefault();
+      this.webglContextLost = true;
+      console.warn('WebGL context lost; rendering will resume when the context is restored.');
+    };
+    this.webglContextRestoredHandler = () => {
+      this.webglContextLost = false;
+      const restoredRenderSize = this.getRenderSize();
+      this.applySceneLayerComposition(restoredRenderSize);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(restoredRenderSize.width, restoredRenderSize.height, false);
+      this.renderFrame();
+    };
+    renderer.domElement.addEventListener('webglcontextlost', this.webglContextLostHandler);
+    renderer.domElement.addEventListener('webglcontextrestored', this.webglContextRestoredHandler);
     canvasHost.appendChild(renderer.domElement);
 
     container.appendChild(this.createHudElement());
@@ -423,7 +475,7 @@ export class Renderer {
   }
 
   public renderFrame(): void {
-    if (!this.scene || !this.camera || !this.renderer) {
+    if (!this.scene || !this.camera || !this.renderer || this.webglContextLost) {
       return;
     }
     this.renderer.clear();
@@ -449,11 +501,24 @@ export class Renderer {
     this.disposed = true;
     this.assetLoadGeneration += 1;
     this.disposePlaneClearEffect();
+    this.clearTouchControlRepeat();
     this.detachCameraInspectionDrag();
     if (this.resizeHandler) {
       window.removeEventListener('resize', this.resizeHandler);
       this.resizeHandler = null;
     }
+    if (this.renderer && this.webglContextLostHandler) {
+      this.renderer.domElement.removeEventListener('webglcontextlost', this.webglContextLostHandler);
+    }
+    if (this.renderer && this.webglContextRestoredHandler) {
+      this.renderer.domElement.removeEventListener(
+        'webglcontextrestored',
+        this.webglContextRestoredHandler
+      );
+    }
+    this.webglContextLostHandler = null;
+    this.webglContextRestoredHandler = null;
+    this.webglContextLost = false;
 
     if (this.scene) {
       this.disposeObjectResources(this.scene);
@@ -910,6 +975,7 @@ export class Renderer {
     this.syncMission(root);
     this.syncHudTimer(root);
     this.syncMuteControl(root);
+    this.syncTouchControls(root);
     this.setText(root, '[data-role="pause-label"]', this.hudState.isPaused ? '再開' : '一時停止');
     this.setText(
       root,
@@ -976,6 +1042,18 @@ export class Renderer {
       }
     }
 
+    const leftSystemStack = root.querySelector<HTMLElement>('.left-system-stack');
+    if (leftSystemStack) {
+      leftSystemStack.querySelectorAll<HTMLButtonElement>('button').forEach((button) => {
+        button.disabled = this.hudState.startMenuOpen;
+      });
+      if (this.hudState.startMenuOpen) {
+        leftSystemStack.setAttribute('inert', '');
+      } else {
+        leftSystemStack.removeAttribute('inert');
+      }
+    }
+
     const settingsOpen = this.hudState.settingsOpen || this.hudState.startMenuOpen;
     this.setText(
       root,
@@ -995,6 +1073,7 @@ export class Renderer {
         this.syncSetupControls(root);
       }
     }
+    this.syncMenuBgmToggle(root);
     const cameraInspectionAllowed = this.isCameraInspectionAllowed();
     root.dataset.cameraInspection = String(cameraInspectionAllowed);
     if (this.canvasHost) {
@@ -1089,6 +1168,118 @@ export class Renderer {
       button.classList.toggle('is-active', isActive);
       button.setAttribute('aria-pressed', String(isActive));
     });
+  }
+
+  private syncTouchControls(root: ParentNode): void {
+    const disabled =
+      this.hudState.settingsOpen ||
+      this.hudState.startMenuOpen ||
+      this.hudState.isPaused ||
+      this.hudState.phase === 'game-over';
+
+    root.querySelectorAll<HTMLButtonElement>('[data-touch-action]').forEach((button) => {
+      button.disabled = disabled;
+      button.setAttribute('aria-disabled', String(disabled));
+    });
+
+    if (disabled) {
+      this.clearTouchControlRepeat();
+    }
+  }
+
+  private handleTouchControlPointerDown(button: HTMLButtonElement, event: PointerEvent): void {
+    if (button.disabled || event.button !== 0) {
+      return;
+    }
+
+    const action = button.dataset.touchAction;
+    this.clearTouchControlRepeat();
+    this.touchControlPointerId = event.pointerId;
+    this.runTouchControlAction(action);
+
+    if (!isRepeatingTouchControlAction(action)) {
+      return;
+    }
+
+    button.setPointerCapture(event.pointerId);
+    const stopRepeat = (endEvent: PointerEvent) => {
+      if (this.touchControlPointerId !== endEvent.pointerId) {
+        return;
+      }
+      button.removeEventListener('pointerup', stopRepeat);
+      button.removeEventListener('pointercancel', stopRepeat);
+      button.removeEventListener('lostpointercapture', stopRepeat);
+      this.clearTouchControlRepeat();
+    };
+    button.addEventListener('pointerup', stopRepeat);
+    button.addEventListener('pointercancel', stopRepeat);
+    button.addEventListener('lostpointercapture', stopRepeat);
+
+    this.touchControlRepeatDelayId = window.setTimeout(() => {
+      this.touchControlRepeatDelayId = null;
+      this.touchControlRepeatIntervalId = window.setInterval(() => {
+        this.runTouchControlAction(action);
+      }, TOUCH_CONTROL_REPEAT_INTERVAL_MS);
+    }, TOUCH_CONTROL_REPEAT_DELAY_MS);
+  }
+
+  private clearTouchControlRepeat(): void {
+    if (this.touchControlRepeatDelayId !== null) {
+      window.clearTimeout(this.touchControlRepeatDelayId);
+      this.touchControlRepeatDelayId = null;
+    }
+    if (this.touchControlRepeatIntervalId !== null) {
+      window.clearInterval(this.touchControlRepeatIntervalId);
+      this.touchControlRepeatIntervalId = null;
+    }
+    this.touchControlPointerId = null;
+  }
+
+  private runTouchControlAction(action: string | undefined): void {
+    if (!isTouchControlAction(action)) {
+      return;
+    }
+
+    switch (action) {
+      case 'move-left':
+        this.callbacks.onMove?.(MOVEMENT_OFFSETS.ArrowLeft);
+        return;
+      case 'move-right':
+        this.callbacks.onMove?.(MOVEMENT_OFFSETS.ArrowRight);
+        return;
+      case 'move-up':
+        this.callbacks.onMove?.(MOVEMENT_OFFSETS.ArrowUp);
+        return;
+      case 'move-down':
+        this.callbacks.onMove?.(MOVEMENT_OFFSETS.ArrowDown);
+        return;
+      case 'rotate-x-negative':
+        this.callbacks.onRotate?.(ROTATION_COMMANDS.KeyQ.axis, ROTATION_COMMANDS.KeyQ.direction);
+        return;
+      case 'rotate-x-positive':
+        this.callbacks.onRotate?.(ROTATION_COMMANDS.KeyA.axis, ROTATION_COMMANDS.KeyA.direction);
+        return;
+      case 'rotate-y-negative':
+        this.callbacks.onRotate?.(ROTATION_COMMANDS.KeyW.axis, ROTATION_COMMANDS.KeyW.direction);
+        return;
+      case 'rotate-y-positive':
+        this.callbacks.onRotate?.(ROTATION_COMMANDS.KeyS.axis, ROTATION_COMMANDS.KeyS.direction);
+        return;
+      case 'rotate-z-negative':
+        this.callbacks.onRotate?.(ROTATION_COMMANDS.KeyE.axis, ROTATION_COMMANDS.KeyE.direction);
+        return;
+      case 'rotate-z-positive':
+        this.callbacks.onRotate?.(ROTATION_COMMANDS.KeyD.axis, ROTATION_COMMANDS.KeyD.direction);
+        return;
+      case 'soft-drop':
+        this.callbacks.onSoftDrop?.();
+        return;
+      case 'hard-drop':
+        this.callbacks.onHardDrop?.();
+        return;
+      case 'hold':
+        this.callbacks.onHold?.();
+    }
   }
 
   private attachCameraInspectionDrag(container: HTMLElement): void {
@@ -1247,7 +1438,7 @@ export class Renderer {
         <section class="info-card audio-toggle-card" aria-label="Audio mute">
           <button class="audio-toggle-button" data-action="mute" type="button" aria-pressed="false">
             <span class="button-icon" data-role="mute-icon">${icon('volume')}</span>
-            <span data-role="mute-label">サウンド ON</span>
+            <span data-role="mute-label">BGM ON</span>
           </button>
         </section>
       </div>
@@ -1293,8 +1484,15 @@ export class Renderer {
         <div class="status-hint">${icon('snowflake')}<div><span class="status-label">ミッション</span><span data-role="footer-tip"></span></div></div>
         <div class="status-meta"><span class="status-label">時間</span><span data-role="timer">00:00:00</span></div>
       </section>
+      ${renderTouchControls(icon)}
       <section class="panel settings-panel" data-role="settings-panel" hidden>
-        <h3>${icon('settings')}<span data-role="setup-title">ゲーム開始</span></h3>
+        <div class="settings-panel-header">
+          <h3>${icon('settings')}<span data-role="setup-title">ゲーム開始</span></h3>
+          <button class="menu-bgm-toggle audio-toggle-button" data-action="mute" type="button" aria-pressed="false" hidden>
+            <span class="button-icon" data-role="mute-icon">${icon('volume')}</span>
+            <span data-role="mute-label">BGM ON</span>
+          </button>
+        </div>
         <form class="setup-form" data-role="setup-form">
           <div class="setup-section">
             <span class="setup-section-heading">LEVEL</span>
@@ -1356,6 +1554,20 @@ export class Renderer {
         if (action === 'mute') {
           this.callbacks.onToggleMute?.();
         }
+      });
+    });
+
+    hud.querySelectorAll<HTMLButtonElement>('[data-touch-action]').forEach((button) => {
+      button.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        this.handleTouchControlPointerDown(button, event);
+      });
+      button.addEventListener('keydown', (event) => {
+        if (event.code !== 'Enter' && event.code !== 'Space') {
+          return;
+        }
+        event.preventDefault();
+        this.runTouchControlAction(button.dataset.touchAction);
       });
     });
 
@@ -2860,18 +3072,31 @@ export class Renderer {
   }
 
   private syncMuteControl(root: ParentNode): void {
-    const button = root.querySelector<HTMLButtonElement>('[data-action="mute"]');
+    const buttons = root.querySelectorAll<HTMLButtonElement>('[data-action="mute"]');
+    if (buttons.length === 0) {
+      return;
+    }
+
+    buttons.forEach((button) => {
+      button.classList.toggle('is-muted', this.hudState.isMuted);
+      button.setAttribute('aria-pressed', String(this.hudState.isMuted));
+      button.setAttribute('aria-label', this.hudState.isMuted ? 'BGM OFF' : 'BGM ON');
+      this.setText(button, '[data-role="mute-label"]', this.hudState.isMuted ? 'BGM OFF' : 'BGM ON');
+      const iconHost = button.querySelector<HTMLElement>('[data-role="mute-icon"]');
+      if (iconHost) {
+        iconHost.innerHTML = renderHudIcon(this.hudState.isMuted ? 'volumeOff' : 'volume');
+      }
+    });
+  }
+
+  private syncMenuBgmToggle(root: ParentNode): void {
+    const button = root.querySelector<HTMLButtonElement>('.menu-bgm-toggle[data-action="mute"]');
     if (!button) {
       return;
     }
 
-    button.classList.toggle('is-muted', !this.hudState.isMuted);
-    button.setAttribute('aria-pressed', String(this.hudState.isMuted));
-    this.setText(button, '[data-role="mute-label"]', this.hudState.isMuted ? 'サウンド ON' : 'サウンド OFF');
-    const iconHost = button.querySelector<HTMLElement>('[data-role="mute-icon"]');
-    if (iconHost) {
-      iconHost.innerHTML = renderHudIcon(this.hudState.isMuted ? 'volume' : 'volumeOff');
-    }
+    button.hidden = !this.hudState.startMenuOpen;
+    button.disabled = !this.hudState.startMenuOpen;
   }
 
   private collectSetupValues(root: ParentNode): GameStateOptions {
@@ -3289,6 +3514,67 @@ function renderCameraInspectionPad(icon: (name: HudIconName) => string): string 
       <button class="camera-view-button camera-view-button-down" data-camera-view="down" type="button" aria-label="視点を下へ" aria-pressed="false" title="下">${icon('arrowDown')}</button>
     </div>
   `;
+}
+
+function renderTouchControls(icon: (name: HudIconName) => string): string {
+  return `
+    <section class="touch-controls" data-role="touch-controls" aria-label="タッチ操作">
+      <div class="touch-pad touch-move-pad" aria-label="移動">
+        <button class="touch-control-button touch-control-up" data-touch-action="move-up" type="button" aria-label="上へ">${icon('arrowUp')}</button>
+        <button class="touch-control-button touch-control-left" data-touch-action="move-left" type="button" aria-label="左へ">${icon('arrowLeft')}</button>
+        <button class="touch-control-center" type="button" tabindex="-1" aria-hidden="true"></button>
+        <button class="touch-control-button touch-control-right" data-touch-action="move-right" type="button" aria-label="右へ">${icon('arrowRight')}</button>
+        <button class="touch-control-button touch-control-down" data-touch-action="move-down" type="button" aria-label="下へ">${icon('arrowDown')}</button>
+      </div>
+      <div class="touch-rotate-panel" aria-label="回転">
+        <button class="touch-control-button touch-rotate-button" data-touch-action="rotate-x-negative" type="button" aria-label="X軸を左回転"><span>X</span><b>-</b></button>
+        <button class="touch-control-button touch-rotate-button" data-touch-action="rotate-x-positive" type="button" aria-label="X軸を右回転"><span>X</span><b>+</b></button>
+        <button class="touch-control-button touch-rotate-button" data-touch-action="rotate-y-negative" type="button" aria-label="Y軸を左回転"><span>Y</span><b>-</b></button>
+        <button class="touch-control-button touch-rotate-button" data-touch-action="rotate-y-positive" type="button" aria-label="Y軸を右回転"><span>Y</span><b>+</b></button>
+        <button class="touch-control-button touch-rotate-button" data-touch-action="rotate-z-negative" type="button" aria-label="Z軸を左回転"><span>Z</span><b>-</b></button>
+        <button class="touch-control-button touch-rotate-button" data-touch-action="rotate-z-positive" type="button" aria-label="Z軸を右回転"><span>Z</span><b>+</b></button>
+      </div>
+      <div class="touch-pad touch-action-pad" aria-label="アクション">
+        <button class="touch-control-button touch-secondary-button" data-touch-action="hold" type="button" aria-label="ホールド"><span>HOLD</span></button>
+        <button class="touch-control-button touch-primary-button" data-touch-action="hard-drop" type="button" aria-label="ハードドロップ">${icon('arrowDown')}<span>DROP</span></button>
+        <button class="touch-control-button touch-secondary-button" data-touch-action="soft-drop" type="button" aria-label="ソフトドロップ"><span>SOFT</span></button>
+      </div>
+    </section>
+  `;
+}
+
+function isTouchControlAction(value: string | undefined): value is TouchControlAction {
+  return (
+    value === 'move-left' ||
+    value === 'move-right' ||
+    value === 'move-up' ||
+    value === 'move-down' ||
+    value === 'rotate-x-negative' ||
+    value === 'rotate-x-positive' ||
+    value === 'rotate-y-negative' ||
+    value === 'rotate-y-positive' ||
+    value === 'rotate-z-negative' ||
+    value === 'rotate-z-positive' ||
+    value === 'soft-drop' ||
+    value === 'hard-drop' ||
+    value === 'hold'
+  );
+}
+
+function isRepeatingTouchControlAction(value: string | undefined): boolean {
+  return (
+    value === 'move-left' ||
+    value === 'move-right' ||
+    value === 'move-up' ||
+    value === 'move-down' ||
+    value === 'rotate-x-negative' ||
+    value === 'rotate-x-positive' ||
+    value === 'rotate-y-negative' ||
+    value === 'rotate-y-positive' ||
+    value === 'rotate-z-negative' ||
+    value === 'rotate-z-positive' ||
+    value === 'soft-drop'
+  );
 }
 
 function isCameraInspectionDirection(
