@@ -1070,7 +1070,9 @@ function normalizeMissionMode(mode: MissionMode | undefined): MissionMode {
 }
 
 function normalizeMissionBlockSet(blockSet: BlockSet, missionMode: MissionMode): BlockSet {
-  return isMissionModeCompatibleWithBlockSet(missionMode, blockSet) ? blockSet : 'basic';
+  return isMissionModeCompatibleWithBlockSet(missionMode, blockSet)
+    ? blockSet
+    : DEFAULT_BLOCK_SET;
 }
 
 function normalizeSeed(seed: number): number {

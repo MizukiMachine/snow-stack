@@ -1140,7 +1140,7 @@ button {
   left: 50%;
   right: auto;
   top: clamp(170px, 22vh, 210px);
-  width: min(1120px, calc(100vw - 80px));
+  width: min(840px, calc(100vw - 80px));
   padding: 24px 28px 28px;
   transform: translateX(-50%);
   z-index: 7;
@@ -1209,6 +1209,15 @@ button {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+.setup-choice-grid-difficulty {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ui-layer[data-start-menu="true"] .setup-choice-grid-difficulty {
+  width: min(100%, 560px);
+  justify-self: center;
 }
 
 .settings-panel:not([hidden]) [data-role="mission-mode-control"] {
@@ -1860,7 +1869,7 @@ button {
 
   .ui-layer[data-start-menu="true"] .settings-panel {
     top: 168px;
-    width: min(1120px, calc(100vw - 72px));
+    width: min(840px, calc(100vw - 72px));
     padding: 20px 26px 22px;
   }
 
@@ -2565,6 +2574,10 @@ button {
   .ui-layer[data-start-menu="true"] [data-role="mission-mode-control"] {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 7px;
+  }
+
+  .setup-choice-grid-difficulty {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .setup-choice,

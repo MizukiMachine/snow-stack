@@ -203,19 +203,20 @@ describe('GameEngine BlockOut controls', () => {
       blockSet: 'extended',
       missionMode: 'cube-trial'
     });
-    const trialPieceSpawnX = 7 - POLYCUBE_DEFINITIONS[4].width;
-    for (const x of [0, 4]) {
-      for (let i = 0; i < 12; i += 1) {
-        state.spawnPolyCube(4);
+    const trialPieceId = 14;
+    const trialPieceSpawnX = 7 - POLYCUBE_DEFINITIONS[trialPieceId].width;
+    for (const x of [0, 3]) {
+      for (let i = 0; i < 15; i += 1) {
+        state.spawnPolyCube(trialPieceId);
         expect(state.moveActivePolyCube({ x: x - trialPieceSpawnX, y: 0, z: 0 })).toBe(true);
         state.hardDropActivePolyCube();
-        if (x === 4 && i === 11) {
+        if (x === 3 && i === 14) {
           break;
         }
         expect(state.lockActivePolyCube()).toBe(0);
       }
     }
-    expect(state.getMissionSnapshot().progressValue).toBe(115);
+    expect(state.getMissionSnapshot().progressValue).toBe(116);
     const { engine, renderer } = startEngine(state);
 
     pressKey('Space');
