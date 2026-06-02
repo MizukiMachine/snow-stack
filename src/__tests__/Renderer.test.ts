@@ -763,7 +763,9 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(controlKeyLabels).not.toContain('Home/PgUp/End/PgDn');
     expect(controlKeyLabels).not.toContain('P');
     expect(controlKeyLabels).not.toContain('R');
-    expect(hud.querySelectorAll('[data-role="block-set-control"] .setup-choice')).toHaveLength(3);
+    const blockSetControl = hud.querySelector('[data-role="block-set-control"]');
+    expect(blockSetControl?.classList.contains('setup-choice-grid-difficulty')).toBe(true);
+    expect(blockSetControl?.querySelectorAll('.setup-choice')).toHaveLength(2);
     expect(missionControl?.querySelectorAll('.setup-choice')).toHaveLength(5);
     expect(hud.querySelector('[data-mission-mode="endless"]')).toBeNull();
     expect(
@@ -778,7 +780,7 @@ describe('Renderer BlockOut layer coloring', () => {
       '落下ブロック全消し'
     ]);
     expect(hud.querySelector('[data-block-set="flat"]')?.textContent).toBe('易しい');
-    expect(hud.querySelector('[data-block-set="basic"]')?.textContent).toBe('普通');
+    expect(hud.querySelector('[data-block-set="basic"]')).toBeNull();
     expect(hud.querySelector('[data-block-set="extended"]')?.textContent).toBe('難しい');
     expect(missionControl?.textContent).not.toContain('エンドレス');
     expect(missionControl?.textContent).not.toContain('120キューブ');
@@ -911,7 +913,7 @@ describe('Renderer BlockOut layer coloring', () => {
     const renderer = new Renderer(new GameState(), { onUiSelect });
     const hud = (renderer as unknown as RendererAccess).createHudElement();
 
-    hud.querySelector<HTMLButtonElement>('[data-block-set="basic"]')?.click();
+    hud.querySelector<HTMLButtonElement>('[data-block-set="extended"]')?.click();
     hud.querySelector<HTMLButtonElement>('[data-mission-mode="score-rush"]')?.click();
 
     expect(onUiSelect).toHaveBeenCalledTimes(2);

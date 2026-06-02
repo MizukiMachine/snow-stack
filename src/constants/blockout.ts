@@ -1,6 +1,6 @@
 import type { FieldCoordinate, FieldDimensions } from './field';
 
-export type BlockSet = 'flat' | 'basic' | 'extended';
+export type BlockSet = 'flat' | 'extended';
 
 export interface PolyCubeDefinition {
   readonly id: number;
@@ -18,7 +18,7 @@ export interface PolyCubeDefinition {
   readonly rotationCenter: FieldCoordinate;
 }
 
-export const BLOCK_SETS: readonly BlockSet[] = Object.freeze(['flat', 'basic', 'extended']);
+export const BLOCK_SETS: readonly BlockSet[] = Object.freeze(['flat', 'extended']);
 export const DEFAULT_BLOCK_SET: BlockSet = 'flat';
 export const DEFAULT_START_LEVEL = 0;
 export const MAX_LEVEL = 10;
@@ -31,7 +31,6 @@ export const MAX_PIT_DEPTH = 18;
 
 export const BLOCK_SET_LABELS: Record<BlockSet, string> = Object.freeze({
   flat: '易しい',
-  basic: '普通',
   extended: '難しい'
 });
 
@@ -57,7 +56,6 @@ export const LINE_NUMBER_FACTOR = Object.freeze([
 
 export const LINE_BASE: Record<BlockSet, number> = Object.freeze({
   flat: 762.5,
-  basic: 875.5,
   extended: 2886.25
 });
 
@@ -101,7 +99,7 @@ const RAW_POLYCUBES: readonly RawPolyCube[] = Object.freeze([
   [307, 27, true, false, [[0, 0, 0], [1, 0, 0], [2, 0, 0]]],
   [624, 53, true, false, [[0, 0, 0], [1, 0, 0], [2, 0, 0], [0, 1, 0], [0, 2, 0]]],
   [307, 27, false, true, [[0, 0, 0], [1, 0, 0], [1, 0, 1]]],
-  [156, 14, false, true, [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 1, 1]]],
+  [156, 14, false, true, [[0, 0, 0], [0, 1, 0], [0, 1, 1]]],
   [461, 40, false, true, [[0, 0, 0], [1, 0, 0], [2, 0, 0], [1, 0, 1]]],
   [461, 40, true, true, [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]]],
   [307, 27, true, true, [[0, 0, 0], [1, 0, 0], [1, 1, 0], [2, 1, 0]]],
@@ -109,34 +107,40 @@ const RAW_POLYCUBES: readonly RawPolyCube[] = Object.freeze([
   [921, 79, false, false, [[0, 0, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1]]],
   [921, 79, false, false, [[0, 0, 0], [1, 0, 0], [1, 0, 1], [1, 1, 1]]],
   [921, 79, false, false, [[0, 0, 0], [0, 1, 0], [0, 1, 1], [1, 1, 1]]],
-  [780, 66, false, false, [[0, 0, 0], [1, 0, 0], [2, 0, 0], [2, 0, 1]]],
-  [780, 66, false, false, [[0, 0, 0], [1, 0, 0], [1, 1, 0], [1, 1, 1], [0, 1, 1]]],
-  [921, 79, false, false, [[0, 0, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0], [1, 2, 1]]],
-  [1248, 105, false, false, [[0, 0, 0], [1, 0, 0], [2, 0, 0], [1, 1, 0], [1, 1, 1]]],
-  [461, 40, false, false, [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [1, 1, 1]]],
-  [921, 79, false, false, [[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0], [3, 0, 1]]],
-  [1402, 118, false, false, [[0, 0, 0], [1, 0, 0], [1, 1, 0], [2, 1, 0], [2, 1, 1]]],
+  [780, 66, false, false, [[0, 0, 0], [1, 0, 0], [2, 0, 0], [1, 1, 0]]],
+  [780, 66, false, false, [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 1, 1]]],
+  [921, 79, false, false, [[0, 0, 0], [0, 1, 0], [0, 2, 0], [1, 1, 0]]],
+  [1248, 105, false, false, [[0, 0, 0], [1, 0, 0], [2, 0, 0], [2, 0, 1]]],
+  [461, 40, false, false, [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]]],
+  [921, 79, false, false, [[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]],
+  [1402, 118, false, false, [[0, 0, 0], [1, 0, 0], [1, 1, 0], [1, 1, 1]]],
   [1379, 131, false, false, [[0, 0, 0], [1, 0, 0], [1, 0, 1], [1, 1, 1], [0, 1, 1]]],
-  [1379, 131, false, false, [[0, 0, 0], [0, 1, 0], [0, 1, 1], [1, 1, 1], [2, 1, 1]]],
-  [965, 92, false, false, [[0, 0, 0], [1, 0, 0], [1, 0, 1], [2, 0, 1], [2, 1, 1]]],
-  [965, 92, false, false, [[0, 0, 0], [0, 0, 1], [0, 1, 1], [1, 1, 1], [1, 2, 1]]],
-  [965, 92, false, false, [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 1, 1], [1, 1, 2]]],
-  [1379, 131, false, false, [[0, 0, 0], [1, 0, 0], [2, 0, 0], [2, 0, 1], [2, 0, 2]]],
-  [1379, 131, false, false, [[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 2, 1], [1, 2, 1]]],
-  [1103, 105, false, false, [[0, 0, 0], [1, 0, 0], [1, 0, 1], [1, 1, 1], [2, 1, 1]]],
-  [1103, 105, false, false, [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 1], [1, 1, 1]]],
-  [1379, 131, false, false, [[0, 0, 0], [0, 1, 0], [1, 1, 0], [2, 1, 0], [2, 1, 1]]],
-  [1379, 131, false, false, [[0, 0, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1], [1, 1, 2]]],
-  [552, 53, false, false, [[0, 0, 0], [1, 0, 0], [2, 0, 0], [2, 1, 0], [2, 1, 1]]],
-  [552, 53, false, false, [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 2, 0], [1, 2, 0]]],
+  [1379, 131, false, false, [[0, 0, 0], [0, 1, 0], [0, 1, 1], [1, 1, 1]]],
+  [965, 92, false, false, [[0, 0, 0], [1, 0, 0], [1, 0, 1], [2, 0, 1]]],
+  [965, 92, false, false, [[0, 0, 0], [0, 0, 1], [0, 1, 1], [1, 1, 1]]],
+  [965, 92, false, false, [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 1, 1]]],
+  [1379, 131, false, false, [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [1, 1, 1]]],
+  [1379, 131, false, false, [[0, 0, 0], [0, 1, 0], [0, 2, 0], [0, 2, 1]]],
+  [1103, 105, false, false, [[0, 0, 0], [1, 0, 0], [1, 0, 1], [1, 1, 1]]],
+  [1103, 105, false, false, [[0, 0, 0], [1, 0, 0], [1, 1, 0], [1, 1, 1]]],
+  [1379, 131, false, false, [[0, 0, 0], [0, 1, 0], [1, 1, 0], [2, 1, 0]]],
+  [1379, 131, false, false, [[0, 0, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1]]],
+  [552, 53, false, false, [[0, 0, 0], [1, 0, 0], [1, 1, 0]]],
+  [552, 53, false, false, [[0, 0, 0], [0, 1, 0], [1, 1, 0]]],
   [552, 53, false, false, [[0, 0, 0], [1, 0, 0], [2, 0, 0], [0, 1, 0], [1, 1, 0]]],
-  [827, 79, false, false, [[0, 0, 0], [1, 0, 0], [0, 0, 1], [0, 0, 2], [1, 0, 2]]],
-  [461, 40, false, false, [[0, 0, 0], [0, 0, 1], [1, 0, 1], [2, 0, 1], [2, 1, 1]]],
-  [1103, 105, false, false, [[0, 0, 0], [1, 0, 0], [1, 0, 1], [1, 1, 1], [1, 2, 1]]],
-  [1103, 105, false, false, [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 1, 1], [2, 1, 1]]],
-  [1103, 105, false, false, [[0, 0, 0], [1, 0, 0], [2, 0, 0], [2, 0, 1], [2, 1, 1]]],
-  [1379, 131, false, false, [[0, 0, 0], [0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 2]]]
+  [827, 79, false, false, [[0, 0, 0], [1, 0, 0], [0, 0, 1], [1, 0, 1]]],
+  [461, 40, false, false, [[0, 0, 0], [0, 0, 1], [1, 0, 1]]],
+  [1103, 105, false, false, [[0, 0, 0], [1, 0, 0], [1, 0, 1], [1, 1, 0]]],
+  [1103, 105, false, false, [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 1, 1]]],
+  [1103, 105, false, false, [[0, 0, 0], [1, 0, 0], [2, 0, 0], [2, 1, 0]]],
+  [1379, 131, false, false, [[0, 0, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1]]],
+  [624, 53, false, false, [[0, 0, 0], [0, 1, 0], [0, 2, 0]]],
+  [461, 40, false, false, [[0, 0, 0], [0, 1, 0]]],
+  [307, 27, false, false, [[0, 0, 0], [1, 0, 0], [1, 1, 0]]],
+  [921, 79, false, false, [[0, 0, 0], [0, 1, 0], [1, 1, 0]]]
 ]);
+
+const HARD_SHARED_FLAT_IDS: readonly number[] = Object.freeze([0, 1, 2, 3]);
 
 export const POLYCUBE_DEFINITIONS: readonly PolyCubeDefinition[] = Object.freeze(
   RAW_POLYCUBES.map(([highScore, lowScore, isFlat, isBasic, rawCells], id) => {
@@ -172,10 +176,7 @@ export function getPolyCubeDefinition(id: number): PolyCubeDefinition {
 
 export function isPolyCubeInBlockSet(definition: PolyCubeDefinition, blockSet: BlockSet): boolean {
   if (blockSet === 'extended') {
-    return true;
-  }
-  if (blockSet === 'basic') {
-    return definition.isBasic;
+    return !definition.isFlat || HARD_SHARED_FLAT_IDS.includes(definition.id);
   }
   return definition.isFlat;
 }

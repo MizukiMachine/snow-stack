@@ -30,14 +30,14 @@ describe('GameState BlockOut rules', () => {
 
     state.configure({
       dimensions: { width: 3, height: 3, depth: 10 },
-      blockSet: 'basic',
+      blockSet: 'extended',
       startLevel: 4,
       randomSeed: 99
     });
 
     expect(state.getSetup()).toEqual({
       dimensions: { width: 3, height: 3, depth: 10 },
-      blockSet: 'basic',
+      blockSet: 'extended',
       startLevel: 4,
       randomSeed: 99,
       missionMode: 'double-cut'
@@ -46,8 +46,10 @@ describe('GameState BlockOut rules', () => {
     expect(state.getScore()).toBe(0);
     expect(state.getSettledBlocks()).toHaveLength(0);
     expect(state.getActivePolyCube()).toBeNull();
-    expect([...state.getUpcomingQueue(7)].sort((a, b) => a - b)).toEqual([
-      2, 5, 6, 7, 8, 9, 10
+    expect([...state.getUpcomingQueue(40)].sort((a, b) => a - b)).toEqual([
+      0, 1, 2, 3, 5, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 20,
+      21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34,
+      35, 36, 37, 38, 39, 40, 41, 42, 43, 44
     ]);
   });
 
@@ -388,10 +390,11 @@ describe('GameState BlockOut rules', () => {
       blockSet: 'extended',
       missionMode: 'cube-trial'
     });
-    const trialPieceSpawnX = 7 - POLYCUBE_DEFINITIONS[4].width;
-    for (const x of [0, 4]) {
-      for (let i = 0; i < 12; i += 1) {
-        cubeTrial.spawnPolyCube(4);
+    const trialPieceId = 14;
+    const trialPieceSpawnX = 7 - POLYCUBE_DEFINITIONS[trialPieceId].width;
+    for (const x of [0, 3]) {
+      for (let i = 0; i < 15; i += 1) {
+        cubeTrial.spawnPolyCube(trialPieceId);
         expect(cubeTrial.moveActivePolyCube({ x: x - trialPieceSpawnX, y: 0, z: 0 })).toBe(true);
         cubeTrial.hardDropActivePolyCube();
         expect(cubeTrial.lockActivePolyCube()).toBe(0);

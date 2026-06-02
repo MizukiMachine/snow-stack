@@ -19,6 +19,7 @@ raw-assets/
 
 # Browser verification output.
 .mcpheadlessbrowser/
+.browser-observer/
 
 # Local generated design and visual check output.
 output/
