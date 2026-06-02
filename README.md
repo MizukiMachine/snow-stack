@@ -3,7 +3,7 @@
 ## ゲーム概要
 
 - Three.js と TypeScript で作る 3D ポリキューブパズル
-- テトリス由来のブロックやルールを使用せず BlockOut II 風のルールを採用
+- 独自のポリキューブ形状と 3D ピット消去ルールを採用
 - `6x6x9` のピットへブロックを奥行き方向に落として、埋まった一面の `Z` プレーンを消す
 - 雪と氷のボクセル空間、ブランドロゴ、Depth パネル、NEXT / HOLD を備えたブラウザゲーム
 
@@ -24,7 +24,7 @@
 - `src/GameEngine.ts` ゲームループ、入力、ポーズ、設定、HUD 同期
 - `src/GameState.ts` ピット状態、衝突、回転、消去、スコア、ミッション
 - `src/Renderer.ts` Three.js シーン、HUD、プレビュー、カメラ確認
-- `src/constants/` ポリキューブ定義、BlockOut 由来係数、フィールド定数
+- `src/constants/` ポリキューブ定義、スコア係数、フィールド定数
 - `src/config/` 操作キーとプレイフィールド設定
 - `src/styles.css` HUD とゲーム画面のスタイル
 - `public/assets/` Vite から配信するロゴ、背景、3D モデル
