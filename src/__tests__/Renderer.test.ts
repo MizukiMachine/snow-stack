@@ -510,10 +510,10 @@ describe('Renderer BlockOut layer coloring', () => {
     const ghost = scene.getObjectByName('landing-ghost') as Group | undefined;
     const footprint = scene.getObjectByName('landing-footprint') as Group | undefined;
     expect(ghost?.children).toHaveLength(3);
-    expect(footprint?.children).toHaveLength(3);
+    expect(footprint?.children).toHaveLength(2);
     expect(ghost?.children[0].position.x).toBe(3.5);
-    expect(ghost?.children[0].position.z).toBe(5.5);
-    expect(footprint?.children[0].position.z).toBeCloseTo(6 - 0.018);
+    expect(ghost?.children[0].position.z).toBe(4.5);
+    expect(footprint?.children[0].position.z).toBeCloseTo(5 - 0.018);
 
     state.moveActivePolyCube({ x: -1, y: 0, z: 0 });
     renderer.updateActivePolyCube(state.getActivePolyCube());
@@ -522,7 +522,7 @@ describe('Renderer BlockOut layer coloring', () => {
     const updatedFootprint = scene.getObjectByName('landing-footprint') as Group | undefined;
     expect(updatedGhost).not.toBe(ghost);
     expect(updatedGhost?.children[0].position.x).toBe(2.5);
-    expect(updatedFootprint?.children).toHaveLength(3);
+    expect(updatedFootprint?.children).toHaveLength(2);
 
     renderer.updateActivePolyCube(null);
 

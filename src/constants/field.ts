@@ -19,8 +19,8 @@ export const CELL_SIZE = 1;
  * 通常プレイで使用する固定ピット寸法。
  */
 export const FIELD_DIMENSIONS: FieldDimensions = Object.freeze({
-  width: 5,
-  height: 5,
+  width: 6,
+  height: 6,
   depth: 9
 });
 
