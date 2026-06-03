@@ -1,6 +1,6 @@
 {
-  "name": "Boxel Tris",
-  "short_name": "Boxel Tris",
+  "name": "Snow Stack",
+  "short_name": "Snow Stack",
   "description": "3D polycube puzzle game",
   "start_url": "/",
   "display": "standalone",
