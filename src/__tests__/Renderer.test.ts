@@ -797,7 +797,7 @@ describe('Renderer BlockOut layer coloring', () => {
     expect(hud.textContent).not.toContain('DEBUG AUDIO');
   });
 
-  it('places the mute toggle in a separate panel under the depth panel and reflects BGM state', () => {
+  it('does not render the depth panel and keeps the mute toggle in the left stack', () => {
     const onToggleMute = vi.fn();
     const state = new GameState();
     const renderer = new Renderer(state, { onToggleMute });
@@ -808,7 +808,10 @@ describe('Renderer BlockOut layer coloring', () => {
 
     expect(muteButton).not.toBeNull();
     expect(muteButton?.closest('.layer-guide-card')).toBeNull();
-    expect(hud.querySelector('.left-system-stack > .layer-guide-card')).not.toBeNull();
+    expect(hud.querySelector('.left-system-stack > .layer-guide-card')).toBeNull();
+    expect(hud.querySelector('[aria-label="Depth layer colors"]')).toBeNull();
+    expect(hud.textContent).not.toContain('DEPTH');
+    expect(hud.textContent).not.toContain('Depth');
     expect(muteButton?.textContent).toContain('BGM ON');
 
     renderer.updateHud(

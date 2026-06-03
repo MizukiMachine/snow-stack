@@ -1431,10 +1431,6 @@ export class Renderer {
         </div>
       </div>
       <div class="left-system-stack">
-        <section class="info-card layer-guide-card" aria-label="Depth layer colors">
-          <div class="card-title">${icon('layers')}<span>Depth</span></div>
-          <div class="layer-guide-stack" data-role="layer-guide-list"></div>
-        </section>
         <section class="info-card audio-toggle-card" aria-label="Audio mute">
           <button class="audio-toggle-button" data-action="mute" type="button" aria-pressed="false">
             <span class="button-icon" data-role="mute-icon">${icon('volume')}</span>

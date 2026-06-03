@@ -1966,7 +1966,7 @@ button {
 
   .ui-layer {
     --mobile-depth-guide-top: 650px;
-    --mobile-depth-guide-reserved-height: clamp(274px, 32vw, 332px);
+    --mobile-depth-guide-reserved-height: 110px;
     --mobile-status-reserved-height: 264px;
   }
 
@@ -2257,7 +2257,7 @@ button {
 
   .ui-layer {
     --mobile-depth-guide-top: 570px;
-    --mobile-depth-guide-reserved-height: 332px;
+    --mobile-depth-guide-reserved-height: 110px;
     --mobile-status-reserved-height: 264px;
   }
 
