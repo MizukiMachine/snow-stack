@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Voxel Tris</string>
-    <string name="title_activity_main">Voxel Tris</string>
-    <string name="package_name">com.voxeltris.app</string>
-    <string name="custom_url_scheme">com.voxeltris.app</string>
+    <string name="app_name">Snow Stack</string>
+    <string name="title_activity_main">Snow Stack</string>
+    <string name="package_name">com.snowstack.app</string>
+    <string name="custom_url_scheme">com.snowstack.app</string>
 </resources>

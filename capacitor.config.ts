@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.voxeltris.app',
-  appName: 'Voxel Tris',
+  appId: 'com.snowstack.app',
+  appName: 'Snow Stack',
   webDir: 'dist',
   server: {
     // Android はデフォルトで https://localhost から配信する。
