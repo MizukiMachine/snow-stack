@@ -1,4 +1,4 @@
-# Boxel Tris
+# Snow Stack
 
 ## ゲーム概要
 

@@ -1423,10 +1423,10 @@ export class Renderer {
     hud.innerHTML = `
       <div class="brand-panel">
         <div class="brand-emblem">
-          <img class="brand-logo" src="/assets/logo/frost-voxel-crest.png" alt="" aria-hidden="true" />
+          <img class="brand-logo" src="/assets/logo/snow-stack-crest.png" alt="" aria-hidden="true" />
         </div>
         <div class="brand-copy">
-          <div class="brand-title">Boxel<br />Tris</div>
+          <div class="brand-title">Snow<br />Stack</div>
           <div class="brand-subtitle">3D POLYCUBE PUZZLE</div>
         </div>
       </div>

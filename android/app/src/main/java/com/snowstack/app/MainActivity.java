@@ -1,4 +1,4 @@
-package com.voxeltris.app;
+package com.snowstack.app;
 
 import com.getcapacitor.BridgeActivity;
 
